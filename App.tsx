@@ -1,20 +1,58 @@
+import React, { useState } from 'react';
+import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import TopBar from './components/TopBar';
+import Calendar from './components/Calendar';
 
-export default function App() {
+type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
+
+const App = () => {
+  const [activeView, setActiveView] = useState<ViewType>('notes');
+  const [showSettings, setShowSettings] = useState(false);
+
+  const handleAddTodo = () => {
+    console.log('Add todo pressed');
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
-    </View>
+      <TopBar
+        onAddTodo={handleAddTodo}
+        activeView={activeView}
+        setActiveView={setActiveView}
+        showSettings={showSettings}
+        setShowSettings={setShowSettings}
+      />
+      <View style={styles.content}>
+        <View style={styles.todoListContainer}>
+          {/* Todo list will go here */}
+        </View>
+        <View style={styles.todoNoteColumnContainer}>
+          {activeView === 'calendar' && <Calendar />}
+        </View>
+      </View>
+    </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'white',
+  },
+  content: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingHorizontal: 0,
+    paddingBottom: 20,
+  },
+  todoListContainer: {
+    width: '40%',
+  },
+  todoNoteColumnContainer: {
+    width: '60%',
   },
 });
+
+export default App;
