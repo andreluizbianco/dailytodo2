@@ -24,14 +24,20 @@ const App = () => {
         showSettings={showSettings}
         setShowSettings={setShowSettings}
       />
-      <View style={styles.content}>
-        <View style={styles.todoListContainer}>
-          {/* Todo list will go here */}
+      {activeView === 'calendar' ? (
+        <View style={styles.calendarContainer}>
+          <Calendar />
         </View>
-        <View style={styles.todoNoteColumnContainer}>
-          {activeView === 'calendar' && <Calendar />}
+      ) : (
+        <View style={styles.content}>
+          <View style={styles.todoListContainer}>
+            {/* Todo list will go here */}
+          </View>
+          <View style={styles.todoNoteColumnContainer}>
+            {/* Todo notes will go here */}
+          </View>
         </View>
-      </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -52,6 +58,10 @@ const styles = StyleSheet.create({
   },
   todoNoteColumnContainer: {
     width: '60%',
+  },
+  calendarContainer: {
+    flex: 1,
+    width: '100%',
   },
 });
 
