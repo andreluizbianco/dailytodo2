@@ -123,7 +123,7 @@ const Calendar = () => {
           markedDates={getMarkedDates()}
           theme={theme}
           firstDay={1}
-          calendarWidth={width * 0.6 - 20}
+          calendarWidth={width - 20}
           allowShadow={false}
           hideKnob={false}
           closeOnDayPress={false}
@@ -140,6 +140,7 @@ const styles = StyleSheet.create({
   calendarWrapper: {
     flex: 1,
     padding: 10,
+    width: '100%',
   },
   calendarContent: {
     flex: 1,
