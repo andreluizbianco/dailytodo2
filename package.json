@@ -1,5 +1,5 @@
 {
-  "name": "dailytodo2",
+  "name": "mycalendarapp",
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
   "scripts": {
@@ -11,8 +11,11 @@
   "dependencies": {
     "expo": "~51.0.28",
     "expo-status-bar": "~1.12.1",
+    "moment": "^2.30.1",
     "react": "18.2.0",
-    "react-native": "0.74.5"
+    "react-native": "0.74.5",
+    "react-native-calendar-strip": "^2.2.6",
+    "react-native-calendars": "^1.1303.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
