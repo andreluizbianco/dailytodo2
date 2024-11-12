@@ -40,8 +40,19 @@ class BackgroundService {
       }),
     });
 
-    // Request permissions
     await Notifications.requestPermissionsAsync();
+  }
+
+  private formatCountdown(milliseconds: number): string {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
   private async registerBackgroundTask() {
@@ -53,7 +64,6 @@ class BackgroundService {
       const remaining = Math.max(0, timerState.endTime - now);
 
       if (remaining > 0) {
-        // Update notification with remaining time
         await this.updateNotification(remaining);
         return BackgroundFetch.BackgroundFetchResult.NewData;
       } else if (!this.hasTriggered) {
@@ -67,7 +77,7 @@ class BackgroundService {
 
     try {
       await BackgroundFetch.registerTaskAsync(TIMER_TASK, {
-        minimumInterval: 1, // 1 second
+        minimumInterval: 1,
         stopOnTerminate: false,
         startOnBoot: true,
       });
@@ -77,16 +87,17 @@ class BackgroundService {
   }
 
   private async updateNotification(remainingMilliseconds: number) {
-    const minutes = Math.floor(remainingMilliseconds / 60000);
-    const seconds = Math.floor((remainingMilliseconds % 60000) / 1000);
+    const timeString = this.formatCountdown(remainingMilliseconds);
+    const totalMs = (parseInt(this.timerState?.hours || '0') * 3600 + parseInt(this.timerState?.minutes || '0') * 60) * 1000;
+    const progress = Math.round((remainingMilliseconds / totalMs) * 100);
     
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Timer Running',
-        body: `${minutes}:${seconds.toString().padStart(2, '0')} remaining`,
-        sound: false,
+        title: '⏱️ Timer Running',
+        body: `${timeString} remaining (${progress}%)`,
         data: { type: 'timer-update' },
       },
+      identifier: TIMER_NOTIFICATION_ID,
       trigger: null,
     });
   }
@@ -98,23 +109,16 @@ class BackgroundService {
     // Show completion notification
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Timer Complete!',
+        title: '⏰ Timer Complete!',
         body: 'Your timer has finished',
         sound: true,
         data: { type: 'timer-complete' },
       },
+      identifier: TIMER_COMPLETE_NOTIFICATION_ID,
       trigger: null,
     });
 
-    // Clear timer state
     await this.stopTimer();
-  }
-
-  private formatTimeRemaining(milliseconds: number): string {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
   private async getTimerState(): Promise<TimerState | null> {
@@ -147,7 +151,6 @@ class BackgroundService {
     await AsyncStorage.setItem('timerState', JSON.stringify(this.timerState));
     await this.updateNotification(totalMilliseconds);
 
-    // Register and start the background task
     try {
       await BackgroundFetch.registerTaskAsync(TIMER_TASK, {
         minimumInterval: 1,
