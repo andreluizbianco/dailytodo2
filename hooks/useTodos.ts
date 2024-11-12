@@ -70,8 +70,35 @@ export const useTodos = () => {
     );
   };
 
+  const updateArchivedTodo = (id: number, updates: Partial<Todo>): void => {
+    setArchivedTodos(prevTodos =>
+      prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo)),
+    );
+  };
+
   const removeTodo = (id: number): void => {
     setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
+  };
+
+  const archiveTodo = (id: number): void => {
+    const todoToArchive = todos.find(todo => todo.id === id);
+    if (todoToArchive) {
+      setArchivedTodos(prevArchivedTodos => [
+        ...prevArchivedTodos,
+        { ...todoToArchive, isEditing: false },
+      ]);
+      setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
+    }
+  };
+
+  const unarchiveTodo = (id: number): void => {
+    const todoToUnarchive = archivedTodos.find(todo => todo.id === id);
+    if (todoToUnarchive) {
+      setTodos(prevTodos => [...prevTodos, { ...todoToUnarchive, isEditing: false }]);
+      setArchivedTodos(prevArchivedTodos =>
+        prevArchivedTodos.filter(todo => todo.id !== id),
+      );
+    }
   };
 
   return {
@@ -81,6 +108,9 @@ export const useTodos = () => {
     setArchivedTodos,
     addTodo,
     updateTodo,
+    updateArchivedTodo,
     removeTodo,
+    archiveTodo,
+    unarchiveTodo,
   };
 };
