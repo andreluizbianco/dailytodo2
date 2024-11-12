@@ -29,6 +29,10 @@ interface TodoSettingsProps {
   const [localNoteType, setLocalNoteType] = useState(todo.noteType);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const handleColorChange = (color: string) => {
+    updateTodo({ color });
+  };
+
   const handleDeletePress = () => {
     if (deleteState === 'initial') {
       setDeleteState('confirm');
@@ -62,7 +66,7 @@ interface TodoSettingsProps {
               { backgroundColor: getColorValue(color) },
               todo.color === color && styles.selectedColor,
             ]}
-            onPress={() => updateTodo({ color })}
+            onPress={() => handleColorChange(color)}
           />
         ))}
       </View>
