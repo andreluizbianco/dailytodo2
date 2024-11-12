@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import TodoItemNote from './TodoItemNote';
 import TodoSettings from './TodoSettings';
 import TimerView from './TimerView';
+import ArchivedTodos from './ArchivedTodos';
 import { Todo } from '../types';
 
 interface TodoNoteColumnProps {
@@ -11,8 +12,14 @@ interface TodoNoteColumnProps {
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   removeTodo: (id: number) => void;
   archiveTodo: (id: number) => void;
+  archivedTodos: Todo[];
+  setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
+  unarchiveTodo: (id: number) => void;
+  updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
   showSettings: boolean;
   printOnCalendar: (todo: Todo) => void;
+  exportData: () => void;
+  importData: () => void;
 }
 
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
@@ -21,39 +28,64 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   updateTodo,
   removeTodo,
   archiveTodo,
+  archivedTodos,
+  setArchivedTodos,
+  unarchiveTodo,
+  updateArchivedTodo,
   showSettings,
   printOnCalendar,
+  exportData,
+  importData,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
 
-  if (activeView === 'settings') {
-    return <TimerView />;
-  }
+  const renderContent = () => {
+    if (activeView === 'settings') {
+      return <TimerView />;
+    }
+
+    if (activeView === 'archive') {
+      return (
+        <ArchivedTodos
+          archivedTodos={archivedTodos}
+          setArchivedTodos={setArchivedTodos}
+          unarchiveTodo={unarchiveTodo}
+          updateArchivedTodo={updateArchivedTodo}
+          exportData={exportData}
+          importData={importData}
+        />
+      );
+    }
+
+    return (
+      selectedTodo && (
+        <>
+          <TodoItemNote
+            todo={selectedTodo}
+            updateNote={(noteText: string) => updateTodo(selectedTodo.id, { note: noteText })}
+            onStartEditing={() => setIsEditing(true)}
+            onEndEditing={() => setIsEditing(false)}
+          />
+          {activeView === 'notes' && showSettings && (
+            <View style={styles.settingsContainer}>
+              <TodoSettings
+                todo={selectedTodo}
+                updateTodo={(updates) => updateTodo(selectedTodo.id, updates)}
+                removeTodo={() => removeTodo(selectedTodo.id)}
+                archiveTodo={() => archiveTodo(selectedTodo.id)}
+                printOnCalendar={printOnCalendar}
+              />
+            </View>
+          )}
+        </>
+      )
+    );
+  };
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
-        {selectedTodo && (
-          <>
-            <TodoItemNote
-              todo={selectedTodo}
-              updateNote={(noteText: string) => updateTodo(selectedTodo.id, { note: noteText })}
-              onStartEditing={() => setIsEditing(true)}
-              onEndEditing={() => setIsEditing(false)}
-            />
-            {activeView === 'notes' && showSettings && (
-              <View style={styles.settingsContainer}>
-                <TodoSettings
-                  todo={selectedTodo}
-                  updateTodo={(updates) => updateTodo(selectedTodo.id, updates)}
-                  removeTodo={() => removeTodo(selectedTodo.id)}
-                  archiveTodo={() => archiveTodo(selectedTodo.id)}
-                  printOnCalendar={printOnCalendar}
-                />
-              </View>
-            )}
-          </>
-        )}
+        {renderContent()}
       </ScrollView>
     </View>
   );

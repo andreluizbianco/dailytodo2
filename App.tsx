@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,10 +6,8 @@ import TopBar from './components/TopBar';
 import Calendar from './components/Calendar';
 import TodoList from './components/TodoList';
 import TodoNoteColumn from './components/TodoNoteColumn';
-import ArchivedTodos from './components/ArchivedTodos';
-import { useTodos } from './hooks/useTodos';
 import { Todo, CalendarEntry } from './types';
-import { backgroundService } from './utils/backgroundService';
+import { useTodos } from './hooks/useTodos';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 
@@ -28,19 +26,9 @@ const App = () => {
     removeTodo,
     archiveTodo,
     unarchiveTodo,
+    exportData,
+    importData,
   } = useTodos();
-
-  useEffect(() => {
-    const initializeBackgroundService = async () => {
-      // This will restore any active timer when the app launches
-      const timerState = await backgroundService.restoreTimer();
-      if (timerState) {
-        console.log('Restored timer state:', timerState);
-      }
-    };
-
-    initializeBackgroundService();
-  }, []);
 
   const handleAddTodo = () => {
     const newTodo = addTodo();
@@ -73,19 +61,6 @@ const App = () => {
       );
     }
 
-    if (activeView === 'archive') {
-      return (
-        <View style={styles.content}>
-          <ArchivedTodos
-            archivedTodos={archivedTodos}
-            setArchivedTodos={setArchivedTodos}
-            unarchiveTodo={unarchiveTodo}
-            updateArchivedTodo={updateArchivedTodo}
-          />
-        </View>
-      );
-    }
-
     return (
       <View style={styles.content}>
         <View style={styles.todoListContainer}>
@@ -104,8 +79,14 @@ const App = () => {
             updateTodo={updateTodo}
             removeTodo={removeTodo}
             archiveTodo={archiveTodo}
+            archivedTodos={archivedTodos}
+            setArchivedTodos={setArchivedTodos}
+            unarchiveTodo={unarchiveTodo}
+            updateArchivedTodo={updateArchivedTodo}
             showSettings={showSettings}
             printOnCalendar={handlePrintOnCalendar}
+            exportData={exportData}
+            importData={importData}
           />
         </View>
       </View>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import TodoList from './TodoList';
 import { Todo } from '../types';
 
@@ -8,6 +8,8 @@ interface ArchivedTodosProps {
   setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
   unarchiveTodo: (id: number) => void;
   updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
+  exportData: () => void;
+  importData: () => void;
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -15,12 +17,22 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   setArchivedTodos,
   unarchiveTodo,
   updateArchivedTodo,
+  exportData,
+  importData,
 }) => {
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(null);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Archived Todos</Text>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.button} onPress={exportData}>
+          <Text style={styles.buttonText}>Export Data</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={importData}>
+          <Text style={styles.buttonText}>Import Data</Text>
+        </TouchableOpacity>
+      </View>
       {archivedTodos.length > 0 ? (
         <TodoList
           todos={archivedTodos}
@@ -49,6 +61,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+  button: {
+    backgroundColor: '#4b5563',
+    padding: 10,
+    borderRadius: 4,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 14,
   },
   emptyText: {
     fontSize: 14,
