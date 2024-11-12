@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import TodoNoteColumn from './components/TodoNoteColumn';
 import ArchivedTodos from './components/ArchivedTodos';
 import { useTodos } from './hooks/useTodos';
 import { Todo, CalendarEntry } from './types';
+import { backgroundService } from './utils/backgroundService';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 
@@ -28,6 +29,18 @@ const App = () => {
     archiveTodo,
     unarchiveTodo,
   } = useTodos();
+
+  useEffect(() => {
+    const initializeBackgroundService = async () => {
+      // This will restore any active timer when the app launches
+      const timerState = await backgroundService.restoreTimer();
+      if (timerState) {
+        console.log('Restored timer state:', timerState);
+      }
+    };
+
+    initializeBackgroundService();
+  }, []);
 
   const handleAddTodo = () => {
     const newTodo = addTodo();
