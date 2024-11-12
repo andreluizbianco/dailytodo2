@@ -6,23 +6,27 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Todo } from '../types';
+import NoteTypeSelector from './NoteTypeSelector';
 
 const colors: string[] = ['red', 'yellow', 'green', 'blue'];
 
 interface TodoSettingsProps {
-  todo: Todo;
-  updateTodo: (updates: Partial<Todo>) => void;
-  removeTodo: () => void;
-  archiveTodo: () => void;
-}
-
-const TodoSettings: React.FC<TodoSettingsProps> = ({
-  todo,
-  updateTodo,
-  removeTodo,
-  archiveTodo,
-}) => {
+    todo: Todo;
+    updateTodo: (updates: Partial<Todo>) => void;
+    removeTodo: () => void;
+    archiveTodo: () => void;
+    printOnCalendar: (todo: Todo) => void;
+  }
+  
+  const TodoSettings: React.FC<TodoSettingsProps> = ({
+    todo,
+    updateTodo,
+    removeTodo,
+    archiveTodo,
+    printOnCalendar
+  }) => {
   const [deleteState, setDeleteState] = useState<'initial' | 'confirm'>('initial');
+  const [localNoteType, setLocalNoteType] = useState(todo.noteType);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDeletePress = () => {
@@ -42,6 +46,11 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
     }
   };
 
+  const handleNoteTypeSelect = (type: 'text' | 'bullet' | 'checkbox') => {
+    setLocalNoteType(type);
+    updateTodo({ noteType: type });
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.colorPalette}>
@@ -57,6 +66,18 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
           />
         ))}
       </View>
+
+      <NoteTypeSelector
+        selectedType={localNoteType}
+        onSelectType={handleNoteTypeSelect}
+      />
+
+    <TouchableOpacity 
+    style={styles.button} 
+    onPress={() => printOnCalendar(todo)}
+    >
+    <Text style={styles.buttonText}>Print on Calendar</Text>
+    </TouchableOpacity>
       
       <TouchableOpacity style={styles.button} onPress={archiveTodo}>
         <Text style={styles.buttonText}>Archive Todo</Text>
