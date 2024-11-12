@@ -3,15 +3,27 @@ import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import TopBar from './components/TopBar';
 import Calendar from './components/Calendar';
+import TodoList from './components/TodoList';
+import { useTodos } from './hooks/useTodos';
+import { Todo } from './types';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 
 const App = () => {
   const [activeView, setActiveView] = useState<ViewType>('notes');
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const {
+    todos,
+    setTodos,
+    addTodo,
+    updateTodo,
+    removeTodo,
+  } = useTodos();
 
   const handleAddTodo = () => {
-    console.log('Add todo pressed');
+    const newTodo = addTodo();
+    setSelectedTodo(newTodo);
   };
 
   return (
@@ -31,10 +43,16 @@ const App = () => {
       ) : (
         <View style={styles.content}>
           <View style={styles.todoListContainer}>
-            {/* Todo list will go here */}
+            <TodoList
+              todos={todos}
+              setTodos={setTodos}
+              updateTodo={updateTodo}
+              selectedTodo={selectedTodo}
+              setSelectedTodo={setSelectedTodo}
+            />
           </View>
           <View style={styles.todoNoteColumnContainer}>
-            {/* Todo notes will go here */}
+            {/* TodoNoteColumn will go here next */}
           </View>
         </View>
       )}
