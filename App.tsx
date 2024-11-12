@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TopBar from './components/TopBar';
 import Calendar from './components/Calendar';
 import TodoList from './components/TodoList';
 import TodoNoteColumn from './components/TodoNoteColumn';
 import ArchivedTodos from './components/ArchivedTodos';
 import { useTodos } from './hooks/useTodos';
-import { Todo } from './types';
+import { Todo, CalendarEntry } from './types';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 
@@ -31,6 +32,23 @@ const App = () => {
   const handleAddTodo = () => {
     const newTodo = addTodo();
     setSelectedTodo(newTodo);
+  };
+
+  const handlePrintOnCalendar = async (todo: Todo) => {
+    const calendarEntry: CalendarEntry = {
+      id: Date.now(),
+      todo: {...todo},
+      printedAt: new Date().toISOString()
+    };
+    
+    try {
+      const savedEntries = await AsyncStorage.getItem('calendarEntries');
+      const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
+      const updatedEntries = [...currentEntries, calendarEntry];
+      await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    } catch (error) {
+      console.error('Error saving calendar entry:', error);
+    }
   };
 
   const renderMainContent = () => {
@@ -74,6 +92,7 @@ const App = () => {
             removeTodo={removeTodo}
             archiveTodo={archiveTodo}
             showSettings={showSettings}
+            printOnCalendar={handlePrintOnCalendar}
           />
         </View>
       </View>

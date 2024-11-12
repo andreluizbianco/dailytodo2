@@ -1,7 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { DateData, CalendarProvider } from 'react-native-calendars';
 import ExpandableCalendar from 'react-native-calendars/src/expandableCalendar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CalendarEntries from './CalendarEntries';
+import { CalendarEntry } from '../types';
 
 const { width } = Dimensions.get('window');
 
@@ -37,12 +40,33 @@ interface CalendarTheme {
 
 const Calendar = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [entries, setEntries] = useState<CalendarEntry[]>([]);
 
-  const events = useMemo(() => ({
-    '2024-10-31': [{ title: 'Meeting' }],
-    '2024-11-01': [{ title: 'Lunch' }],
-    '2024-11-05': [{ title: 'Conference' }],
-  }), []);
+  // Load entries on mount
+  useEffect(() => {
+    const loadEntries = async () => {
+      try {
+        const savedEntries = await AsyncStorage.getItem('calendarEntries');
+        if (savedEntries) {
+          setEntries(JSON.parse(savedEntries));
+        }
+      } catch (error) {
+        console.error('Error loading calendar entries:', error);
+      }
+    };
+    loadEntries();
+  }, []);
+
+  const events = useMemo(() => {
+    const markedDates: { [key: string]: any } = {};
+    entries.forEach(entry => {
+      const date = new Date(entry.printedAt).toISOString().split('T')[0];
+      if (!markedDates[date]) {
+        markedDates[date] = { marked: true };
+      }
+    });
+    return markedDates;
+  }, [entries]);
 
   const theme: CalendarTheme = useMemo(() => ({
     backgroundColor: '#ffffff',
@@ -87,15 +111,9 @@ const Calendar = () => {
   }, []);
 
   const getMarkedDates = useCallback(() => {
-    const marked: { [key: string]: any } = {};
-    Object.keys(events).forEach(date => {
-      marked[date] = {
-        marked: true,
-        dotColor: theme.dotColor,
-      };
-    });
-    
+    const marked = { ...events };
     const formattedSelectedDate = formatDate(selectedDate);
+    
     marked[formattedSelectedDate] = {
       ...marked[formattedSelectedDate],
       selected: true,
@@ -104,10 +122,10 @@ const Calendar = () => {
     };
     
     return marked;
-  }, [events, selectedDate, theme.dotColor, theme.selectedDayBackgroundColor, theme.selectedDayTextColor, formatDate]);
+  }, [events, selectedDate, theme.selectedDayBackgroundColor, theme.selectedDayTextColor, formatDate]);
 
   const handleDateChanged = useCallback((date: string) => {
-    setSelectedDate(new Date(date));
+    // Don't update selection on month change
   }, []);
 
   return (
@@ -128,9 +146,11 @@ const Calendar = () => {
           hideKnob={false}
           closeOnDayPress={false}
         />
-        <View style={styles.calendarContent}>
-          {/* Calendar entries will go here */}
-        </View>
+        <CalendarEntries 
+          selectedDate={formatDate(selectedDate)}
+          entries={entries}
+          setEntries={setEntries}
+        />
       </CalendarProvider>
     </View>
   );

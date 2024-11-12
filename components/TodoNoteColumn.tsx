@@ -5,22 +5,24 @@ import TodoSettings from './TodoSettings';
 import { Todo } from '../types';
 
 interface TodoNoteColumnProps {
-  selectedTodo: Todo | null;
-  activeView: 'notes' | 'settings' | 'archive' | 'calendar';
-  updateTodo: (id: number, updates: Partial<Todo>) => void;
-  removeTodo: (id: number) => void;
-  archiveTodo: (id: number) => void;
-  showSettings: boolean;
-}
-
-const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
-  selectedTodo,
-  activeView,
-  updateTodo,
-  removeTodo,
-  archiveTodo,
-  showSettings,
-}) => {
+    selectedTodo: Todo | null;
+    activeView: 'notes' | 'settings' | 'archive' | 'calendar';
+    updateTodo: (id: number, updates: Partial<Todo>) => void;
+    removeTodo: (id: number) => void;
+    archiveTodo: (id: number) => void;
+    showSettings: boolean;
+    printOnCalendar: (todo: Todo) => void;
+  }
+  
+  const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
+    selectedTodo,
+    activeView,
+    updateTodo,
+    removeTodo,
+    archiveTodo,
+    showSettings,
+    printOnCalendar
+  }) => {
   const [isEditing, setIsEditing] = useState(false);
 
   const handleUpdateTodo = (updates: Partial<Todo>) => {
@@ -59,6 +61,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
                   updateTodo={handleUpdateTodo}
                   removeTodo={handleRemoveTodo}
                   archiveTodo={handleArchiveTodo}
+                  printOnCalendar={printOnCalendar}
                 />
               </View>
             )}
