@@ -9,6 +9,8 @@ interface TodoListProps {
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   selectedTodo: Todo | null;
   setSelectedTodo: (todo: Todo) => void;
+  isArchiveView?: boolean;
+  unarchiveTodo?: (id: number) => void;
 }
 
 const TodoList: React.FC<TodoListProps> = ({
@@ -16,6 +18,8 @@ const TodoList: React.FC<TodoListProps> = ({
   updateTodo,
   selectedTodo,
   setSelectedTodo,
+  isArchiveView = false,
+  unarchiveTodo,
 }) => {
   const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
 
@@ -43,6 +47,8 @@ const TodoList: React.FC<TodoListProps> = ({
             isSelected={selectedTodo !== null && selectedTodo.id === todo.id}
             updateTodo={updateTodo}
             stopOtherEdits={() => stopOtherEdits(todo.id)}
+            isArchiveView={isArchiveView}
+            unarchiveTodo={unarchiveTodo}
             ref={(ref: TodoItemRef | null) => {
               if (ref) {
                 todoRefs.current[todo.id] = ref;

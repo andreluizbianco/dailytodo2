@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import TopBar from './components/TopBar';
 import Calendar from './components/Calendar';
 import TodoList from './components/TodoList';
+import TodoNoteColumn from './components/TodoNoteColumn';
+import ArchivedTodos from './components/ArchivedTodos';
 import { useTodos } from './hooks/useTodos';
 import { Todo } from './types';
 
@@ -16,14 +18,66 @@ const App = () => {
   const {
     todos,
     setTodos,
+    archivedTodos,
+    setArchivedTodos,
     addTodo,
     updateTodo,
+    updateArchivedTodo,
     removeTodo,
+    archiveTodo,
+    unarchiveTodo,
   } = useTodos();
 
   const handleAddTodo = () => {
     const newTodo = addTodo();
     setSelectedTodo(newTodo);
+  };
+
+  const renderMainContent = () => {
+    if (activeView === 'calendar') {
+      return (
+        <View style={styles.calendarContainer}>
+          <Calendar />
+        </View>
+      );
+    }
+
+    if (activeView === 'archive') {
+      return (
+        <View style={styles.content}>
+          <ArchivedTodos
+            archivedTodos={archivedTodos}
+            setArchivedTodos={setArchivedTodos}
+            unarchiveTodo={unarchiveTodo}
+            updateArchivedTodo={updateArchivedTodo}
+          />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.content}>
+        <View style={styles.todoListContainer}>
+          <TodoList
+            todos={todos}
+            setTodos={setTodos}
+            updateTodo={updateTodo}
+            selectedTodo={selectedTodo}
+            setSelectedTodo={setSelectedTodo}
+          />
+        </View>
+        <View style={styles.todoNoteColumnContainer}>
+          <TodoNoteColumn
+            selectedTodo={selectedTodo}
+            activeView={activeView}
+            updateTodo={updateTodo}
+            removeTodo={removeTodo}
+            archiveTodo={archiveTodo}
+            showSettings={showSettings}
+          />
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -36,26 +90,7 @@ const App = () => {
         showSettings={showSettings}
         setShowSettings={setShowSettings}
       />
-      {activeView === 'calendar' ? (
-        <View style={styles.calendarContainer}>
-          <Calendar />
-        </View>
-      ) : (
-        <View style={styles.content}>
-          <View style={styles.todoListContainer}>
-            <TodoList
-              todos={todos}
-              setTodos={setTodos}
-              updateTodo={updateTodo}
-              selectedTodo={selectedTodo}
-              setSelectedTodo={setSelectedTodo}
-            />
-          </View>
-          <View style={styles.todoNoteColumnContainer}>
-            {/* TodoNoteColumn will go here next */}
-          </View>
-        </View>
-      )}
+      {renderMainContent()}
     </SafeAreaView>
   );
 };
