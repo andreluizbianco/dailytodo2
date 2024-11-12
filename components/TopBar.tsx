@@ -1,23 +1,21 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 
 interface TopBarProps {
   onAddTodo: () => void;
-  activeView: ViewType;
-  setActiveView: (view: ViewType) => void;
+  activeView: 'notes' | 'settings' | 'archive' | 'calendar';
+  setActiveView: (view: 'notes' | 'settings' | 'archive' | 'calendar') => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ 
-  onAddTodo, 
-  activeView, 
-  setActiveView, 
-  showSettings, 
-  setShowSettings 
+const TopBar: React.FC<TopBarProps> = ({
+  onAddTodo,
+  activeView,
+  setActiveView,
+  showSettings,
+  setShowSettings,
 }) => {
   const handleNotesPress = () => {
     if (activeView !== 'notes') {
@@ -63,7 +61,11 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="time"
             size={28}
-            color={activeView === 'settings' || activeView === 'calendar' ? '#3b82f6' : '#6b7280'}
+            color={
+              activeView === 'settings' || activeView === 'calendar'
+                ? '#3b82f6'
+                : '#6b7280'
+            }
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -84,7 +86,7 @@ const TopBar: React.FC<TopBarProps> = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    paddingTop: 8,
+    paddingTop: Platform.OS === 'android' ? 16 : 8,
   },
   addButtonSection: {
     width: '40%',
