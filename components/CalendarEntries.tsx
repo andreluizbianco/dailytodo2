@@ -77,7 +77,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 })}
               </Text>
               <TouchableOpacity
-                onPress={() => handleDeleteEntry(entry.id)}
+                onLongPress={() => handleDeleteEntry(entry.id)}
+                delayLongPress={700}
                 style={styles.deleteButton}
               >
                 <Ionicons name="trash-outline" size={18} color="#ef4444" />
