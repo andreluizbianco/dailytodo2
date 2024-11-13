@@ -12,6 +12,7 @@ import {
   State,
 } from 'react-native-gesture-handler';
 import { Todo } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
 interface TodoItemProps {
   todo: Todo;
@@ -169,13 +170,19 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
             </TouchableOpacity>
             
             {isArchiveView && unarchiveTodo && (
-              <TouchableOpacity
-                style={styles.unarchiveButton}
-                onPress={() => unarchiveTodo(todo.id)}
-              >
-                <Text style={styles.unarchiveButtonText}>Unarchive</Text>
-              </TouchableOpacity>
-            )}
+  <TouchableOpacity
+    onLongPress={() => unarchiveTodo(todo.id)}
+    delayLongPress={650}
+    style={styles.unarchiveButton}
+  >
+    <Ionicons 
+      name="archive-outline" 
+      size={20} 
+      color="#6b7280" 
+      style={{ transform: [{ rotate: '180deg' }] }}
+    />
+  </TouchableOpacity>
+)}
           </View>
         </TapGestureHandler>
       </TapGestureHandler>
@@ -243,10 +250,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   unarchiveButton: {
-    backgroundColor: '#6b7280',
-    padding: 5,
-    borderRadius: 4,
+    padding: 4,
     marginLeft: 10,
+    // justifyContent: 'center',
+    // alignItems: 'center',
   },
   unarchiveButtonText: {
     color: 'white',
