@@ -96,11 +96,26 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
       }
     };
 
+    const getSelectionColor = () => {
+      switch (todo.color) {
+        case 'red':
+          return '#ef4444'; // Darker red
+        case 'yellow':
+          return '#f59e0b'; // Darker yellow
+        case 'green':
+          return '#10b981'; // Darker green
+        case 'blue':
+          return '#3b82f6'; // Darker blue
+        default:
+          return '#3b82f6';
+      }
+    };
+
     return (
       <View style={[
         styles.container,
         getColorStyle(),
-        isSelected && styles.selectedTodo,
+        isSelected && { borderLeftColor: getSelectionColor() },
       ]}>
         <TouchableOpacity
           onPress={handlePress}
@@ -165,9 +180,6 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     padding: 0,
     margin: 0,
-  },
-  selectedTodo: {
-    borderLeftColor: '#3b82f6',
   },
   redTodo: {
     backgroundColor: '#fee2e2',
