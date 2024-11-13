@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Todo } from '../types';
 import NoteTypeSelector from './NoteTypeSelector';
 
@@ -59,6 +60,19 @@ interface TodoSettingsProps {
     updateTodo({ color });
   };
   
+  const handleLongPress = (action: 'print' | 'archive' | 'delete') => {
+    switch (action) {
+      case 'print':
+        printOnCalendar(todo);
+        break;
+      case 'archive':
+        archiveTodo();
+        break;
+      case 'delete':
+        removeTodo();
+        break;
+    }
+  };
   
 
   return (
@@ -82,27 +96,31 @@ interface TodoSettingsProps {
         onSelectType={handleNoteTypeSelect}
       />
 
-    <TouchableOpacity 
-    style={styles.button} 
-    onPress={() => printOnCalendar(todo)}
-    >
-    <Text style={styles.buttonText}>Print on Calendar</Text>
-    </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.button} onPress={archiveTodo}>
-        <Text style={styles.buttonText}>Archive Todo</Text>
-      </TouchableOpacity>
+      <View style={styles.actionButtons}>
+      <TouchableOpacity 
+          style={styles.iconButton}
+          onLongPress={() => handleLongPress('print')}
+          delayLongPress={800}
+        >
+          <Ionicons name="calendar-outline" size={24} color="#4b5563" />
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={handleDeletePress}
-        onLongPress={handleDeleteLongPress}
-        delayLongPress={1000}
-      >
-        <Text style={styles.buttonText}>
-          {deleteState === 'initial' ? 'Delete Todo' : 'Long press to confirm delete'}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.iconButton}
+          onLongPress={() => handleLongPress('archive')}
+          delayLongPress={800}
+        >
+          <Ionicons name="archive-outline" size={24} color="#4b5563" />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.iconButton}
+          onLongPress={() => handleLongPress('delete')}
+          delayLongPress={800}
+        >
+          <Ionicons name="trash-outline" size={24} color="#ef4444" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -143,22 +161,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#4b5563',
   },
-  button: {
-    backgroundColor: '#4b5563',
-    padding: 10,
-    borderRadius: 4,
-    alignItems: 'center',
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
     marginBottom: 10,
   },
-  deleteButton: {
-    backgroundColor: '#ef4444',
+  iconButton: {
     padding: 10,
     borderRadius: 4,
     alignItems: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    justifyContent: 'center',
   },
 });
 
