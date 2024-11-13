@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Animated } from 'react-native';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import TodoItem, { TodoItemRef } from './TodoItem';
 import { Todo } from '../types';
+import { useTodoListDrag } from '../hooks/useTodoListDrag';
 
 interface TodoListProps {
   todos: Todo[];
@@ -13,8 +15,11 @@ interface TodoListProps {
   unarchiveTodo?: (id: number) => void;
 }
 
+const ITEM_GAP = 3;
+
 const TodoList: React.FC<TodoListProps> = ({
   todos,
+  setTodos,
   updateTodo,
   selectedTodo,
   setSelectedTodo,
@@ -22,6 +27,16 @@ const TodoList: React.FC<TodoListProps> = ({
   unarchiveTodo,
 }) => {
   const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
+  const {
+    draggedTodoId,
+    pan,
+    itemAnimations,
+    onPanGestureEvent,
+    onHandlerStateChange,
+    handleLayout,
+    onDragStart,
+    setListLayout,
+  } = useTodoListDrag(todos, setTodos);
 
   const stopOtherEdits = (currentTodoId: number) => {
     Object.entries(todoRefs.current).forEach(([id, ref]) => {
@@ -37,24 +52,52 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View 
+      style={styles.container}
+      onLayout={event => setListLayout(event.nativeEvent.layout)}
+    >
       <ScrollView style={styles.scrollView}>
         {todos.map(todo => (
-          <TodoItem
+          <PanGestureHandler
             key={todo.id}
-            todo={todo}
-            selectTodo={() => handleSelectTodo(todo)}
-            isSelected={selectedTodo !== null && selectedTodo.id === todo.id}
-            updateTodo={updateTodo}
-            stopOtherEdits={() => stopOtherEdits(todo.id)}
-            isArchiveView={isArchiveView}
-            unarchiveTodo={unarchiveTodo}
-            ref={(ref: TodoItemRef | null) => {
-              if (ref) {
-                todoRefs.current[todo.id] = ref;
-              }
-            }}
-          />
+            onGestureEvent={onPanGestureEvent}
+            onHandlerStateChange={onHandlerStateChange}
+            enabled={draggedTodoId === todo.id}>
+            <Animated.View
+              style={[
+                styles.todoItemContainer,
+                {
+                  transform: [
+                    {
+                      translateY: draggedTodoId === todo.id
+                        ? pan.y
+                        : itemAnimations[todo.id]
+                        ? itemAnimations[todo.id]
+                        : 0,
+                    },
+                  ],
+                  zIndex: draggedTodoId === todo.id ? 999 : 1,
+                },
+              ]}>
+              <TodoItem
+                todo={todo}
+                selectTodo={() => handleSelectTodo(todo)}
+                isSelected={selectedTodo !== null && selectedTodo.id === todo.id}
+                updateTodo={updateTodo}
+                stopOtherEdits={() => stopOtherEdits(todo.id)}
+                onDragStart={() => onDragStart(todo.id)}
+                isDragging={draggedTodoId === todo.id}
+                onLayout={layout => handleLayout(todo.id, layout)}
+                isArchiveView={isArchiveView}
+                unarchiveTodo={unarchiveTodo}
+                ref={(ref: TodoItemRef | null) => {
+                  if (ref) {
+                    todoRefs.current[todo.id] = ref;
+                  }
+                }}
+              />
+            </Animated.View>
+          </PanGestureHandler>
         ))}
       </ScrollView>
     </View>
@@ -69,6 +112,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingTop: 8,
+  },
+  todoItemContainer: {
+    marginBottom: ITEM_GAP,
   },
 });
 

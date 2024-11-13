@@ -8,6 +8,7 @@ import TodoList from './components/TodoList';
 import TodoNoteColumn from './components/TodoNoteColumn';
 import { Todo, CalendarEntry } from './types';
 import { useTodos } from './hooks/useTodos';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 type CalendarViewMode = 'day' | 'week';
@@ -105,18 +106,20 @@ const App = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      <TopBar
-        onAddTodo={handleAddTodo}
-        activeView={activeView}
-        setActiveView={setActiveView}
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
-        onCalendarPress={handleCalendarPress}
-      />
-      {renderMainContent()}
-    </SafeAreaView>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="auto" />
+        <TopBar
+          onAddTodo={handleAddTodo}
+          activeView={activeView}
+          setActiveView={setActiveView}
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+          onCalendarPress={handleCalendarPress}
+        />
+        {renderMainContent()}
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 };
 
