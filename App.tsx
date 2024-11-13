@@ -10,10 +10,12 @@ import { Todo, CalendarEntry } from './types';
 import { useTodos } from './hooks/useTodos';
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
+type CalendarViewMode = 'day' | 'week';
 
 const App = () => {
   const [activeView, setActiveView] = useState<ViewType>('notes');
   const [showSettings, setShowSettings] = useState(false);
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>('day');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const {
     todos,
@@ -56,10 +58,11 @@ const App = () => {
     if (activeView === 'calendar') {
       return (
         <View style={styles.calendarContainer}>
-          <Calendar />
+          <Calendar viewMode={calendarViewMode} />
         </View>
       );
     }
+  
 
     return (
       <View style={styles.content}>
@@ -93,6 +96,14 @@ const App = () => {
     );
   };
 
+  const handleCalendarPress = () => {
+    if (activeView !== 'calendar') {
+      setActiveView('calendar');
+    } else {
+      setCalendarViewMode(prev => prev === 'day' ? 'week' : 'day');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
@@ -102,6 +113,7 @@ const App = () => {
         setActiveView={setActiveView}
         showSettings={showSettings}
         setShowSettings={setShowSettings}
+        onCalendarPress={handleCalendarPress}
       />
       {renderMainContent()}
     </SafeAreaView>

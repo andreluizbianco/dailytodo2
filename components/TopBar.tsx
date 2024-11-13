@@ -8,6 +8,7 @@ interface TopBarProps {
   setActiveView: (view: 'notes' | 'settings' | 'archive' | 'calendar') => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  onCalendarPress: () => void;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -16,6 +17,7 @@ const TopBar: React.FC<TopBarProps> = ({
   setActiveView,
   showSettings,
   setShowSettings,
+  onCalendarPress,
 }) => {
   const handleNotesPress = () => {
     if (activeView !== 'notes') {
@@ -53,9 +55,7 @@ const TopBar: React.FC<TopBarProps> = ({
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={handleTimerPress}
-          onLongPress={handleTimerLongPress}
-          delayLongPress={500}
+          onPress={() => setActiveView('settings')}
           style={styles.iconButton}
         >
           <Ionicons
@@ -65,7 +65,7 @@ const TopBar: React.FC<TopBarProps> = ({
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveView('calendar')}
+          onPress={onCalendarPress}
           style={styles.iconButton}
         >
           <Ionicons

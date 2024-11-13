@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { DateData, CalendarProvider } from 'react-native-calendars';
 import ExpandableCalendar from 'react-native-calendars/src/expandableCalendar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,10 +38,14 @@ interface CalendarTheme {
   };
 }
 
-const Calendar = () => {
+interface CalendarProps {
+  viewMode: 'day' | 'week';
+}
+
+const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
-  const [viewMode, setViewMode] = useState<'week' | 'day'>('day');
+  // const [viewMode, setViewMode] = useState<'week' | 'day'>('day');
 
   // Load entries on mount
   useEffect(() => {
@@ -162,25 +166,6 @@ const Calendar = () => {
 
   return (
     <View style={styles.calendarWrapper}>
-      <View style={styles.viewToggle}>
-        <TouchableOpacity 
-          style={[styles.toggleButton, viewMode === 'day' && styles.activeToggle]}
-          onPress={() => setViewMode('day')}
-        >
-          <Text style={[styles.toggleText, viewMode === 'day' && styles.activeToggleText]}>
-            Day
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.toggleButton, viewMode === 'week' && styles.activeToggle]}
-          onPress={() => setViewMode('week')}
-        >
-          <Text style={[styles.toggleText, viewMode === 'week' && styles.activeToggleText]}>
-            Week
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <CalendarProvider
         date={formatDate(selectedDate)}
         onDateChanged={handleDateChanged}
@@ -190,7 +175,7 @@ const Calendar = () => {
         <ExpandableCalendar
           onDayPress={handleDateSelect}
           markedDates={getMarkedDates()}
-          theme={calendarTheme}
+          theme={theme}
           firstDay={1}
           calendarWidth={width - 20}
           allowShadow={false}
@@ -218,28 +203,6 @@ const styles = StyleSheet.create({
   calendarContent: {
     flex: 1,
     paddingTop: 20,
-  },
-  viewToggle: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  toggleButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginHorizontal: 5,
-    backgroundColor: '#f3f4f6',
-  },
-  activeToggle: {
-    backgroundColor: '#2196F3',
-  },
-  toggleText: {
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  activeToggleText: {
-    color: '#ffffff',
   },
 });
 
