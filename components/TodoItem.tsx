@@ -163,7 +163,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
                 />
               ) : (
                 <Text style={[styles.text, !todo.text && styles.emptyText]}>
-                  {todo.text || 'New Todo'}
+                  {todo.text || ''}
                 </Text>
               )}
             </TouchableOpacity>
