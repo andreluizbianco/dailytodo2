@@ -98,15 +98,6 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const renderWeekView = () => {
     return (
       <View style={styles.weekContainer}>
-        <View style={styles.weekHeader}>
-          {weekDates.map(date => (
-            <View key={date.toISOString()} style={styles.dayColumn}>
-              <Text style={styles.dayHeader}>
-                {date.toLocaleDateString('en-US', { weekday: 'short' })}
-              </Text>
-            </View>
-          ))}
-        </View>
         <ScrollView style={styles.weekContent}>
           <View style={styles.weekRow}>
             {weekDates.map(date => {
