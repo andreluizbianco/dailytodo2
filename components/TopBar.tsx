@@ -61,11 +61,17 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="time"
             size={28}
-            color={
-              activeView === 'settings' || activeView === 'calendar'
-                ? '#3b82f6'
-                : '#6b7280'
-            }
+            color={activeView === 'settings' ? '#3b82f6' : '#6b7280'}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveView('calendar')}
+          style={styles.iconButton}
+        >
+          <Ionicons
+            name="calendar"
+            size={28}
+            color={activeView === 'calendar' ? '#3b82f6' : '#6b7280'}
           />
         </TouchableOpacity>
         <TouchableOpacity
