@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, TextInput, Text } from 'react-native';
+import { View, TouchableOpacity, TouchableWithoutFeedback, StyleSheet, TextInput, Text } from 'react-native';
 import { Todo } from '../types';
 
 interface TodoItemNoteProps {
@@ -22,9 +22,26 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     setLocalNote(todo.note);
   }, [todo.note]);
 
-  useEffect(() => {
-    setIsEditing(false);
-  }, [todo.id]);
+  const handleChangeText = (text: string) => {
+    let processedText = text;
+    
+    // Check if a new line was added
+    if (text.length > localNote.length && text.includes('\n', localNote.length - 1)) {
+      let prefix = '';
+      if (todo.noteType === 'bullet') {
+        prefix = '• ';
+      } else if (todo.noteType === 'checkbox') {
+        prefix = '[ ] ';
+      }
+
+      // Get the text before the newline and everything after
+      const insertPos = text.lastIndexOf('\n') + 1;
+      processedText = text.slice(0, insertPos) + prefix + text.slice(insertPos);
+    }
+
+    setLocalNote(processedText);
+    updateNote(processedText);
+  };
 
   const handleStartEditing = () => {
     setIsEditing(true);
@@ -53,16 +70,6 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     updateNote(updatedNote);
   };
 
-  const handleChangeText = (text: string) => {
-    let processedText = text;
-    if (todo.noteType !== 'text' && text.endsWith('\n')) {
-      const prefix = todo.noteType === 'bullet' ? '• ' : '[ ] ';
-      processedText = text + prefix;
-    }
-    setLocalNote(processedText);
-    updateNote(processedText);
-  };
-
   const renderNoteContent = () => {
     if (isEditing) {
       return (
@@ -81,7 +88,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     return (
       <View>
         {lines.map((line, index) => {
-          if (todo.noteType === 'checkbox' && (line.startsWith('[ ]') || line.startsWith('[x]'))) {
+          if (line.startsWith('[ ]') || line.startsWith('[x]')) {
             const isChecked = line.startsWith('[x]');
             return (
               <TouchableOpacity
@@ -107,15 +114,15 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   };
 
   return (
-    <TouchableOpacity
-      onLongPress={handleStartEditing}
-      style={[
-        styles.container,
-        { backgroundColor: getBackgroundColor(todo.color) },
-      ]}
-    >
-      {renderNoteContent()}
-    </TouchableOpacity>
+    <TouchableWithoutFeedback onLongPress={handleStartEditing}>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: getBackgroundColor(todo.color) },
+        ]}>
+        {renderNoteContent()}
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 

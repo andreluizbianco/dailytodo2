@@ -73,6 +73,13 @@ export const useTodos = () => {
     setTodos(prevTodos =>
       prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo)),
     );
+    
+    //  to save immediately:
+    const updatedTodos = todos.map(todo => 
+      todo.id === id ? { ...todo, ...updates } : todo
+    );
+    AsyncStorage.setItem('todos', JSON.stringify(updatedTodos))
+      .catch(error => console.error('Error saving todos:', error));
   };
 
   const updateArchivedTodo = (id: number, updates: Partial<Todo>): void => {

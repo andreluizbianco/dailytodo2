@@ -54,6 +54,12 @@ interface TodoSettingsProps {
     setLocalNoteType(type);
     updateTodo({ noteType: type });
   };
+  
+  const handleColorSelect = (color: string) => {
+    updateTodo({ color });
+  };
+  
+  
 
   return (
     <View style={styles.container}>

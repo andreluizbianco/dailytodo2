@@ -38,6 +38,19 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   importData,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(selectedTodo);
+
+  React.useEffect(() => {
+    setLocalSelectedTodo(selectedTodo);
+  }, [selectedTodo]);
+
+  const handleTodoUpdate = (updates: Partial<Todo>) => {
+    if (localSelectedTodo) {
+      const updatedTodo = { ...localSelectedTodo, ...updates };
+      setLocalSelectedTodo(updatedTodo);
+      updateTodo(updatedTodo.id, updates);
+    }
+  };
 
   const renderContent = () => {
     if (activeView === 'settings') {
@@ -58,21 +71,21 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     }
 
     return (
-      selectedTodo && (
+      localSelectedTodo && (
         <>
           <TodoItemNote
-            todo={selectedTodo}
-            updateNote={(noteText: string) => updateTodo(selectedTodo.id, { note: noteText })}
+            todo={localSelectedTodo}
+            updateNote={(noteText: string) => handleTodoUpdate({ note: noteText })}
             onStartEditing={() => setIsEditing(true)}
             onEndEditing={() => setIsEditing(false)}
           />
           {activeView === 'notes' && showSettings && (
             <View style={styles.settingsContainer}>
               <TodoSettings
-                todo={selectedTodo}
-                updateTodo={(updates) => updateTodo(selectedTodo.id, updates)}
-                removeTodo={() => removeTodo(selectedTodo.id)}
-                archiveTodo={() => archiveTodo(selectedTodo.id)}
+                todo={localSelectedTodo}
+                updateTodo={handleTodoUpdate}
+                removeTodo={() => removeTodo(localSelectedTodo.id)}
+                archiveTodo={() => archiveTodo(localSelectedTodo.id)}
                 printOnCalendar={printOnCalendar}
               />
             </View>
