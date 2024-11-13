@@ -91,17 +91,21 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
           if (line.startsWith('[ ]') || line.startsWith('[x]')) {
             const isChecked = line.startsWith('[x]');
             return (
-              <TouchableOpacity
-                key={index}
-                onPress={() => handleToggleCheckbox(index, lines)}
-                style={styles.checkboxLine}
-              >
-                <View style={styles.checkbox}>
-                  {isChecked && <Text style={styles.checkmark}>✓</Text>}
-                </View>
+              <View key={index} style={styles.checkboxLine}>
+                <TouchableOpacity
+                  onPress={() => handleToggleCheckbox(index, lines)}
+                  style={styles.checkboxTouchable}
+                >
+                  {isChecked ? (
+                    <Text style={styles.checkmark}>✓</Text>
+                  ) : (
+                    <View style={styles.checkbox} />
+                  )}
+                </TouchableOpacity>
                 <Text style={styles.noteText}>{line.substring(4)}</Text>
-              </TouchableOpacity>
+              </View>
             );
+
           }
           return (
             <Text key={index} style={styles.noteText}>
@@ -164,18 +168,24 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: 13,
+    height: 13,
     borderWidth: 2,
     borderColor: '#4b5563',
     borderRadius: 4,
-    marginRight: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   checkmark: {
     color: '#4b5563',
     fontSize: 14,
+    width: 13,
+  },
+  checkboxTouchable: {
+    width: 24, // Wider than the checkbox to make it easier to tap
+    height: 24, // Taller than the checkbox to make it easier to tap
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: -4,  // Adjusted to align properly
+    marginRight: 4,  // Added to maintain spacing
   },
 });
 
