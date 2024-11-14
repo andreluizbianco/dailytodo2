@@ -13,9 +13,12 @@ export interface Todo {
   };
 }
 
-  
-  export interface CalendarEntry {
-    id: number;
-    todo: Todo;
-    printedAt: string;
-  }
+export interface CalendarEntry {
+  id: number;
+  todo: Todo;
+  printedAt: string;
+  timeSpent?: {
+    elapsed: number; // Total time in minutes
+  };
+  timerCompleted?: boolean;
+}
