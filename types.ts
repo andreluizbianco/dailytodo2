@@ -1,11 +1,18 @@
 export interface Todo {
-    id: number;
-    text: string;
-    note: string;
-    color: string;
-    isEditing: boolean;
-    noteType: 'text' | 'bullet' | 'checkbox';
-  }
+  id: number;
+  text: string;
+  note: string;
+  color: string;
+  isEditing: boolean;
+  noteType: 'text' | 'bullet' | 'checkbox';
+  timer?: {
+    hours: string;
+    minutes: string;
+    isActive: boolean;
+    endTime?: number;
+  };
+}
+
   
   export interface CalendarEntry {
     id: number;
