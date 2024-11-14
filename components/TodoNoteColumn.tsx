@@ -70,6 +70,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           exportData={exportData}
           importData={importData}
           showSettings={showSettings}
+          updateTodo={updateTodo}
           todos={todos}
         />
       );
