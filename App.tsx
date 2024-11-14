@@ -91,6 +91,7 @@ const App = () => {
             printOnCalendar={handlePrintOnCalendar}
             exportData={exportData}
             importData={importData}
+            todos={todos}
           />
         </View>
       </View>
