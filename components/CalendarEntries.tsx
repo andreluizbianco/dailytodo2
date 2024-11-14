@@ -25,6 +25,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
 
+  const formatElapsedTime = (elapsedMinutes: number): string => {
+    const hours = Math.floor(elapsedMinutes / 60);
+    const minutes = elapsedMinutes % 60;
+    
+    if (hours > 0) {
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+  };
+
   const handleUpdateNote = async (entryId: number, newNote: string) => {
     const updatedEntries = entries.map(entry => 
       entry.id === entryId ? {
@@ -41,6 +51,23 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     const updatedEntries = entries.filter(entry => entry.id !== entryId);
     setEntries(updatedEntries);
     await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+  };
+
+  const renderTimerInfo = (entry: CalendarEntry) => {
+    if (!entry.timeSpent) return null;
+
+    return (
+      <View style={styles.timerInfo}>
+        <Ionicons 
+          name="time"
+          size={14} 
+          color="#6b7280" 
+        />
+        <Text style={styles.timerText}>
+          {formatElapsedTime(entry.timeSpent.elapsed)}
+        </Text>
+      </View>
+    );
   };
 
   const renderDayView = () => {
@@ -66,23 +93,28 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         {dateEntries.map(entry => (
           <View key={entry.id} style={styles.entryContainer}>
             <View style={styles.header}>
-              <Text style={styles.todoText} numberOfLines={1}>
-                {entry.todo.text || 'Untitled Note'}
-              </Text>
-              <Text style={styles.timestamp}>
-                {new Date(entry.printedAt).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false,
-                })}
-              </Text>
-              <TouchableOpacity
-                onLongPress={() => handleDeleteEntry(entry.id)}
-                delayLongPress={700}
-                style={styles.deleteButton}
-              >
-                <Ionicons name="trash-outline" size={18} color="#ef4444" />
-              </TouchableOpacity>
+              <View style={styles.headerLeft}>
+                <Text style={styles.todoText} numberOfLines={1}>
+                  {entry.todo.text || 'Untitled Note'}
+                </Text>
+                {entry.timeSpent && renderTimerInfo(entry)}
+              </View>
+              <View style={styles.headerRight}>
+                <Text style={styles.timestamp}>
+                  {new Date(entry.printedAt).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  })}
+                </Text>
+                <TouchableOpacity
+                  onLongPress={() => handleDeleteEntry(entry.id)}
+                  delayLongPress={700}
+                  style={styles.deleteButton}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
             </View>
             <TodoItemNote
               todo={entry.todo}
@@ -112,15 +144,15 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 <View key={dateStr} style={styles.dayColumn}>
                   {dayEntries.map(entry => (
                     <View key={entry.id} style={styles.weekEntryItem}>
-                      <Text 
-                        style={[
-                          styles.weekEntryText,
-                          { backgroundColor: getBackgroundColor(entry.todo.color) }
-                        ]} 
-                        numberOfLines={2}
-                      >
-                        {entry.todo.text || 'Untitled'}
-                      </Text>
+                      <View style={[
+                        styles.weekEntryContent,
+                        { backgroundColor: getBackgroundColor(entry.todo.color) }
+                      ]}>
+                        <Text style={styles.weekEntryText} numberOfLines={2}>
+                          {entry.todo.text || 'Untitled'}
+                        </Text>
+                        {entry.timeSpent && renderTimerInfo(entry)}
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -180,12 +212,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   todoText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#1f2937',
     flex: 1,
-    marginRight: 8,
   },
   timestamp: {
     fontSize: 12,
@@ -195,16 +236,23 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 8,
   },
-  // Week view styles
+  timerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  timerText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginLeft: 4,
+  },
   weekContainer: {
     flex: 1,
     marginTop: 10,
-  },
-  weekHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingBottom: 8,
   },
   weekContent: {
     flex: 1,
@@ -218,21 +266,17 @@ const styles = StyleSheet.create({
     minHeight: 50,
     alignItems: 'center',
   },
-  dayHeader: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4b5563',
-    textAlign: 'center',
-  },
   weekEntryItem: {
     padding: 4,
     width: COLUMN_WIDTH - 8,
   },
+  weekEntryContent: {
+    padding: 4,
+    borderRadius: 4,
+  },
   weekEntryText: {
     fontSize: 12,
     color: '#1f2937',
-    padding: 4,
-    borderRadius: 4,
   },
 });
 

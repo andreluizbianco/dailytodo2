@@ -17,17 +17,21 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [displayTime, setDisplayTime] = useState<string>('');
   const timerInterval = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
 
-  // Print todo to calendar
+  // Print todo to calendar with correct elapsed time
   const printToCalendar = async (todo: Todo, completed: boolean) => {
+    const now = Date.now();
+    const elapsedMs = now - startTimeRef.current;
+    const elapsedMinutes = Math.max(1, Math.floor(elapsedMs / (1000 * 60)));
+    
     const calendarEntry = {
-      id: Date.now(),
+      id: now,
       todo: { ...todo },
       printedAt: new Date().toISOString(),
-      timerCompleted: completed, // Add flag to indicate if timer was completed or stopped
+      timerCompleted: completed,
       timeSpent: {
-        hours: currentHours,
-        minutes: currentMinutes
+        elapsed: elapsedMinutes
       }
     };
     
@@ -106,15 +110,12 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const handlePlay = () => {
     if (!selectedTodo) return;
 
-    if (timerInterval.current) {
-      clearInterval(timerInterval.current);
-    }
-
     const totalSeconds = 
       (parseInt(currentHours) * 3600) + 
       (parseInt(currentMinutes) * 60);
     
     if (totalSeconds > 0) {
+      startTimeRef.current = Date.now(); // Record start time
       setRemainingSeconds(totalSeconds);
       setIsPlaying(true);
       updateTodo(selectedTodo.id, {
@@ -158,9 +159,6 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     }
     
     setIsPlaying(false);
-    const totalSeconds = (parseInt(currentHours) * 3600) + (parseInt(currentMinutes) * 60);
-    setRemainingSeconds(totalSeconds);
-    
     updateTodo(selectedTodo.id, {
       timer: {
         hours: currentHours,
@@ -169,7 +167,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       }
     });
 
-    // Print to calendar when timer is stopped manually
+    // Print to calendar with actual elapsed time when stopped
     printToCalendar(selectedTodo, false);
   };
 
