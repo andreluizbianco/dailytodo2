@@ -123,20 +123,27 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                 <Text style={styles.resultText}>
                   {getItemText(result)}
                 </Text>
-                {result.type === 'calendar' && (result.item as CalendarEntry).timeSpent && (
-                  <View style={styles.timerInfo}>
-                    <Ionicons name="time" size={14} color="#6b7280" />
-                    <Text style={styles.timerText}>
-                      {`${(result.item as CalendarEntry).timeSpent?.elapsed}m`}
-                    </Text>
-                  </View>
-                )}
+                {result.type === 'calendar' && (
+  <View style={styles.timerInfo}>
+    <Ionicons name="time" size={14} color="#6b7280" />
+    {(result.item as CalendarEntry).timeSpent?.elapsed && (
+      <Text style={styles.timerText}>
+        {`${(result.item as CalendarEntry).timeSpent?.elapsed}m`}
+      </Text>
+    )}
+  </View>
+)}
               </View>
-              <Text style={styles.resultType}>
-                {result.type === 'todo' ? 'Current' : 
-                 result.type === 'archived' ? 'Archived' : 
-                 'Calendar'}
-              </Text>
+              {(result.type === 'archived' || result.type === 'calendar') && (
+  <View style={styles.resultType}>
+    {result.type === 'archived' && (
+      <Text style={styles.typeText}>Archived</Text>
+    )}
+    {result.type === 'calendar' && (
+      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+    )}
+  </View>
+)}
             </View>
             <TodoItemNote
               todo={getTodoForNote(result)}
@@ -272,12 +279,16 @@ const styles = StyleSheet.create({
     color: '#1f2937',
   },
   resultType: {
-    fontSize: 12,
-    color: '#6b7280',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#f3f4f6',
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 4,
+  },
+  typeText: {
+    fontSize: 12,
+    color: '#6b7280',
   },
   timerInfo: {
     flexDirection: 'row',
