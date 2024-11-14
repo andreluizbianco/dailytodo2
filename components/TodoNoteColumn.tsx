@@ -54,8 +54,9 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
 
   const renderContent = () => {
     if (activeView === 'settings') {
-      return <TimerView />;
+      return <TimerView selectedTodo={selectedTodo} updateTodo={updateTodo} />;
     }
+  
 
     if (activeView === 'archive') {
       return (
