@@ -20,7 +20,8 @@ interface ArchivedTodosProps {
   exportData: () => void;
   importData: () => void;
   showSettings: boolean;
-  todos: Todo[]; // Add this to access current todos
+  todos: Todo[];
+  updateTodo: (id: number, updates: Partial<Todo>) => void;
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -31,7 +32,8 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   exportData,
   importData,
   showSettings,
-  todos
+  todos,
+  updateTodo
 }) => {
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +90,55 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     setSearchResults(results);
   }, [todos, archivedTodos]);
 
+  const handleUpdateNote = async (result: SearchResult, newNote: string) => {
+    const updatedTodo = {
+      ...(result.type === 'calendar' ? (result.item as CalendarEntry).todo : result.item as Todo),
+      note: newNote
+    };
+  
+    try {
+      switch (result.type) {
+        case 'todo':
+          // Update current todo
+          updateTodo(updatedTodo.id, { note: newNote });
+          break;
+  
+        case 'archived':
+          // Update archived todo
+          updateArchivedTodo(updatedTodo.id, { note: newNote });
+          break;
+  
+        case 'calendar':
+          // Update calendar entry
+          const savedEntries = await AsyncStorage.getItem('calendarEntries');
+          if (savedEntries) {
+            const entries: CalendarEntry[] = JSON.parse(savedEntries);
+            const updatedEntries = entries.map(entry => 
+              entry.id === (result.item as CalendarEntry).id 
+                ? { ...entry, todo: { ...entry.todo, note: newNote } }
+                : entry
+            );
+            await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+            
+            // Update search results
+            setSearchResults(prev => prev.map(searchResult => 
+              searchResult === result 
+                ? { 
+                    ...searchResult, 
+                    item: { 
+                      ...(searchResult.item as CalendarEntry),
+                      todo: { ...(searchResult.item as CalendarEntry).todo, note: newNote }
+                    }
+                  }
+                : searchResult
+            ));
+          }
+          break;
+      }
+    } catch (error) {
+      console.error('Error updating note:', error);
+    }
+  };
 
   const renderSearchResults = () => {
     if (!searchQuery.trim()) {
@@ -145,12 +196,12 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   </View>
 )}
             </View>
-            <TodoItemNote
-              todo={getTodoForNote(result)}
-              updateNote={() => {}}
-              onStartEditing={() => {}}
-              onEndEditing={() => {}}
-            />
+              <TodoItemNote
+                todo={getTodoForNote(result)}
+                updateNote={(note) => handleUpdateNote(result, note)}
+                onStartEditing={() => {}}
+                onEndEditing={() => {}}
+              />
           </View>
         ))}
       </ScrollView>
