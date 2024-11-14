@@ -1,10 +1,9 @@
-import React, { memo, useCallback, useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { useTimeManagement } from '../hooks/useTimeManagement';
+import React, { memo, useCallback, useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import TimeWheelPicker from './TimeWheelPicker';
 import PlayStopControls from './PlayStopControls';
-import { backgroundService } from '../utils/backgroundService';
 import { Todo } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface TimerViewProps {
   selectedTodo: Todo | null;
@@ -12,41 +11,83 @@ interface TimerViewProps {
 }
 
 const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
-  const { hours, minutes, updateTime, isLoaded } = useTimeManagement();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentHours, setCurrentHours] = useState(hours);
-  const [currentMinutes, setCurrentMinutes] = useState(minutes);
+  const [currentHours, setCurrentHours] = useState('00');
+  const [currentMinutes, setCurrentMinutes] = useState('25');
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [displayTime, setDisplayTime] = useState<string>('');
+  const timerInterval = useRef<NodeJS.Timeout | null>(null);
 
+  // Print todo to calendar
+  const printToCalendar = async (todo: Todo, completed: boolean) => {
+    const calendarEntry = {
+      id: Date.now(),
+      todo: { ...todo },
+      printedAt: new Date().toISOString(),
+      timerCompleted: completed, // Add flag to indicate if timer was completed or stopped
+      timeSpent: {
+        hours: currentHours,
+        minutes: currentMinutes
+      }
+    };
+    
+    try {
+      const savedEntries = await AsyncStorage.getItem('calendarEntries');
+      const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
+      const updatedEntries = [...currentEntries, calendarEntry];
+      await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    } catch (error) {
+      console.error('Error saving calendar entry:', error);
+    }
+  };
+
+  // Load saved timer settings when todo changes
   useEffect(() => {
     if (selectedTodo?.timer) {
       setCurrentHours(selectedTodo.timer.hours);
       setCurrentMinutes(selectedTodo.timer.minutes);
-      setIsPlaying(selectedTodo.timer.isActive);
-    } else if (hours && minutes) {
-      setCurrentHours(hours);
-      setCurrentMinutes(minutes);
+      setIsPlaying(selectedTodo.timer.isActive || false);
+      
+      if (selectedTodo.timer.isActive) {
+        handlePlay();
+      }
+    } else {
+      setCurrentHours('00');
+      setCurrentMinutes('25');
+      setIsPlaying(false);
     }
-  }, [selectedTodo, hours, minutes]);
+  }, [selectedTodo?.id]);
+
+  const formatTimeDisplay = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
 
   useEffect(() => {
-    const restoreTimer = async () => {
-      if (selectedTodo?.timer?.isActive) {
-        const timerState = await backgroundService.restoreTimer();
-        if (timerState) {
-          setIsPlaying(true);
-        }
+    if (remainingSeconds >= 0) {
+      setDisplayTime(formatTimeDisplay(remainingSeconds));
+    }
+  }, [remainingSeconds]);
+
+  useEffect(() => {
+    return () => {
+      if (timerInterval.current) {
+        clearInterval(timerInterval.current);
       }
     };
-
-    restoreTimer();
-  }, [selectedTodo]);
+  }, []);
 
   const handleTimeChange = useCallback(
     (h: string, m: string) => {
       if (!isPlaying && selectedTodo) {
         setCurrentHours(h);
         setCurrentMinutes(m);
-        updateTime(h, m);
         updateTodo(selectedTodo.id, {
           timer: {
             hours: h,
@@ -54,33 +95,42 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
             isActive: false
           }
         });
+        
+        const totalSeconds = (parseInt(h) * 3600) + (parseInt(m) * 60);
+        setRemainingSeconds(totalSeconds);
       }
     },
-    [updateTime, isPlaying, selectedTodo, updateTodo],
+    [isPlaying, selectedTodo, updateTodo],
   );
 
-  const handlePlay = async () => {
+  const handlePlay = () => {
     if (!selectedTodo) return;
 
-    setIsPlaying(true);
-    const totalSeconds = parseInt(currentHours) * 3600 + parseInt(currentMinutes) * 60;
+    if (timerInterval.current) {
+      clearInterval(timerInterval.current);
+    }
+
+    const totalSeconds = 
+      (parseInt(currentHours) * 3600) + 
+      (parseInt(currentMinutes) * 60);
     
     if (totalSeconds > 0) {
+      setRemainingSeconds(totalSeconds);
+      setIsPlaying(true);
       updateTodo(selectedTodo.id, {
         timer: {
           hours: currentHours,
           minutes: currentMinutes,
-          isActive: true,
-          endTime: Date.now() + (totalSeconds * 1000)
+          isActive: true
         }
       });
 
-      await backgroundService.startTimer(
-        currentHours,
-        currentMinutes,
-        () => {
-          setIsPlaying(false);
-          if (selectedTodo) {
+      timerInterval.current = setInterval(() => {
+        setRemainingSeconds(prev => {
+          if (prev <= 1) {
+            // Timer completed
+            clearInterval(timerInterval.current!);
+            setIsPlaying(false);
             updateTodo(selectedTodo.id, {
               timer: {
                 hours: currentHours,
@@ -88,17 +138,29 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
                 isActive: false
               }
             });
+            // Print to calendar when timer completes
+            if (selectedTodo) {
+              printToCalendar(selectedTodo, true);
+            }
+            return 0;
           }
-        },
-      );
+          return prev - 1;
+        });
+      }, 1000);
     }
   };
 
-  const handleStop = async () => {
+  const handleStop = () => {
     if (!selectedTodo) return;
 
+    if (timerInterval.current) {
+      clearInterval(timerInterval.current);
+    }
+    
     setIsPlaying(false);
-    await backgroundService.stopTimer();
+    const totalSeconds = (parseInt(currentHours) * 3600) + (parseInt(currentMinutes) * 60);
+    setRemainingSeconds(totalSeconds);
+    
     updateTodo(selectedTodo.id, {
       timer: {
         hours: currentHours,
@@ -106,25 +168,34 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         isActive: false
       }
     });
-  };
 
-  if (!isLoaded || !selectedTodo) {
-    return <View style={styles.container} />;
-  }
+    // Print to calendar when timer is stopped manually
+    printToCalendar(selectedTodo, false);
+  };
 
   return (
     <View style={styles.container}>
+      <View style={styles.countdownContainer}>
+        <Text style={[
+          styles.countdownText,
+          isPlaying && styles.countdownTextActive
+        ]}>
+          {displayTime || '00:00'}
+        </Text>
+      </View>
+      
       <TimeWheelPicker
         initialHours={currentHours}
         initialMinutes={currentMinutes}
         onTimeChange={handleTimeChange}
       />
+      
       <View style={styles.controlsContainer}>
         <PlayStopControls
           onPlay={handlePlay}
           onStop={handleStop}
           isPlaying={isPlaying}
-          disabled={parseInt(currentHours) === 0 && parseInt(currentMinutes) === 0}
+          disabled={!selectedTodo || (parseInt(currentHours) === 0 && parseInt(currentMinutes) === 0)}
         />
       </View>
     </View>
@@ -137,6 +208,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  countdownContainer: {
+    marginBottom: 30,
+    padding: 20,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  countdownText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
+    color: '#1f2937',
+  },
+  countdownTextActive: {
+    color: '#2563eb',
   },
   controlsContainer: {
     marginTop: 30,
