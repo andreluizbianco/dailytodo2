@@ -67,6 +67,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           updateArchivedTodo={updateArchivedTodo}
           exportData={exportData}
           importData={importData}
+          showSettings={showSettings}
         />
       );
     }
