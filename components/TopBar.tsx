@@ -28,12 +28,13 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
-  const handleTimerPress = () => {
-    setActiveView('settings');
-  };
-
-  const handleTimerLongPress = () => {
-    setActiveView('calendar');
+  const handleArchivePress = () => {
+    if (activeView !== 'archive') {
+      setActiveView('archive');
+      setShowSettings(false);
+    } else {
+      setShowSettings(!showSettings);
+    }
   };
 
   return (
@@ -75,7 +76,7 @@ const TopBar: React.FC<TopBarProps> = ({
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveView('archive')}
+          onPress={handleArchivePress}
           style={styles.iconButton}
         >
           <Ionicons

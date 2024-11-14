@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import TodoList from './TodoList';
 import { Todo } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
 interface ArchivedTodosProps {
   archivedTodos: Todo[];
@@ -10,6 +11,7 @@ interface ArchivedTodosProps {
   updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
   exportData: () => void;
   importData: () => void;
+  showSettings: boolean;
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -19,32 +21,43 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   updateArchivedTodo,
   exportData,
   importData,
+  showSettings
 }) => {
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(null);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Archived Todos</Text>
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={exportData}>
-          <Text style={styles.buttonText}>Export Data</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={importData}>
-          <Text style={styles.buttonText}>Import Data</Text>
-        </TouchableOpacity>
-      </View>
-      {archivedTodos.length > 0 ? (
-        <TodoList
-          todos={archivedTodos}
-          setTodos={setArchivedTodos}
-          updateTodo={updateArchivedTodo}
-          selectedTodo={selectedArchivedTodo}
-          setSelectedTodo={setSelectedArchivedTodo}
-          isArchiveView={true}
-          unarchiveTodo={unarchiveTodo}
-        />
+      {showSettings ? (
+        <View style={styles.settingsContainer}>
+          <Text style={styles.title}>Data Management</Text>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.button} onPress={exportData}>
+              <Ionicons name="download-outline" size={20} color="white" />
+              <Text style={styles.buttonText}>Export Data</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={importData}>
+              <Ionicons name="push-outline" size={20} color="white" />
+              <Text style={styles.buttonText}>Import Data</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       ) : (
-        <Text style={styles.emptyText}>No archived todos</Text>
+        <>
+          <Text style={styles.title}>Archived Notes</Text>
+          {archivedTodos.length > 0 ? (
+            <TodoList
+              todos={archivedTodos}
+              setTodos={setArchivedTodos}
+              updateTodo={updateArchivedTodo}
+              selectedTodo={selectedArchivedTodo}
+              setSelectedTodo={setSelectedArchivedTodo}
+              isArchiveView={true}
+              unarchiveTodo={unarchiveTodo}
+            />
+          ) : (
+            <Text style={styles.emptyText}>No archived notes</Text>
+          )}
+        </>
       )}
     </View>
   );
@@ -57,31 +70,42 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 10,
   },
+  settingsContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 20,
+  },
   title: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 20,
+    color: '#1f2937',
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 10,
+    width: '100%',
+    gap: 16,
+    paddingHorizontal: 20,
   },
   button: {
     backgroundColor: '#4b5563',
-    padding: 10,
-    borderRadius: 4,
-    minWidth: 120,
+    padding: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
   },
   emptyText: {
     fontSize: 14,
     fontStyle: 'italic',
     color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
 
