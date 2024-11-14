@@ -20,6 +20,7 @@ interface TodoNoteColumnProps {
   printOnCalendar: (todo: Todo) => void;
   exportData: () => void;
   importData: () => void;
+  todos: Todo[];
 }
 
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
@@ -36,6 +37,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   printOnCalendar,
   exportData,
   importData,
+  todos,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(selectedTodo);
@@ -68,9 +70,11 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           exportData={exportData}
           importData={importData}
           showSettings={showSettings}
+          todos={todos}
         />
       );
     }
+
 
     return (
       localSelectedTodo && (
