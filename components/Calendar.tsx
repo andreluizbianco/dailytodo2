@@ -4,7 +4,7 @@ import { DateData, CalendarProvider } from 'react-native-calendars';
 import ExpandableCalendar from 'react-native-calendars/src/expandableCalendar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CalendarEntries from './CalendarEntries';
-import { CalendarEntry } from '../types';
+import { CalendarEntry, Todo } from '../types';
 
 const { width } = Dimensions.get('window');
 
@@ -40,27 +40,35 @@ interface CalendarTheme {
 
 interface CalendarProps {
   viewMode: 'day' | 'week';
+  onDateSelect: (date: string) => void;
+  onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
+const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
-  // const [viewMode, setViewMode] = useState<'week' | 'day'>('day');
 
-  // Load entries on mount
   useEffect(() => {
-    const loadEntries = async () => {
-      try {
-        const savedEntries = await AsyncStorage.getItem('calendarEntries');
-        if (savedEntries) {
-          setEntries(JSON.parse(savedEntries));
-        }
-      } catch (error) {
-        console.error('Error loading calendar entries:', error);
-      }
-    };
     loadEntries();
   }, []);
+
+  const loadEntries = async () => {
+    try {
+      const savedEntries = await AsyncStorage.getItem('calendarEntries');
+      if (savedEntries) {
+        setEntries(JSON.parse(savedEntries));
+      }
+    } catch (error) {
+      console.error('Error loading calendar entries:', error);
+    }
+  };
+
+  const handleAddEntry = async () => {
+    const newEntry = await onAddEntry();
+    if (newEntry && 'todo' in newEntry) {
+      setEntries(prev => [...prev, newEntry]);
+    }
+  };
 
   const events = useMemo(() => {
     const markedDates: { [key: string]: any } = {};
@@ -107,10 +115,9 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
     },
   }), []);
 
-  
   const getWeekDates = (date: Date): Date[] => {
     const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust for starting Monday
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(date.setDate(diff));
     
     const week: Date[] = [];
@@ -127,8 +134,10 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
   }, []);
 
   const handleDateSelect = useCallback((date: DateData) => {
-    setSelectedDate(new Date(date.dateString));
-  }, []);
+    const newDate = new Date(date.dateString);
+    setSelectedDate(newDate);
+    onDateSelect(date.dateString);
+  }, [onDateSelect]);
 
   const getMarkedDates = useCallback(() => {
     const marked = { ...events };
@@ -149,20 +158,6 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
   }, []);
 
   const weekDates = useMemo(() => getWeekDates(new Date(selectedDate)), [selectedDate]);
-
-  const calendarTheme = useMemo(() => ({
-    ...theme,
-    'stylesheet.calendar.header': {
-      ...theme['stylesheet.calendar.header'],
-      // Make week header align with our columns
-      week: {
-        marginTop: 5,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingHorizontal: 10,
-      },
-    },
-  }), []);
 
   return (
     <View style={styles.calendarWrapper}>
@@ -188,6 +183,7 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode }) => {
           setEntries={setEntries}
           viewMode={viewMode}
           weekDates={weekDates}
+          onAddEntry={handleAddEntry}
         />
       </CalendarProvider>
     </View>
