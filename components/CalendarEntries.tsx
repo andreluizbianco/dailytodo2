@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import TodoItemNote from './TodoItemNote';
-import { CalendarEntry } from '../types';
+import { CalendarEntry, Todo } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
@@ -14,7 +14,7 @@ interface CalendarEntriesProps {
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
   viewMode: 'week' | 'day';
   weekDates: Date[];
-  onAddEntry: () => Promise<void>;
+  onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;  // Updated return type
 }
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
@@ -23,6 +23,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   setEntries,
   viewMode,
   weekDates,
+  onAddEntry
 }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
 
