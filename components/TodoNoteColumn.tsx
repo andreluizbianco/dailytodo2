@@ -21,6 +21,7 @@ interface TodoNoteColumnProps {
   exportData: () => void;
   importData: () => void;
   todos: Todo[];
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this line
 }
 
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
@@ -38,6 +39,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   exportData,
   importData,
   todos,
+  setTodos,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(selectedTodo);
@@ -72,6 +74,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           showSettings={showSettings}
           updateTodo={updateTodo}
           todos={todos}
+          setTodos={setTodos} 
         />
       );
     }
