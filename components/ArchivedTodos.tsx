@@ -99,17 +99,14 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     try {
       switch (result.type) {
         case 'todo':
-          // Update current todo
           updateTodo(updatedTodo.id, { note: newNote });
           break;
   
         case 'archived':
-          // Update archived todo
           updateArchivedTodo(updatedTodo.id, { note: newNote });
           break;
   
         case 'calendar':
-          // Update calendar entry
           const savedEntries = await AsyncStorage.getItem('calendarEntries');
           if (savedEntries) {
             const entries: CalendarEntry[] = JSON.parse(savedEntries);
@@ -120,7 +117,6 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
             );
             await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
             
-            // Update search results
             setSearchResults(prev => prev.map(searchResult => 
               searchResult === result 
                 ? { 
@@ -175,55 +171,44 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                   {getItemText(result)}
                 </Text>
                 {result.type === 'calendar' && (
-  <View style={styles.timerInfo}>
-    <Ionicons name="time" size={14} color="#6b7280" />
-    {(result.item as CalendarEntry).timeSpent?.elapsed && (
-      <Text style={styles.timerText}>
-        {`${(result.item as CalendarEntry).timeSpent?.elapsed}m`}
-      </Text>
-    )}
-  </View>
-)}
+                  <View style={styles.timerInfo}>
+                    <Ionicons name="time" size={14} color="#6b7280" />
+                    {(result.item as CalendarEntry).timeSpent?.elapsed && (
+                      <Text style={styles.timerText}>
+                        {`${(result.item as CalendarEntry).timeSpent?.elapsed}m`}
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
               {(result.type === 'archived' || result.type === 'calendar') && (
-  <View style={styles.resultType}>
-    {result.type === 'archived' && (
-      <Text style={styles.typeText}>Archived</Text>
-    )}
-    {result.type === 'calendar' && (
-      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
-    )}
-  </View>
-)}
+                <View style={styles.resultType}>
+                  {result.type === 'archived' && (
+                    <Text style={styles.typeText}>Archived</Text>
+                  )}
+                  {result.type === 'calendar' && (
+                    <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                  )}
+                </View>
+              )}
             </View>
-              <TodoItemNote
-                todo={getTodoForNote(result)}
-                updateNote={(note) => handleUpdateNote(result, note)}
-                onStartEditing={() => {}}
-                onEndEditing={() => {}}
-              />
+            <TodoItemNote
+              todo={getTodoForNote(result)}
+              updateNote={(note) => handleUpdateNote(result, note)}
+              onStartEditing={() => {}}
+              onEndEditing={() => {}}
+            />
           </View>
         ))}
       </ScrollView>
     );
   };
 
-  return (
-    <View style={styles.container}>
-      {showSettings ? (
+  if (showSettings) {
+    return (
+      <View style={styles.container}>
         <View style={styles.settingsContainer}>
-          <Text style={styles.title}>Search & Data Management</Text>
-          
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search in all notes..."
-              value={searchQuery}
-              onChangeText={handleSearch}
-              autoCapitalize="none"
-            />
-          </View>
-
+          <Text style={styles.title}>Data Management</Text>
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.button} onPress={exportData}>
               <Text style={styles.buttonText}>Export</Text>
@@ -232,26 +217,39 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
               <Text style={styles.buttonText}>Import</Text>
             </TouchableOpacity>
           </View>
-
-          {renderSearchResults()}
         </View>
-      ) : (
-        <>
-          <Text style={styles.title}>Archived Notes</Text>
-          {archivedTodos.length > 0 ? (
-            <TodoList
-              todos={archivedTodos}
-              setTodos={setArchivedTodos}
-              updateTodo={updateArchivedTodo}
-              selectedTodo={selectedArchivedTodo}
-              setSelectedTodo={setSelectedArchivedTodo}
-              isArchiveView={true}
-              unarchiveTodo={unarchiveTodo}
-            />
-          ) : (
-            <Text style={styles.emptyText}>No archived notes</Text>
-          )}
-        </>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Archived Notes</Text>
+      
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search in all notes..."
+          value={searchQuery}
+          onChangeText={handleSearch}
+          autoCapitalize="none"
+        />
+      </View>
+
+      {searchQuery ? renderSearchResults() : (
+        archivedTodos.length > 0 ? (
+          <TodoList
+            todos={archivedTodos}
+            setTodos={setArchivedTodos}
+            updateTodo={updateArchivedTodo}
+            selectedTodo={selectedArchivedTodo}
+            setSelectedTodo={setSelectedArchivedTodo}
+            isArchiveView={true}
+            unarchiveTodo={unarchiveTodo}
+          />
+        ) : (
+          <Text style={styles.emptyText}>No archived notes</Text>
+        )
       )}
     </View>
   );
