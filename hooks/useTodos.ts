@@ -58,12 +58,13 @@ export const useTodos = () => {
 
   const addTodo = (): Todo => {
     const newTodo: Todo = {
-      id: Date.now(),
+      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
       text: '',
       note: '',
       color: 'blue',
       isEditing: true,
       noteType: 'text',
+      createdAt: new Date().toISOString()
     };
     setTodos(prevTodos => [...prevTodos, newTodo]);
     return newTodo;
