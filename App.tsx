@@ -18,6 +18,7 @@ const App = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>('day');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const {
     todos,
     setTodos,
@@ -33,9 +34,38 @@ const App = () => {
     importData,
   } = useTodos();
 
-  const handleAddTodo = () => {
-    const newTodo = addTodo();
-    setSelectedTodo(newTodo);
+  const handleAddTodo = async () => {
+    if (activeView === 'calendar') {
+      const newTodo: Todo = {
+        id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+        text: '',
+        note: '',
+        color: 'blue',
+        isEditing: true,
+        noteType: 'text',
+        createdAt: new Date().toISOString()
+      };
+
+      const calendarEntry: CalendarEntry = {
+        id: Date.now(),
+        todo: newTodo,
+        printedAt: `${selectedDate}T${new Date().toTimeString().split(' ')[0]}`
+      };
+
+      try {
+        const savedEntries = await AsyncStorage.getItem('calendarEntries');
+        const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
+        const updatedEntries = [...currentEntries, calendarEntry];
+        await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+        return calendarEntry;
+      } catch (error) {
+        console.error('Error saving calendar entry:', error);
+      }
+    } else {
+      const newTodo = addTodo();
+      setSelectedTodo(newTodo);
+      return newTodo;
+    }
   };
 
   const handlePrintOnCalendar = async (todo: Todo) => {
@@ -59,11 +89,14 @@ const App = () => {
     if (activeView === 'calendar') {
       return (
         <View style={styles.calendarContainer}>
-          <Calendar viewMode={calendarViewMode} />
+          <Calendar 
+            viewMode={calendarViewMode} 
+            onDateSelect={setSelectedDate}
+            onAddEntry={handleAddTodo}
+          />
         </View>
       );
     }
-  
 
     return (
       <View style={styles.content}>

@@ -14,6 +14,7 @@ interface CalendarEntriesProps {
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
   viewMode: 'week' | 'day';
   weekDates: Date[];
+  onAddEntry: () => Promise<void>;
 }
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
