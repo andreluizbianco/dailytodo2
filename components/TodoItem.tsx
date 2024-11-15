@@ -70,7 +70,6 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
 
     const handleChangeText = (text: string) => {
       setEditedText(text);
-      updateTodo(todo.id, { text });
     };
 
     const handleStartEditing = () => {
@@ -80,7 +79,17 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
 
     const handleEndEditing = () => {
       setIsEditing(false);
-      updateTodo(todo.id, { isEditing: false });
+      // Immediately save the current text when ending edit mode
+      updateTodo(todo.id, { 
+        text: editedText,
+        isEditing: false 
+      });
+    };
+
+    const handleBlur = () => {
+      if (isEditing) {
+        handleEndEditing();
+      }
     };
 
     const onSingleTap = (event: any) => {
@@ -159,7 +168,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
                   style={styles.input}
                   value={editedText}
                   onChangeText={handleChangeText}
-                  onBlur={handleEndEditing}
+                  onBlur={handleBlur} 
                   multiline
                 />
               ) : (
