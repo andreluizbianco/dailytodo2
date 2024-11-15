@@ -172,29 +172,46 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       } else if (result.type === 'calendar') {
         const calendarEntry = result.item as CalendarEntry;
         
-        // Create a new todo from the calendar entry
+        // Generate new unique ID using timestamp with microsecond precision
+        const uniqueId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
+        // Create a new todo from the calendar entry with the new unique ID
         const newTodo: Todo = {
           ...calendarEntry.todo,
-          id: Date.now(), // Generate new ID to avoid conflicts
+          id: uniqueId,
           isEditing: false,
           color: calendarEntry.todo.color || 'blue',
           noteType: calendarEntry.todo.noteType || 'text',
           text: calendarEntry.todo.text || '',
-          note: calendarEntry.todo.note || ''
+          note: calendarEntry.todo.note || '',
+          createdAt: calendarEntry.printedAt, // Preserve original creation time
+          restoredFrom: {
+            type: 'calendar',
+            originalId: calendarEntry.id,
+            timestamp: new Date().toISOString()
+          }
         };
         
-        console.log('About to add new todo:', newTodo);
-        
-        // Update todos state directly
-        setTodos((currentTodos: Todo[]) => {
-          console.log('Current todos:', currentTodos);
-          const updatedTodos = [...currentTodos, newTodo];
-          console.log('Updated todos:', updatedTodos);
-          return updatedTodos;
+        // Update todos with the new unique ID
+        setTodos(currentTodos => {
+          // Check for any potential duplicates before adding
+          const isDuplicate = currentTodos.some((todo: Todo) => 
+            todo.text === newTodo.text && 
+            todo.note === newTodo.note &&
+            Math.abs(new Date(todo.createdAt || 0).getTime() - 
+                    new Date(calendarEntry.printedAt).getTime()) < 1000
+          );
+          
+          if (isDuplicate) {
+            console.warn('Duplicate todo detected, skipping...');
+            return currentTodos;
+          }
+          
+          return [...currentTodos, newTodo];
         });
         
-        // Remove from calendar entries
         try {
+          // Remove from calendar entries
           const savedEntries = await AsyncStorage.getItem('calendarEntries');
           if (savedEntries) {
             const entries: CalendarEntry[] = JSON.parse(savedEntries);
@@ -205,12 +222,23 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
             setSearchResults(prev => prev.filter(r => 
               !(r.type === 'calendar' && (r.item as CalendarEntry).id === calendarEntry.id)
             ));
-  
-            // Also update AsyncStorage for todos
+    
+            // Update AsyncStorage for todos with duplicate checking
             AsyncStorage.getItem('todosData').then(savedTodos => {
               const currentTodos = savedTodos ? JSON.parse(savedTodos) : { todos: [], archivedTodos: [] };
-              currentTodos.todos.push(newTodo);
-              AsyncStorage.setItem('todosData', JSON.stringify(currentTodos));
+              
+              // Check for duplicates before adding to storage
+              const isDuplicateInStorage = currentTodos.todos.some((todo: Todo) => 
+                todo.text === newTodo.text && 
+                todo.note === newTodo.note &&
+                Math.abs(new Date(todo.createdAt || 0).getTime() - 
+                        new Date(calendarEntry.printedAt).getTime()) < 1000
+              );
+              
+              if (!isDuplicateInStorage) {
+                currentTodos.todos.push(newTodo);
+                AsyncStorage.setItem('todosData', JSON.stringify(currentTodos));
+              }
             });
           }
         } catch (error) {
