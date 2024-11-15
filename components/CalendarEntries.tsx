@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import TodoItemNote from './TodoItemNote';
 import { CalendarEntry, Todo } from '../types';
@@ -14,7 +14,7 @@ interface CalendarEntriesProps {
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
   viewMode: 'week' | 'day';
   weekDates: Date[];
-  onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;  // Updated return type
+  onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
 }
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
@@ -25,7 +25,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   weekDates,
   onAddEntry
 }) => {
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
@@ -49,6 +50,24 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
   };
 
+  const handleStartTitleEditing = (entry: CalendarEntry) => {
+    setEditingTitleId(entry.id);
+    setEditingText(entry.todo.text);
+  };
+
+  const handleEndTitleEditing = async (entryId: number) => {
+    const updatedEntries = entries.map(entry =>
+      entry.id === entryId ? {
+        ...entry,
+        todo: { ...entry.todo, text: editingText }
+      } : entry
+    );
+
+    setEntries(updatedEntries);
+    setEditingTitleId(null);
+    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+  };
+
   const handleDeleteEntry = async (entryId: number) => {
     const updatedEntries = entries.filter(entry => entry.id !== entryId);
     setEntries(updatedEntries);
@@ -60,15 +79,34 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
     return (
       <View style={styles.timerInfo}>
-        <Ionicons 
-          name="time"
-          size={14} 
-          color="#6b7280" 
-        />
+        <Ionicons name="time" size={14} color="#6b7280" />
         <Text style={styles.timerText}>
           {formatElapsedTime(entry.timeSpent.elapsed)}
         </Text>
       </View>
+    );
+  };
+
+  const renderTodoText = (entry: CalendarEntry) => {
+    if (editingTitleId === entry.id) {
+      return (
+        <TextInput
+          value={editingText}
+          onChangeText={setEditingText}
+          onBlur={() => handleEndTitleEditing(entry.id)}
+          style={[styles.todoText, styles.todoInput]}
+          autoFocus
+        />
+      );
+    }
+    return (
+      <Text 
+        style={styles.todoText} 
+        numberOfLines={1}
+        onLongPress={() => handleStartTitleEditing(entry)}
+      >
+        {entry.todo.text || 'Untitled Note'}
+      </Text>
     );
   };
 
@@ -96,9 +134,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           <View key={entry.id} style={styles.entryContainer}>
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <Text style={styles.todoText} numberOfLines={1}>
-                  {entry.todo.text || 'Untitled Note'}
-                </Text>
+                {renderTodoText(entry)}
                 {entry.timeSpent && renderTimerInfo(entry)}
               </View>
               <View style={styles.headerRight}>
@@ -121,8 +157,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             <TodoItemNote
               todo={entry.todo}
               updateNote={(note) => handleUpdateNote(entry.id, note)}
-              onStartEditing={() => setEditingId(entry.id)}
-              onEndEditing={() => setEditingId(null)}
+              onStartEditing={() => {}}
+              onEndEditing={() => {}}
             />
           </View>
         ))}
@@ -150,9 +186,23 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                         styles.weekEntryContent,
                         { backgroundColor: getBackgroundColor(entry.todo.color) }
                       ]}>
-                        <Text style={styles.weekEntryText} numberOfLines={2}>
-                          {entry.todo.text || 'Untitled'}
-                        </Text>
+                        {editingTitleId === entry.id ? (
+                          <TextInput
+                            value={editingText}
+                            onChangeText={setEditingText}
+                            onBlur={() => handleEndTitleEditing(entry.id)}
+                            style={[styles.weekEntryText, styles.todoInput]}
+                            autoFocus
+                          />
+                        ) : (
+                          <Text 
+                            style={styles.weekEntryText} 
+                            numberOfLines={2}
+                            onLongPress={() => handleStartTitleEditing(entry)}
+                          >
+                            {entry.todo.text || 'Untitled'}
+                          </Text>
+                        )}
                         {entry.timeSpent && renderTimerInfo(entry)}
                       </View>
                     </View>
@@ -229,6 +279,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1f2937',
     flex: 1,
+  },
+  todoInput: {
+    padding: 0,
+    margin: 0,
   },
   timestamp: {
     fontSize: 12,
