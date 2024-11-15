@@ -42,11 +42,12 @@ interface CalendarProps {
   viewMode: 'day' | 'week';
   onDateSelect: (date: string) => void;
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
+  entries: CalendarEntry[];
+  setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry }) => {
+const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry, entries, setEntries }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [entries, setEntries] = useState<CalendarEntry[]>([]);
 
   useEffect(() => {
     loadEntries();
@@ -66,13 +67,14 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry 
   const handleAddEntry = async () => {
     const newEntry = await onAddEntry();
     if (newEntry && 'todo' in newEntry) {
-      setEntries(prev => [...prev, newEntry]);
+      const entry = newEntry as CalendarEntry;
+      setEntries((currentEntries: CalendarEntry[]) => [...currentEntries, entry]);
     }
   };
 
   const events = useMemo(() => {
     const markedDates: { [key: string]: any } = {};
-    entries.forEach(entry => {
+    entries.forEach((entry: CalendarEntry) => {
       const date = new Date(entry.printedAt).toISOString().split('T')[0];
       if (!markedDates[date]) {
         markedDates[date] = { marked: true };
@@ -183,7 +185,7 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry 
           setEntries={setEntries}
           viewMode={viewMode}
           weekDates={weekDates}
-          onAddEntry={handleAddEntry}
+          onAddEntry={onAddEntry}
         />
       </CalendarProvider>
     </View>

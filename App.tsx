@@ -18,6 +18,7 @@ const App = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>('day');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const {
     todos,
@@ -45,22 +46,27 @@ const App = () => {
         noteType: 'text',
         createdAt: new Date().toISOString()
       };
-
+  
       const calendarEntry: CalendarEntry = {
         id: Date.now(),
         todo: newTodo,
         printedAt: `${selectedDate}T${new Date().toTimeString().split(' ')[0]}`
       };
-
+  
+      // Update state immediately
+      setCalendarEntries(prev => [...prev, calendarEntry]);
+  
+      // Save to storage in background
       try {
         const savedEntries = await AsyncStorage.getItem('calendarEntries');
         const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
         const updatedEntries = [...currentEntries, calendarEntry];
         await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
-        return calendarEntry;
       } catch (error) {
         console.error('Error saving calendar entry:', error);
       }
+  
+      return calendarEntry;
     } else {
       const newTodo = addTodo();
       setSelectedTodo(newTodo);
@@ -93,6 +99,8 @@ const App = () => {
             viewMode={calendarViewMode} 
             onDateSelect={setSelectedDate}
             onAddEntry={handleAddTodo}
+            entries={calendarEntries}
+            setEntries={setCalendarEntries}
           />
         </View>
       );
