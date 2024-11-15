@@ -63,6 +63,7 @@ interface TodoSettingsProps {
   const handleLongPress = (action: 'print' | 'archive' | 'delete') => {
     switch (action) {
       case 'print':
+        // Don't update the todo, just print it as is
         printOnCalendar(todo);
         break;
       case 'archive':

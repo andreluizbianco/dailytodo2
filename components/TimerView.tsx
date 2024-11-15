@@ -25,26 +25,43 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     const elapsedMs = now - startTimeRef.current;
     const elapsedMinutes = Math.max(1, Math.floor(elapsedMs / (1000 * 60)));
     
-    const calendarEntry = {
-      id: now,
-      todo: { ...todo },
-      printedAt: new Date().toISOString(),
-      timerCompleted: completed,
-      timeSpent: {
-        elapsed: elapsedMinutes
-      }
-    };
-    
+    // Ensure we have the latest todo data from storage before printing
     try {
-      const savedEntries = await AsyncStorage.getItem('calendarEntries');
-      const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
-      const updatedEntries = [...currentEntries, calendarEntry];
-      await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+      const savedData = await AsyncStorage.getItem('todosData');
+      let currentTodo = todo;
+      
+      if (savedData) {
+        const { todos } = JSON.parse(savedData);
+        // Find the latest version of this todo
+        const latestTodo = todos.find((t: Todo) => t.id === todo.id);
+        if (latestTodo) {
+          currentTodo = latestTodo;
+        }
+      }
+      
+      const calendarEntry = {
+        id: now,
+        todo: { ...currentTodo },  // Use the latest todo data
+        printedAt: new Date().toISOString(),
+        timerCompleted: completed,
+        timeSpent: {
+          elapsed: elapsedMinutes
+        }
+      };
+      
+      try {
+        const savedEntries = await AsyncStorage.getItem('calendarEntries');
+        const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
+        const updatedEntries = [...currentEntries, calendarEntry];
+        await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+      } catch (error) {
+        console.error('Error saving calendar entry:', error);
+      }
     } catch (error) {
-      console.error('Error saving calendar entry:', error);
+      console.error('Error retrieving latest todo data:', error);
     }
   };
-
+  
   // Load saved timer settings when todo changes
   useEffect(() => {
     if (selectedTodo?.timer) {

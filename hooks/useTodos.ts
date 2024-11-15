@@ -70,19 +70,27 @@ export const useTodos = () => {
     return newTodo;
   };
 
-  const updateTodo = (id: number, updates: Partial<Todo>): void => {
+  const updateTodo = async (id: number, updates: Partial<Todo>): Promise<void> => {
+    // Update state immediately
     setTodos(prevTodos =>
-      prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo)),
+      prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo))
     );
     
-    //  to save immediately:
-    const updatedTodos = todos.map(todo => 
-      todo.id === id ? { ...todo, ...updates } : todo
-    );
-    AsyncStorage.setItem('todos', JSON.stringify(updatedTodos))
-      .catch(error => console.error('Error saving todos:', error));
+    // Save to storage immediately
+    try {
+      const savedData = await AsyncStorage.getItem('todosData');
+      const currentData = savedData ? JSON.parse(savedData) : { todos: [], archivedTodos: [], version: 1 };
+      
+      currentData.todos = currentData.todos.map((todo: Todo) => 
+        todo.id === id ? { ...todo, ...updates } : todo
+      );
+      
+      await AsyncStorage.setItem('todosData', JSON.stringify(currentData));
+    } catch (error) {
+      console.error('Error saving todo update:', error);
+    }
   };
-
+  
   const updateArchivedTodo = (id: number, updates: Partial<Todo>): void => {
     setArchivedTodos(prevTodos =>
       prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo)),
