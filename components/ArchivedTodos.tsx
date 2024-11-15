@@ -21,6 +21,7 @@ interface ArchivedTodosProps {
   importData: () => void;
   showSettings: boolean;
   todos: Todo[];
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void;
 }
 
@@ -33,6 +34,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   importData,
   showSettings,
   todos,
+  setTodos,
   updateTodo
 }) => {
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(null);
@@ -160,6 +162,62 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       }
       return result.item as Todo;
     };
+
+    const handleUnarchive = async (result: SearchResult) => {
+      if (result.type === 'archived') {
+        unarchiveTodo((result.item as Todo).id);
+        setSearchResults(prev => prev.filter(r => 
+          !(r.type === 'archived' && (r.item as Todo).id === (result.item as Todo).id)
+        ));
+      } else if (result.type === 'calendar') {
+        const calendarEntry = result.item as CalendarEntry;
+        
+        // Create a new todo from the calendar entry
+        const newTodo: Todo = {
+          ...calendarEntry.todo,
+          id: Date.now(), // Generate new ID to avoid conflicts
+          isEditing: false,
+          color: calendarEntry.todo.color || 'blue',
+          noteType: calendarEntry.todo.noteType || 'text',
+          text: calendarEntry.todo.text || '',
+          note: calendarEntry.todo.note || ''
+        };
+        
+        console.log('About to add new todo:', newTodo);
+        
+        // Update todos state directly
+        setTodos((currentTodos: Todo[]) => {
+          console.log('Current todos:', currentTodos);
+          const updatedTodos = [...currentTodos, newTodo];
+          console.log('Updated todos:', updatedTodos);
+          return updatedTodos;
+        });
+        
+        // Remove from calendar entries
+        try {
+          const savedEntries = await AsyncStorage.getItem('calendarEntries');
+          if (savedEntries) {
+            const entries: CalendarEntry[] = JSON.parse(savedEntries);
+            const updatedEntries = entries.filter(entry => entry.id !== calendarEntry.id);
+            await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+            
+            // Remove from search results
+            setSearchResults(prev => prev.filter(r => 
+              !(r.type === 'calendar' && (r.item as CalendarEntry).id === calendarEntry.id)
+            ));
+  
+            // Also update AsyncStorage for todos
+            AsyncStorage.getItem('todosData').then(savedTodos => {
+              const currentTodos = savedTodos ? JSON.parse(savedTodos) : { todos: [], archivedTodos: [] };
+              currentTodos.todos.push(newTodo);
+              AsyncStorage.setItem('todosData', JSON.stringify(currentTodos));
+            });
+          }
+        } catch (error) {
+          console.error('Error removing calendar entry:', error);
+        }
+      }
+    };
   
     return (
       <ScrollView style={styles.searchResults}>
@@ -167,7 +225,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           <View key={index} style={styles.searchResult}>
             <View style={styles.resultHeader}>
               <View style={styles.resultTitleContainer}>
-                <Text style={styles.resultText}>
+                <Text style={styles.resultText} numberOfLines={1}>
                   {getItemText(result)}
                 </Text>
                 {result.type === 'calendar' && (
@@ -181,7 +239,21 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                   </View>
                 )}
               </View>
-              {(result.type === 'archived' || result.type === 'calendar') && (
+              <View style={styles.headerActions}>
+                {(result.type === 'archived' || result.type === 'calendar') && (
+                  <TouchableOpacity
+                    onLongPress={() => handleUnarchive(result)}
+                    delayLongPress={650}
+                    style={styles.unarchiveButton}
+                  >
+                    <Ionicons 
+                      name="archive-outline" 
+                      size={20} 
+                      color="#6b7280" 
+                      style={{ transform: [{ rotate: '180deg' }] }}
+                    />
+                  </TouchableOpacity>
+                )}
                 <View style={styles.resultType}>
                   {result.type === 'archived' && (
                     <Text style={styles.typeText}>Archived</Text>
@@ -190,7 +262,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                     <Ionicons name="calendar-outline" size={14} color="#6b7280" />
                   )}
                 </View>
-              )}
+              </View>
             </View>
             <TodoItemNote
               todo={getTodoForNote(result)}
@@ -358,6 +430,14 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     marginTop: 20,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  unarchiveButton: {
+    padding: 4,
   },
 });
 

@@ -92,6 +92,7 @@ const App = () => {
             exportData={exportData}
             importData={importData}
             todos={todos}
+            setTodos={setTodos}
           />
         </View>
       </View>
