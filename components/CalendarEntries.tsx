@@ -200,7 +200,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                             style={styles.weekEntryText} 
                             onLongPress={() => handleStartTitleEditing(entry)}
                           >
-                            {entry.todo.text || 'Untitled'}
+                            {entry.todo.text || ''}
                           </Text>
                         )}
                       </View>
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   weekRow: {
     flexDirection: 'row',
-    paddingTop: 8,
+    paddingTop: 1,
   },
   dayColumn: {
     width: COLUMN_WIDTH,
@@ -322,19 +322,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   weekEntryItem: {
-    padding: 4,
-    width: COLUMN_WIDTH - 8,
-    minHeight: 50,
+    paddingHorizontal: 3,
+    paddingVertical: 4,
+    width: COLUMN_WIDTH - 4,
+    minHeight: 38,
   },
   weekEntryContent: {
-    padding: 4,
+    padding: 2,
     borderRadius: 4,
     flex: 1,
+    justifyContent: 'center',
   },
   weekEntryText: {
     fontSize: 12,
     color: '#1f2937',
     flexWrap: 'wrap',
+    textAlign: 'center',
   },
 });
 
