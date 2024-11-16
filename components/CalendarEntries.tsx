@@ -193,17 +193,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                             onBlur={() => handleEndTitleEditing(entry.id)}
                             style={[styles.weekEntryText, styles.todoInput]}
                             autoFocus
+                            multiline
                           />
                         ) : (
                           <Text 
                             style={styles.weekEntryText} 
-                            numberOfLines={2}
                             onLongPress={() => handleStartTitleEditing(entry)}
                           >
                             {entry.todo.text || 'Untitled'}
                           </Text>
                         )}
-                        {entry.timeSpent && renderTimerInfo(entry)}
                       </View>
                     </View>
                   ))}
@@ -325,14 +324,17 @@ const styles = StyleSheet.create({
   weekEntryItem: {
     padding: 4,
     width: COLUMN_WIDTH - 8,
+    minHeight: 50,
   },
   weekEntryContent: {
     padding: 4,
     borderRadius: 4,
+    flex: 1,
   },
   weekEntryText: {
     fontSize: 12,
     color: '#1f2937',
+    flexWrap: 'wrap',
   },
 });
 
