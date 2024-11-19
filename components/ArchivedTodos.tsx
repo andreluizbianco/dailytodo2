@@ -256,16 +256,6 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                 <Text style={styles.resultText} numberOfLines={1}>
                   {getItemText(result)}
                 </Text>
-                {result.type === 'calendar' && (
-                  <View style={styles.timerInfo}>
-                    <Ionicons name="time" size={14} color="#6b7280" />
-                    {(result.item as CalendarEntry).timeSpent?.elapsed && (
-                      <Text style={styles.timerText}>
-                        {`${(result.item as CalendarEntry).timeSpent?.elapsed}m`}
-                      </Text>
-                    )}
-                  </View>
-                )}
               </View>
               <View style={styles.headerActions}>
                 {(result.type === 'archived' || result.type === 'calendar') && (
@@ -438,19 +428,6 @@ const styles = StyleSheet.create({
   typeText: {
     fontSize: 12,
     color: '#6b7280',
-  },
-  timerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  timerText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginLeft: 4,
   },
   emptyText: {
     fontSize: 14,
