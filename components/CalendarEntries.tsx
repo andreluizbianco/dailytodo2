@@ -304,16 +304,23 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         </View>
       );
     }
-
-    const dateEntries = entries.filter(entry => {
-      const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
-      return entryDate === selectedDate;
-    });
-
+  
+    // Filter entries for the selected date and sort them by time
+    const dateEntries = entries
+      .filter(entry => {
+        const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
+        return entryDate === selectedDate;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.printedAt).getTime();
+        const timeB = new Date(b.printedAt).getTime();
+        return timeA - timeB;
+      });
+  
     if (dateEntries.length === 0) {
       return <Text style={styles.placeholder}>No entries for this date</Text>;
     }
-
+  
     return (
       <ScrollView style={styles.dayContainer}>
         {dateEntries.map(entry => (
@@ -324,18 +331,26 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 {entry.timeSpent && renderTimerInfo(entry)}
               </View>
               <View style={styles.headerRight}>
-  <TimeEditor
-    timestamp={entry.printedAt}
-    onSave={async (newTimestamp) => {
-      const updatedEntry = { ...entry, printedAt: newTimestamp };
-      const updatedEntries = entries.map(e => 
-        e.id === entry.id ? updatedEntry : e
-      );
-      setEntries(updatedEntries);
-      await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
-    }}
-  />
-</View>
+                <TimeEditor
+                  timestamp={entry.printedAt}
+                  onSave={async (newTimestamp) => {
+                    const updatedEntry = { ...entry, printedAt: newTimestamp };
+                    // Remove the old entry and add the updated one
+                    const updatedEntries = entries
+                      .filter(e => e.id !== entry.id)
+                      .concat(updatedEntry)
+                      // Re-sort after update
+                      .sort((a, b) => {
+                        const timeA = new Date(a.printedAt).getTime();
+                        const timeB = new Date(b.printedAt).getTime();
+                        return timeA - timeB;
+                      });
+                    
+                    setEntries(updatedEntries);
+                    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+                  }}
+                />
+              </View>
             </View>
             <TodoItemNote
               todo={entry.todo}
