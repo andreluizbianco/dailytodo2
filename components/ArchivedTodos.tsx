@@ -280,9 +280,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                   {result.type === 'archived' && (
                     <Text style={styles.typeText}>Archived</Text>
                   )}
-                  {result.type === 'calendar' && (
-                    <View style={styles.calendarInfo}>
-                      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                    {result.type === 'calendar' && (
                       <Text style={styles.dateText}>
                         {new Date((result.item as CalendarEntry).printedAt)
                           .toLocaleDateString('en-US', {
@@ -291,8 +289,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                             year: '2-digit'
                           })}
                       </Text>
-                    </View>
-                  )}
+                    )}
                 </View>
               </View>
             </View>
