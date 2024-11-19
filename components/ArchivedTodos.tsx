@@ -257,7 +257,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           <View key={index} style={styles.searchResult}>
             <View style={styles.resultHeader}>
               <View style={styles.resultTitleContainer}>
-                <Text style={styles.resultText} numberOfLines={1}>
+                <Text style={styles.resultText} numberOfLines={2}>  {/* Changed to 2 lines */}
                   {getItemText(result)}
                 </Text>
               </View>
@@ -281,7 +281,17 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                     <Text style={styles.typeText}>Archived</Text>
                   )}
                   {result.type === 'calendar' && (
-                    <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                    <View style={styles.calendarInfo}>
+                      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                      <Text style={styles.dateText}>
+                        {new Date((result.item as CalendarEntry).printedAt)
+                          .toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: '2-digit'
+                          })}
+                      </Text>
+                    </View>
                   )}
                 </View>
               </View>
@@ -329,6 +339,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           autoCapitalize="none"
         />
       </View>
+    
 
       {searchQuery ? renderSearchResults() : (
         archivedTodos.length > 0 ? (
@@ -348,6 +359,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -407,19 +419,23 @@ const styles = StyleSheet.create({
   resultHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start', // Changed from 'center' to allow multiline
     marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   resultTitleContainer: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
+    marginRight: 8,
   },
   resultText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#1f2937',
+    flexShrink: 1, // Allows text to shrink if needed
   },
   resultType: {
     flexDirection: 'row',
@@ -444,9 +460,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0, // Prevents shrinking of buttons and date
   },
   unarchiveButton: {
     padding: 4,
+  },
+  calendarInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginLeft: 4,
   },
 });
 
