@@ -29,6 +29,9 @@ interface TodoSettingsProps {
   const [deleteState, setDeleteState] = useState<'initial' | 'confirm'>('initial');
   const [localNoteType, setLocalNoteType] = useState(todo.noteType);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPrintPressed, setIsPrintPressed] = useState(false);
+  const [isArchivePressed, setIsArchivePressed] = useState(false);
+  const [isDeletePressed, setIsDeletePressed] = useState(false);
 
   const handleColorChange = (color: string) => {
     updateTodo({ color });
@@ -97,31 +100,65 @@ interface TodoSettingsProps {
         onSelectType={handleNoteTypeSelect}
       />
 
-      <View style={styles.actionButtons}>
+<View style={styles.actionButtons}>
       <TouchableOpacity 
-          style={styles.iconButton}
-          onLongPress={() => handleLongPress('print')}
-          delayLongPress={800}
-        >
-          <Ionicons name="calendar-outline" size={24} color="#4b5563" />
-        </TouchableOpacity>
+        style={[
+          styles.iconButton,
+          isPrintPressed && styles.iconButtonPressed
+        ]}
+        onLongPress={() => {
+          setIsPrintPressed(true);
+          handleLongPress('print');
+          // Reset the pressed state after a short delay
+          setTimeout(() => setIsPrintPressed(false), 200);
+        }}
+        delayLongPress={800}
+      >
+        <Ionicons 
+          name="calendar-outline" 
+          size={24} 
+          color={isPrintPressed ? "#ffffff" : "#4b5563"} 
+        />
+      </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.iconButton}
-          onLongPress={() => handleLongPress('archive')}
-          delayLongPress={800}
-        >
-          <Ionicons name="archive-outline" size={24} color="#4b5563" />
-        </TouchableOpacity>
+      <TouchableOpacity 
+        style={[
+          styles.iconButton,
+          isArchivePressed && styles.iconButtonPressed
+        ]}
+        onLongPress={() => {
+          setIsArchivePressed(true);
+          handleLongPress('archive');
+          setTimeout(() => setIsArchivePressed(false), 200);
+        }}
+        delayLongPress={800}
+      >
+        <Ionicons 
+          name="archive-outline" 
+          size={24} 
+          color={isArchivePressed ? "#ffffff" : "#4b5563"} 
+        />
+      </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.iconButton}
-          onLongPress={() => handleLongPress('delete')}
-          delayLongPress={800}
-        >
-          <Ionicons name="trash-outline" size={24} color="#ef4444" />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity 
+        style={[
+          styles.iconButton,
+          isDeletePressed && styles.iconButtonPressed
+        ]}
+        onLongPress={() => {
+          setIsDeletePressed(true);
+          handleLongPress('delete');
+          setTimeout(() => setIsDeletePressed(false), 200);
+        }}
+        delayLongPress={800}
+      >
+        <Ionicons 
+          name="trash-outline" 
+          size={24} 
+          color={isDeletePressed ? "#ffffff" : "#ef4444"} 
+        />
+      </TouchableOpacity>
+    </View>
     </View>
   );
 };
@@ -173,6 +210,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconButtonPressed: {
+
+    transform: [{ scale: 0.95 }], // optional: adds a slight scale effect
   },
 });
 
