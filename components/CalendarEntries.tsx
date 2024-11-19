@@ -27,6 +27,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 }) => {
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [showSettingsForId, setShowSettingsForId] = useState<number | null>(null);
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
@@ -74,6 +75,36 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
   };
 
+  const handleTitlePress = (entryId: number) => {
+    setShowSettingsForId(showSettingsForId === entryId ? null : entryId);
+  };
+
+  const renderSettings = (entry: CalendarEntry) => {
+    if (showSettingsForId !== entry.id) return null;
+
+    return (
+      <View style={styles.settingsContainer}>
+        <View style={styles.colorPalette}>
+          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#ff6b6b' }]} />
+          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#ffd93d' }]} />
+          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#6bcb77' }]} />
+          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#4d96ff' }]} />
+        </View>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="calendar-outline" size={24} color="#4b5563" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="archive-outline" size={24} color="#4b5563" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="trash-outline" size={24} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const renderTimerInfo = (entry: CalendarEntry) => {
     if (!entry.timeSpent) return null;
 
@@ -103,6 +134,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       <Text 
         style={styles.todoText} 
         numberOfLines={1}
+        onPress={() => handleTitlePress(entry.id)}
         onLongPress={() => handleStartTitleEditing(entry)}
       >
         {entry.todo.text || 'Untitled Note'}
@@ -160,6 +192,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
               onStartEditing={() => {}}
               onEndEditing={() => {}}
             />
+            {renderSettings(entry)}
           </View>
         ))}
       </ScrollView>
@@ -338,6 +371,35 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flexWrap: 'wrap',
     textAlign: 'center',
+  },
+  settingsContainer: {
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  colorPalette: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 22,
+    marginTop: 10,
+  },
+  colorButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  iconButton: {
+    padding: 10,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
