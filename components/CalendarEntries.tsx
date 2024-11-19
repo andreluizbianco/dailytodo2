@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import TodoItemNote from './TodoItemNote';
@@ -126,7 +126,6 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  // Add this
     updateTodo: (id: number, updates: Partial<Todo>) => void;  // Add this
   }
-  
 
   const handleUnarchiveEntry = async (entry: CalendarEntry) => {
     const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
@@ -325,14 +324,18 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 {entry.timeSpent && renderTimerInfo(entry)}
               </View>
               <View style={styles.headerRight}>
-                <Text style={styles.timestamp}>
-                  {new Date(entry.printedAt).toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  })}
-                </Text>
-              </View>
+  <TimeEditor
+    timestamp={entry.printedAt}
+    onSave={async (newTimestamp) => {
+      const updatedEntry = { ...entry, printedAt: newTimestamp };
+      const updatedEntries = entries.map(e => 
+        e.id === entry.id ? updatedEntry : e
+      );
+      setEntries(updatedEntries);
+      await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    }}
+  />
+</View>
             </View>
             <TodoItemNote
               todo={entry.todo}
@@ -421,6 +424,97 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     </View>
   );
 };
+
+const TimeEditor = ({ 
+  timestamp,
+  onSave
+}: { 
+  timestamp: string,
+  onSave: (newTimestamp: string) => void 
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      const time = new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const [h, m] = time.split(':');
+      setHours(h);
+      setMinutes(m);
+    }
+  }, [isEditing, timestamp]);
+
+  const validateAndSave = () => {
+    const h = parseInt(hours);
+    const m = parseInt(minutes);
+    
+    if (isNaN(h) || h < 0 || h > 23 || isNaN(m) || m < 0 || m > 59) {
+      // Reset to original time if invalid
+      const time = new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const [originalH, originalM] = time.split(':');
+      setHours(originalH);
+      setMinutes(originalM);
+    } else {
+      // Create new timestamp with updated time
+      const date = new Date(timestamp);
+      date.setHours(h, m);
+      onSave(date.toISOString());
+    }
+    setIsEditing(false);
+  };
+
+  if (!isEditing) {
+    return (
+      <Text 
+        style={styles.timestamp}
+        onLongPress={() => setIsEditing(true)}
+      >
+        {new Date(timestamp).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.timeEditContainer}>
+      <TextInput
+        ref={inputRef}
+        style={styles.timeInput}
+        value={hours}
+        onChangeText={text => setHours(text.slice(0, 2))}
+        keyboardType="number-pad"
+        maxLength={2}
+        selectTextOnFocus
+        onBlur={validateAndSave}
+        autoFocus
+      />
+      <Text style={styles.timeColon}>:</Text>
+      <TextInput
+        style={styles.timeInput}
+        value={minutes}
+        onChangeText={text => setMinutes(text.slice(0, 2))}
+        keyboardType="number-pad"
+        maxLength={2}
+        selectTextOnFocus
+        onBlur={validateAndSave}
+      />
+    </View>
+  );
+};
+
 
 const styles = StyleSheet.create({
   container: {
@@ -552,6 +646,22 @@ const styles = StyleSheet.create({
   selectedColor: {
     borderWidth: 2,
     borderColor: '#4b5563',
+  },
+  timeEditContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timeInput: {
+    fontSize: 12,
+    color: '#6b7280',
+    padding: 0,
+    width: 20,
+    textAlign: 'center',
+  },
+  timeColon: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginHorizontal: 2,
   },
 });
 
