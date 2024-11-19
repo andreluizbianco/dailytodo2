@@ -435,7 +435,8 @@ const TimeEditor = ({
   const [isEditing, setIsEditing] = useState(false);
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
-  const inputRef = useRef<TextInput>(null);
+  const hoursRef = useRef<TextInput>(null);
+  const minutesRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (isEditing) {
@@ -450,26 +451,64 @@ const TimeEditor = ({
     }
   }, [isEditing, timestamp]);
 
-  const validateAndSave = () => {
-    const h = parseInt(hours);
-    const m = parseInt(minutes);
+  const handleHoursChange = (text: string) => {
+    const numericText = text.replace(/\D/g, '');
+    const h = parseInt(numericText);
     
-    if (isNaN(h) || h < 0 || h > 23 || isNaN(m) || m < 0 || m > 59) {
-      // Reset to original time if invalid
-      const time = new Date(timestamp).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-      const [originalH, originalM] = time.split(':');
-      setHours(originalH);
-      setMinutes(originalM);
-    } else {
-      // Create new timestamp with updated time
+    if (numericText.length === 2 || (h >= 0 && h <= 23)) {
+      setHours(numericText);
+      if (numericText.length === 2 && h >= 0 && h <= 23) {
+        minutesRef.current?.focus();
+      }
+    }
+  };
+
+  const handleMinutesChange = (text: string) => {
+    const numericText = text.replace(/\D/g, '');
+    const m = parseInt(numericText);
+    
+    if (numericText.length === 2 || (m >= 0 && m <= 59)) {
+      setMinutes(numericText);
+      if (numericText.length === 2 && m >= 0 && m <= 59) {
+        saveTime(parseInt(hours), m);
+      }
+    }
+  };
+
+  const saveTime = (h: number, m: number) => {
+    if ((h >= 0 && h <= 23) && (m >= 0 && m <= 59)) {
       const date = new Date(timestamp);
       date.setHours(h, m);
       onSave(date.toISOString());
+      setIsEditing(false);
     }
+  };
+
+  const handleHoursBlur = () => {
+    const h = parseInt(hours);
+    if (isNaN(h) || h < 0 || h > 23) {
+      resetTime();
+    }
+  };
+
+  const handleMinutesBlur = () => {
+    const m = parseInt(minutes);
+    if (isNaN(m) || m < 0 || m > 59) {
+      resetTime();
+    } else {
+      saveTime(parseInt(hours), m);
+    }
+  };
+
+  const resetTime = () => {
+    const time = new Date(timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const [h, m] = time.split(':');
+    setHours(h);
+    setMinutes(m);
     setIsEditing(false);
   };
 
@@ -477,7 +516,10 @@ const TimeEditor = ({
     return (
       <Text 
         style={styles.timestamp}
-        onLongPress={() => setIsEditing(true)}
+        onLongPress={() => {
+          setIsEditing(true);
+          setTimeout(() => hoursRef.current?.focus(), 50);
+        }}
       >
         {new Date(timestamp).toLocaleTimeString('en-US', {
           hour: '2-digit',
@@ -491,25 +533,26 @@ const TimeEditor = ({
   return (
     <View style={styles.timeEditContainer}>
       <TextInput
-        ref={inputRef}
+        ref={hoursRef}
         style={styles.timeInput}
         value={hours}
-        onChangeText={text => setHours(text.slice(0, 2))}
+        onChangeText={handleHoursChange}
         keyboardType="number-pad"
         maxLength={2}
         selectTextOnFocus
-        onBlur={validateAndSave}
-        autoFocus
+        onBlur={handleHoursBlur}
+
       />
       <Text style={styles.timeColon}>:</Text>
       <TextInput
+        ref={minutesRef}
         style={styles.timeInput}
         value={minutes}
-        onChangeText={text => setMinutes(text.slice(0, 2))}
+        onChangeText={handleMinutesChange}
         keyboardType="number-pad"
         maxLength={2}
         selectTextOnFocus
-        onBlur={validateAndSave}
+        onBlur={handleMinutesBlur}
       />
     </View>
   );
