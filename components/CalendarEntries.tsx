@@ -79,25 +79,88 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     setShowSettingsForId(showSettingsForId === entryId ? null : entryId);
   };
 
+  const getColorValue = (buttonColor: string): string => {
+    switch (buttonColor) {
+      case '#ff6b6b':
+        return 'red';
+      case '#ffd93d':
+        return 'yellow';
+      case '#6bcb77':
+        return 'green';
+      case '#4d96ff':
+        return 'blue';
+      default:
+        return 'blue';
+    }
+  };
+  
+  const handleColorChange = async (entryId: number, buttonColor: string) => {
+    const color = getColorValue(buttonColor);
+    
+    const updatedEntries = entries.map(entry =>
+      entry.id === entryId ? {
+        ...entry,
+        todo: { ...entry.todo, color }
+      } : entry
+    );
+  
+    setEntries(updatedEntries);
+    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+  };
+
   const renderSettings = (entry: CalendarEntry) => {
     if (showSettingsForId !== entry.id) return null;
-
+  
     return (
       <View style={styles.settingsContainer}>
         <View style={styles.colorPalette}>
-          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#ff6b6b' }]} />
-          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#ffd93d' }]} />
-          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#6bcb77' }]} />
-          <TouchableOpacity style={[styles.colorButton, { backgroundColor: '#4d96ff' }]} />
+          <TouchableOpacity 
+            style={[
+              styles.colorButton, 
+              { backgroundColor: '#ff6b6b' },
+              entry.todo.color === 'red' && styles.selectedColor
+            ]}
+            onPress={() => handleColorChange(entry.id, '#ff6b6b')}
+          />
+          <TouchableOpacity 
+            style={[
+              styles.colorButton, 
+              { backgroundColor: '#ffd93d' },
+              entry.todo.color === 'yellow' && styles.selectedColor
+            ]}
+            onPress={() => handleColorChange(entry.id, '#ffd93d')}
+          />
+          <TouchableOpacity 
+            style={[
+              styles.colorButton, 
+              { backgroundColor: '#6bcb77' },
+              entry.todo.color === 'green' && styles.selectedColor
+            ]}
+            onPress={() => handleColorChange(entry.id, '#6bcb77')}
+          />
+          <TouchableOpacity 
+            style={[
+              styles.colorButton, 
+              { backgroundColor: '#4d96ff' },
+              entry.todo.color === 'blue' && styles.selectedColor
+            ]}
+            onPress={() => handleColorChange(entry.id, '#4d96ff')}
+          />
         </View>
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="calendar-outline" size={24} color="#4b5563" />
+            <Ionicons 
+              name="archive-outline" 
+              size={24} 
+              color="#4b5563" 
+              style={{ transform: [{ rotate: '180deg' }] }}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="archive-outline" size={24} color="#4b5563" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity 
+          style={styles.iconButton}
+          onLongPress={() => handleDeleteEntry(entry.id)}
+          delayLongPress={700}
+          >
             <Ionicons name="trash-outline" size={24} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -177,13 +240,6 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                     hour12: false,
                   })}
                 </Text>
-                <TouchableOpacity
-                  onLongPress={() => handleDeleteEntry(entry.id)}
-                  delayLongPress={700}
-                  style={styles.deleteButton}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                </TouchableOpacity>
               </View>
             </View>
             <TodoItemNote
@@ -400,6 +456,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  selectedColor: {
+    borderWidth: 2,
+    borderColor: '#4b5563',
   },
 });
 
