@@ -10,7 +10,7 @@ interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
   activeView: 'notes' | 'settings' | 'archive' | 'calendar';
   updateTodo: (id: number, updates: Partial<Todo>) => void;
-  removeTodo: (id: number) => void;
+  removeTodo: (id: number) => Todo | null; 
   archiveTodo: (id: number) => void;
   archivedTodos: Todo[];
   setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
@@ -60,7 +60,6 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     if (activeView === 'settings') {
       return <TimerView selectedTodo={selectedTodo} updateTodo={updateTodo} />;
     }
-  
 
     if (activeView === 'archive') {
       return (
@@ -74,11 +73,10 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           showSettings={showSettings}
           updateTodo={updateTodo}
           todos={todos}
-          setTodos={setTodos} 
+          setTodos={setTodos}
         />
       );
     }
-
 
     return (
       localSelectedTodo && (
@@ -94,7 +92,12 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
               <TodoSettings
                 todo={localSelectedTodo}
                 updateTodo={handleTodoUpdate}
-                removeTodo={() => removeTodo(localSelectedTodo.id)}
+                removeTodo={() => {
+                  if (localSelectedTodo) {
+                    const nextTodo = removeTodo(localSelectedTodo.id);
+                    setLocalSelectedTodo(nextTodo);
+                  }
+                }}
                 archiveTodo={() => archiveTodo(localSelectedTodo.id)}
                 printOnCalendar={printOnCalendar}
               />
