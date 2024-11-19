@@ -97,8 +97,31 @@ export const useTodos = () => {
     );
   };
 
-  const removeTodo = (id: number): void => {
-    setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
+  const removeTodo = (id: number): Todo | null => {
+    let nextSelectedTodo: Todo | null = null;
+    
+    setTodos(prevTodos => {
+      const todoIndex = prevTodos.findIndex(todo => todo.id === id);
+      if (todoIndex === -1) return prevTodos;
+
+      const newTodos = [...prevTodos];
+      newTodos.splice(todoIndex, 1);
+
+      // Find the closest todo to select next
+      if (newTodos.length > 0) {
+        if (todoIndex < newTodos.length) {
+          // Select the next todo if available
+          nextSelectedTodo = newTodos[todoIndex];
+        } else {
+          // If we removed the last todo, select the new last todo
+          nextSelectedTodo = newTodos[newTodos.length - 1];
+        }
+      }
+
+      return newTodos;
+    });
+
+    return nextSelectedTodo;
   };
 
   const archiveTodo = (id: number): void => {

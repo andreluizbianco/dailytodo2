@@ -91,6 +91,12 @@ const App = () => {
     }
   };
 
+  const handleRemoveTodo = (id: number): Todo | null => {
+    const nextTodo = removeTodo(id);
+    setSelectedTodo(nextTodo);
+    return nextTodo;
+  };
+
   const renderMainContent = () => {
     if (activeView === 'calendar') {
       return (
@@ -125,7 +131,7 @@ const App = () => {
             selectedTodo={selectedTodo}
             activeView={activeView}
             updateTodo={updateTodo}
-            removeTodo={removeTodo}
+            removeTodo={handleRemoveTodo}  // Use the new handler
             archiveTodo={archiveTodo}
             archivedTodos={archivedTodos}
             setArchivedTodos={setArchivedTodos}
