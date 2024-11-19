@@ -44,9 +44,12 @@ interface CalendarProps {
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
   entries: CalendarEntry[];
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
+  todos: Todo[];  // Add this
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  // Add this
+  updateTodo: (id: number, updates: Partial<Todo>) => void;  // Add this
 }
 
-const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry, entries, setEntries }) => {
+const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry, entries, setEntries, todos, setTodos, updateTodo }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
@@ -186,6 +189,9 @@ const Calendar: React.FC<CalendarProps> = ({ viewMode, onDateSelect, onAddEntry,
           viewMode={viewMode}
           weekDates={weekDates}
           onAddEntry={onAddEntry}
+          todos={todos}
+          setTodos={setTodos}
+          updateTodo={updateTodo}
         />
       </CalendarProvider>
     </View>

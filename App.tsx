@@ -101,6 +101,9 @@ const App = () => {
             onAddEntry={handleAddTodo}
             entries={calendarEntries}
             setEntries={setCalendarEntries}
+            todos={todos}
+            setTodos={setTodos} 
+            updateTodo={updateTodo} 
           />
         </View>
       );

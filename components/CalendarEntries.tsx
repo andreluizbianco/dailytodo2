@@ -15,7 +15,11 @@ interface CalendarEntriesProps {
   viewMode: 'week' | 'day';
   weekDates: Date[];
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
+  todos: Todo[];  // Add this
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  
+  updateTodo: (id: number, updates: Partial<Todo>) => void; 
 }
+
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   selectedDate,
@@ -23,7 +27,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   setEntries,
   viewMode,
   weekDates,
-  onAddEntry
+  onAddEntry,
+  todos,
+  setTodos,
+  updateTodo
 }) => {
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -108,6 +115,87 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
   };
 
+  interface CalendarEntriesProps {
+    selectedDate: string | null;
+    entries: CalendarEntry[];
+    setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
+    viewMode: 'week' | 'day';
+    weekDates: Date[];
+    onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
+    todos: Todo[];  // Add this
+    setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  // Add this
+    updateTodo: (id: number, updates: Partial<Todo>) => void;  // Add this
+  }
+  
+
+  const handleUnarchiveEntry = async (entry: CalendarEntry) => {
+    const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    const isFutureOrToday = entryDate >= today;
+  
+    try {
+      const uniqueId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+      
+      const newTodo: Todo = {
+        ...entry.todo,
+        id: uniqueId,
+        isEditing: false,
+        createdAt: new Date().toISOString(),
+        restoredFrom: {
+          type: 'calendar',
+          originalId: entry.id,
+          timestamp: new Date().toISOString()
+        }
+      };
+  
+      // Fix typing for setTodos callback
+      setTodos((currentTodos: Todo[]) => {
+        const isDuplicate = currentTodos.some((todo: Todo) => 
+          todo.text === newTodo.text && 
+          todo.note === newTodo.note &&
+          Math.abs(new Date(todo.createdAt || 0).getTime() - 
+                  new Date(entry.printedAt).getTime()) < 1000
+        );
+        
+        if (isDuplicate) {
+          console.warn('Duplicate todo detected, skipping...');
+          return currentTodos;
+        }
+        
+        return [...currentTodos, newTodo];
+      });
+  
+      try {
+        const savedData = await AsyncStorage.getItem('todosData');
+        const currentData = savedData ? JSON.parse(savedData) : { todos: [], archivedTodos: [], version: 1 };
+        
+        const isDuplicateInStorage = currentData.todos.some((todo: Todo) => 
+          todo.text === newTodo.text && 
+          todo.note === newTodo.note &&
+          Math.abs(new Date(todo.createdAt || 0).getTime() - 
+                  new Date(entry.printedAt).getTime()) < 1000
+        );
+        
+        if (!isDuplicateInStorage) {
+          currentData.todos.push(newTodo);
+          await AsyncStorage.setItem('todosData', JSON.stringify(currentData));
+        }
+  
+        if (isFutureOrToday) {
+          const updatedEntries = entries.filter(e => e.id !== entry.id);
+          setEntries(updatedEntries);
+          await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+        }
+  
+        setShowSettingsForId(null);
+      } catch (error) {
+        console.error('Error saving to AsyncStorage:', error);
+      }
+    } catch (error) {
+      console.error('Error handling unarchive:', error);
+    }
+  };
+
   const renderSettings = (entry: CalendarEntry) => {
     if (showSettingsForId !== entry.id) return null;
   
@@ -148,7 +236,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           />
         </View>
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onLongPress={() => handleUnarchiveEntry(entry)}
+            delayLongPress={700}
+          >
             <Ionicons 
               name="archive-outline" 
               size={24} 
@@ -157,9 +249,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             />
           </TouchableOpacity>
           <TouchableOpacity 
-          style={styles.iconButton}
-          onLongPress={() => handleDeleteEntry(entry.id)}
-          delayLongPress={700}
+            style={styles.iconButton}
+            onLongPress={() => handleDeleteEntry(entry.id)}
+            delayLongPress={700}
           >
             <Ionicons name="trash-outline" size={24} color="#ef4444" />
           </TouchableOpacity>
