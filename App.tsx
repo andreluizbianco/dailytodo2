@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet, View } from 'react-native';
+import { SafeAreaView, StyleSheet, View, LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TopBar from './components/TopBar';
@@ -9,6 +9,9 @@ import TodoNoteColumn from './components/TodoNoteColumn';
 import { Todo, CalendarEntry } from './types';
 import { useTodos } from './hooks/useTodos';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+// Ignore the specific warning about defaultProps
+LogBox.ignoreLogs(['Warning: ExpandableCalendar: Support for defaultProps']);
 
 type ViewType = 'notes' | 'settings' | 'archive' | 'calendar';
 type CalendarViewMode = 'day' | 'week';
