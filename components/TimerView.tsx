@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import TimeWheelPicker from './TimeWheelPicker';
 import PlayStopControls from './PlayStopControls';
 import { Todo } from '../types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { addTimerEntryToCalendar } from '../utils/calendarStorage';
 
 interface TimerViewProps {
   selectedTodo: Todo | null;
@@ -16,51 +16,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [currentMinutes, setCurrentMinutes] = useState('25');
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [displayTime, setDisplayTime] = useState<string>('');
-  const timerInterval = useRef<NodeJS.Timeout | null>(null);
+  const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
-
-  // Print todo to calendar with correct elapsed time
-  const printToCalendar = async (todo: Todo, completed: boolean) => {
-    const now = Date.now();
-    const elapsedMs = now - startTimeRef.current;
-    const elapsedMinutes = Math.max(1, Math.floor(elapsedMs / (1000 * 60)));
-    
-    // Ensure we have the latest todo data from storage before printing
-    try {
-      const savedData = await AsyncStorage.getItem('todosData');
-      let currentTodo = todo;
-      
-      if (savedData) {
-        const { todos } = JSON.parse(savedData);
-        // Find the latest version of this todo
-        const latestTodo = todos.find((t: Todo) => t.id === todo.id);
-        if (latestTodo) {
-          currentTodo = latestTodo;
-        }
-      }
-      
-      const calendarEntry = {
-        id: now,
-        todo: { ...currentTodo },  // Use the latest todo data
-        printedAt: new Date().toISOString(),
-        timerCompleted: completed,
-        timeSpent: {
-          elapsed: elapsedMinutes
-        }
-      };
-      
-      try {
-        const savedEntries = await AsyncStorage.getItem('calendarEntries');
-        const currentEntries = savedEntries ? JSON.parse(savedEntries) : [];
-        const updatedEntries = [...currentEntries, calendarEntry];
-        await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
-      } catch (error) {
-        console.error('Error saving calendar entry:', error);
-      }
-    } catch (error) {
-      console.error('Error retrieving latest todo data:', error);
-    }
-  };
   
   // Load saved timer settings when todo changes
   useEffect(() => {
@@ -146,20 +103,29 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       timerInterval.current = setInterval(() => {
         setRemainingSeconds(prev => {
           if (prev <= 1) {
-            // Timer completed
-            clearInterval(timerInterval.current!);
-            setIsPlaying(false);
-            updateTodo(selectedTodo.id, {
-              timer: {
-                hours: currentHours,
-                minutes: currentMinutes,
-                isActive: false
-              }
-            });
-            // Print to calendar when timer completes
-            if (selectedTodo) {
-              printToCalendar(selectedTodo, true);
+            if (timerInterval.current) {
+              clearInterval(timerInterval.current);
+              timerInterval.current = null;
             }
+
+            setTimeout(() => {
+              setIsPlaying(false);
+
+              updateTodo(selectedTodo.id, {
+                timer: {
+                  hours: currentHours,
+                  minutes: currentMinutes,
+                  isActive: false,
+                },
+              });
+
+              addTimerEntryToCalendar({
+                todo: selectedTodo,
+                completed: true,
+                startedAt: startTimeRef.current,
+              });
+            }, 0);
+
             return 0;
           }
           return prev - 1;
@@ -185,7 +151,11 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     });
 
     // Print to calendar with actual elapsed time when stopped
-    printToCalendar(selectedTodo, false);
+    addTimerEntryToCalendar({
+      todo: selectedTodo,
+      completed: false,
+      startedAt: startTimeRef.current,
+    });
   };
 
   return (

@@ -28,7 +28,7 @@ interface TodoSettingsProps {
   }) => {
   const [deleteState, setDeleteState] = useState<'initial' | 'confirm'>('initial');
   const [localNoteType, setLocalNoteType] = useState(todo.noteType);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPrintPressed, setIsPrintPressed] = useState(false);
   const [isArchivePressed, setIsArchivePressed] = useState(false);
   const [isDeletePressed, setIsDeletePressed] = useState(false);

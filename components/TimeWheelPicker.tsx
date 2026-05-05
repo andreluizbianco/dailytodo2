@@ -33,7 +33,7 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
 }) => {
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
   const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleTimeChange = useCallback((hours: string, minutes: string) => {
     if (saveTimeoutRef.current) {

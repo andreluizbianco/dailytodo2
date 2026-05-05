@@ -9,7 +9,7 @@ interface TimeState {
 export const useTimeManagement = () => {
   const [timeState, setTimeState] = useState<TimeState | null>(null);
   const isMounted = useRef(true);
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const updateTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const loadSavedTime = async () => {
