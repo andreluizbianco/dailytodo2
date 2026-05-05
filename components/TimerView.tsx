@@ -16,48 +16,97 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [currentMinutes, setCurrentMinutes] = useState('25');
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [displayTime, setDisplayTime] = useState<string>('');
+
   const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
-  
-  // Load saved timer settings when todo changes
-  useEffect(() => {
-    if (selectedTodo?.timer) {
-      setCurrentHours(selectedTodo.timer.hours);
-      setCurrentMinutes(selectedTodo.timer.minutes);
-      setIsPlaying(selectedTodo.timer.isActive || false);
-      
-      if (selectedTodo.timer.isActive) {
-        handlePlay();
-      }
-    } else {
-      setCurrentHours('00');
-      setCurrentMinutes('25');
-      setIsPlaying(false);
-    }
-  }, [selectedTodo?.id]);
+  const endTimeRef = useRef<number>(0);
+  const hasPrintedRef = useRef(false);
 
   const formatTimeDisplay = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     if (hours > 0) {
       return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
+
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  useEffect(() => {
-    if (remainingSeconds >= 0) {
-      setDisplayTime(formatTimeDisplay(remainingSeconds));
+  const clearTimerInterval = () => {
+    if (timerInterval.current) {
+      clearInterval(timerInterval.current);
+      timerInterval.current = null;
     }
+  };
+
+  const finishTimer = useCallback(() => {
+    if (!selectedTodo || hasPrintedRef.current) return;
+
+    hasPrintedRef.current = true;
+    clearTimerInterval();
+
+    setIsPlaying(false);
+    setRemainingSeconds(0);
+
+    updateTodo(selectedTodo.id, {
+      timer: {
+        hours: currentHours,
+        minutes: currentMinutes,
+        isActive: false,
+      },
+    });
+
+    addTimerEntryToCalendar({
+      todo: selectedTodo,
+      completed: true,
+      startedAt: startTimeRef.current,
+      plannedMinutes:
+        parseInt(currentHours || '0', 10) * 60 +
+        parseInt(currentMinutes || '0', 10),
+    });
+  }, [selectedTodo, currentHours, currentMinutes, updateTodo]);
+
+  const tick = useCallback(() => {
+    const secondsLeft = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+
+    setRemainingSeconds(secondsLeft);
+
+    if (secondsLeft <= 0) {
+      finishTimer();
+    }
+  }, [finishTimer]);
+
+  useEffect(() => {
+    setDisplayTime(formatTimeDisplay(remainingSeconds));
   }, [remainingSeconds]);
 
   useEffect(() => {
+    if (selectedTodo?.timer) {
+      setCurrentHours(selectedTodo.timer.hours);
+      setCurrentMinutes(selectedTodo.timer.minutes);
+      setIsPlaying(false);
+
+      const totalSeconds =
+        parseInt(selectedTodo.timer.hours || '0', 10) * 3600 +
+        parseInt(selectedTodo.timer.minutes || '0', 10) * 60;
+
+      setRemainingSeconds(totalSeconds);
+    } else {
+      setCurrentHours('00');
+      setCurrentMinutes('25');
+      setIsPlaying(false);
+      setRemainingSeconds(25 * 60);
+    }
+
+    clearTimerInterval();
+    hasPrintedRef.current = false;
+  }, [selectedTodo?.id]);
+
+  useEffect(() => {
     return () => {
-      if (timerInterval.current) {
-        clearInterval(timerInterval.current);
-      }
+      clearTimerInterval();
     };
   }, []);
 
@@ -66,15 +115,19 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       if (!isPlaying && selectedTodo) {
         setCurrentHours(h);
         setCurrentMinutes(m);
+
         updateTodo(selectedTodo.id, {
           timer: {
             hours: h,
             minutes: m,
-            isActive: false
-          }
+            isActive: false,
+          },
         });
-        
-        const totalSeconds = (parseInt(h) * 3600) + (parseInt(m) * 60);
+
+        const totalSeconds =
+          parseInt(h || '0', 10) * 3600 +
+          parseInt(m || '0', 10) * 60;
+
         setRemainingSeconds(totalSeconds);
       }
     },
@@ -82,80 +135,58 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   );
 
   const handlePlay = () => {
-    if (!selectedTodo) return;
+    if (!selectedTodo || isPlaying) return;
 
-    const totalSeconds = 
-      (parseInt(currentHours) * 3600) + 
-      (parseInt(currentMinutes) * 60);
-    
-    if (totalSeconds > 0) {
-      startTimeRef.current = Date.now(); // Record start time
-      setRemainingSeconds(totalSeconds);
-      setIsPlaying(true);
-      updateTodo(selectedTodo.id, {
-        timer: {
-          hours: currentHours,
-          minutes: currentMinutes,
-          isActive: true
-        }
-      });
+    const totalSeconds =
+      parseInt(currentHours || '0', 10) * 3600 +
+      parseInt(currentMinutes || '0', 10) * 60;
 
-      timerInterval.current = setInterval(() => {
-        setRemainingSeconds(prev => {
-          if (prev <= 1) {
-            if (timerInterval.current) {
-              clearInterval(timerInterval.current);
-              timerInterval.current = null;
-            }
+    if (totalSeconds <= 0) return;
 
-            setTimeout(() => {
-              setIsPlaying(false);
+    clearTimerInterval();
 
-              updateTodo(selectedTodo.id, {
-                timer: {
-                  hours: currentHours,
-                  minutes: currentMinutes,
-                  isActive: false,
-                },
-              });
+    const now = Date.now();
 
-              addTimerEntryToCalendar({
-                todo: selectedTodo,
-                completed: true,
-                startedAt: startTimeRef.current,
-              });
-            }, 0);
+    startTimeRef.current = now;
+    endTimeRef.current = now + totalSeconds * 1000;
+    hasPrintedRef.current = false;
 
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-  };
+    setRemainingSeconds(totalSeconds);
+    setIsPlaying(true);
 
-  const handleStop = () => {
-    if (!selectedTodo) return;
-
-    if (timerInterval.current) {
-      clearInterval(timerInterval.current);
-    }
-    
-    setIsPlaying(false);
     updateTodo(selectedTodo.id, {
       timer: {
         hours: currentHours,
         minutes: currentMinutes,
-        isActive: false
-      }
+        isActive: true,
+      },
     });
 
-    // Print to calendar with actual elapsed time when stopped
+    timerInterval.current = setInterval(tick, 1000);
+  };
+
+  const handleStop = () => {
+    if (!selectedTodo || !isPlaying) return;
+
+    clearTimerInterval();
+
+    setIsPlaying(false);
+
+    updateTodo(selectedTodo.id, {
+      timer: {
+        hours: currentHours,
+        minutes: currentMinutes,
+        isActive: false,
+      },
+    });
+
     addTimerEntryToCalendar({
       todo: selectedTodo,
       completed: false,
       startedAt: startTimeRef.current,
     });
+
+    hasPrintedRef.current = true;
   };
 
   return (
@@ -163,24 +194,28 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       <View style={styles.countdownContainer}>
         <Text style={[
           styles.countdownText,
-          isPlaying && styles.countdownTextActive
+          isPlaying && styles.countdownTextActive,
         ]}>
           {displayTime || '00:00'}
         </Text>
       </View>
-      
+
       <TimeWheelPicker
         initialHours={currentHours}
         initialMinutes={currentMinutes}
         onTimeChange={handleTimeChange}
       />
-      
+
       <View style={styles.controlsContainer}>
         <PlayStopControls
           onPlay={handlePlay}
           onStop={handleStop}
           isPlaying={isPlaying}
-          disabled={!selectedTodo || (parseInt(currentHours) === 0 && parseInt(currentMinutes) === 0)}
+          disabled={
+            !selectedTodo ||
+            (parseInt(currentHours || '0', 10) === 0 &&
+              parseInt(currentMinutes || '0', 10) === 0)
+          }
         />
       </View>
     </View>
