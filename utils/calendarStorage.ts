@@ -7,6 +7,7 @@ interface AddTimerEntryParams {
   startedAt: number;
   printedAt?: string;
   plannedMinutes?: number;
+  elapsedSeconds?: number;
 }
 
 export const addTimerEntryToCalendar = async ({
@@ -15,14 +16,17 @@ export const addTimerEntryToCalendar = async ({
   startedAt,
   printedAt,
   plannedMinutes,
+  elapsedSeconds,
 }: AddTimerEntryParams): Promise<CalendarEntry | null> => {
     const now = Date.now();
     const elapsedMs = now - startedAt;
 
     const elapsedMinutes =
-    completed && typeof plannedMinutes === 'number'
-        ? plannedMinutes
-        : Math.max(1, Math.round(elapsedMs / (1000 * 60)));
+      typeof elapsedSeconds === 'number'
+        ? Math.max(1, Math.round(elapsedSeconds / 60))
+        : completed && typeof plannedMinutes === 'number'
+          ? plannedMinutes
+          : Math.max(1, Math.round(elapsedMs / (1000 * 60)));
 
   try {
     const savedData = await AsyncStorage.getItem("todosData");

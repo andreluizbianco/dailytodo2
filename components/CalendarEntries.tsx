@@ -1,25 +1,32 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import TodoItemNote from './TodoItemNote';
-import { CalendarEntry, Todo } from '../types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Dimensions,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import TodoItemNote from "./TodoItemNote";
+import { CalendarEntry, Todo } from "../types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 7;
 
 interface CalendarEntriesProps {
   selectedDate: string | null;
   entries: CalendarEntry[];
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
-  viewMode: 'week' | 'day';
+  viewMode: "week" | "day";
   weekDates: Date[];
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
-  todos: Todo[];  // Add this
-  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  
-  updateTodo: (id: number, updates: Partial<Todo>) => void; 
+  todos: Todo[]; // Add this
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
+  updateTodo: (id: number, updates: Partial<Todo>) => void;
 }
-
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   selectedDate,
@@ -30,16 +37,18 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   onAddEntry,
   todos,
   setTodos,
-  updateTodo
+  updateTodo,
 }) => {
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
-  const [editingText, setEditingText] = useState('');
-  const [showSettingsForId, setShowSettingsForId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
+    null,
+  );
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
     const minutes = elapsedMinutes % 60;
-    
+
     if (hours > 0) {
       return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
@@ -47,15 +56,20 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const handleUpdateNote = async (entryId: number, newNote: string) => {
-    const updatedEntries = entries.map(entry => 
-      entry.id === entryId ? {
-        ...entry,
-        todo: { ...entry.todo, note: newNote }
-      } : entry
+    const updatedEntries = entries.map((entry) =>
+      entry.id === entryId
+        ? {
+            ...entry,
+            todo: { ...entry.todo, note: newNote },
+          }
+        : entry,
     );
 
     setEntries(updatedEntries);
-    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
   };
 
   const handleStartTitleEditing = (entry: CalendarEntry) => {
@@ -64,22 +78,30 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const handleEndTitleEditing = async (entryId: number) => {
-    const updatedEntries = entries.map(entry =>
-      entry.id === entryId ? {
-        ...entry,
-        todo: { ...entry.todo, text: editingText }
-      } : entry
+    const updatedEntries = entries.map((entry) =>
+      entry.id === entryId
+        ? {
+            ...entry,
+            todo: { ...entry.todo, text: editingText },
+          }
+        : entry,
     );
 
     setEntries(updatedEntries);
     setEditingTitleId(null);
-    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
   };
 
   const handleDeleteEntry = async (entryId: number) => {
-    const updatedEntries = entries.filter(entry => entry.id !== entryId);
+    const updatedEntries = entries.filter((entry) => entry.id !== entryId);
     setEntries(updatedEntries);
-    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
   };
 
   const handleTitlePress = (entryId: number) => {
@@ -88,166 +110,182 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
   const getColorValue = (buttonColor: string): string => {
     switch (buttonColor) {
-      case '#ff6b6b':
-        return 'red';
-      case '#ffd93d':
-        return 'yellow';
-      case '#6bcb77':
-        return 'green';
-      case '#4d96ff':
-        return 'blue';
+      case "#ff6b6b":
+        return "red";
+      case "#ffd93d":
+        return "yellow";
+      case "#6bcb77":
+        return "green";
+      case "#4d96ff":
+        return "blue";
       default:
-        return 'blue';
+        return "blue";
     }
   };
-  
+
   const handleColorChange = async (entryId: number, buttonColor: string) => {
     const color = getColorValue(buttonColor);
-    
-    const updatedEntries = entries.map(entry =>
-      entry.id === entryId ? {
-        ...entry,
-        todo: { ...entry.todo, color }
-      } : entry
+
+    const updatedEntries = entries.map((entry) =>
+      entry.id === entryId
+        ? {
+            ...entry,
+            todo: { ...entry.todo, color },
+          }
+        : entry,
     );
-  
+
     setEntries(updatedEntries);
-    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
   };
 
   interface CalendarEntriesProps {
     selectedDate: string | null;
     entries: CalendarEntry[];
     setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
-    viewMode: 'week' | 'day';
+    viewMode: "week" | "day";
     weekDates: Date[];
     onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
-    todos: Todo[];  // Add this
-    setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;  // Add this
-    updateTodo: (id: number, updates: Partial<Todo>) => void;  // Add this
+    todos: Todo[]; // Add this
+    setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
+    updateTodo: (id: number, updates: Partial<Todo>) => void; // Add this
   }
 
   const handleUnarchiveEntry = async (entry: CalendarEntry) => {
-    const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
-    const today = new Date().toISOString().split('T')[0];
+    const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+    const today = new Date().toISOString().split("T")[0];
     const isFutureOrToday = entryDate >= today;
-  
+
     try {
       const uniqueId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
+
       const newTodo: Todo = {
         ...entry.todo,
         id: uniqueId,
         isEditing: false,
         createdAt: new Date().toISOString(),
         restoredFrom: {
-          type: 'calendar',
+          type: "calendar",
           originalId: entry.id,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
-  
+
       // Fix typing for setTodos callback
       setTodos((currentTodos: Todo[]) => {
-        const isDuplicate = currentTodos.some((todo: Todo) => 
-          todo.text === newTodo.text && 
-          todo.note === newTodo.note &&
-          Math.abs(new Date(todo.createdAt || 0).getTime() - 
-                  new Date(entry.printedAt).getTime()) < 1000
+        const isDuplicate = currentTodos.some(
+          (todo: Todo) =>
+            todo.text === newTodo.text &&
+            todo.note === newTodo.note &&
+            Math.abs(
+              new Date(todo.createdAt || 0).getTime() -
+                new Date(entry.printedAt).getTime(),
+            ) < 1000,
         );
-        
+
         if (isDuplicate) {
-          console.warn('Duplicate todo detected, skipping...');
+          console.warn("Duplicate todo detected, skipping...");
           return currentTodos;
         }
-        
+
         return [...currentTodos, newTodo];
       });
-  
+
       try {
-        const savedData = await AsyncStorage.getItem('todosData');
-        const currentData = savedData ? JSON.parse(savedData) : { todos: [], archivedTodos: [], version: 1 };
-        
-        const isDuplicateInStorage = currentData.todos.some((todo: Todo) => 
-          todo.text === newTodo.text && 
-          todo.note === newTodo.note &&
-          Math.abs(new Date(todo.createdAt || 0).getTime() - 
-                  new Date(entry.printedAt).getTime()) < 1000
+        const savedData = await AsyncStorage.getItem("todosData");
+        const currentData = savedData
+          ? JSON.parse(savedData)
+          : { todos: [], archivedTodos: [], version: 1 };
+
+        const isDuplicateInStorage = currentData.todos.some(
+          (todo: Todo) =>
+            todo.text === newTodo.text &&
+            todo.note === newTodo.note &&
+            Math.abs(
+              new Date(todo.createdAt || 0).getTime() -
+                new Date(entry.printedAt).getTime(),
+            ) < 1000,
         );
-        
+
         if (!isDuplicateInStorage) {
           currentData.todos.push(newTodo);
-          await AsyncStorage.setItem('todosData', JSON.stringify(currentData));
+          await AsyncStorage.setItem("todosData", JSON.stringify(currentData));
         }
-  
+
         if (isFutureOrToday) {
-          const updatedEntries = entries.filter(e => e.id !== entry.id);
+          const updatedEntries = entries.filter((e) => e.id !== entry.id);
           setEntries(updatedEntries);
-          await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+          await AsyncStorage.setItem(
+            "calendarEntries",
+            JSON.stringify(updatedEntries),
+          );
         }
-  
+
         setShowSettingsForId(null);
       } catch (error) {
-        console.error('Error saving to AsyncStorage:', error);
+        console.error("Error saving to AsyncStorage:", error);
       }
     } catch (error) {
-      console.error('Error handling unarchive:', error);
+      console.error("Error handling unarchive:", error);
     }
   };
 
   const renderSettings = (entry: CalendarEntry) => {
     if (showSettingsForId !== entry.id) return null;
-  
+
     return (
       <View style={styles.settingsContainer}>
         <View style={styles.colorPalette}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.colorButton, 
-              { backgroundColor: '#ff6b6b' },
-              entry.todo.color === 'red' && styles.selectedColor
+              styles.colorButton,
+              { backgroundColor: "#ff6b6b" },
+              entry.todo.color === "red" && styles.selectedColor,
             ]}
-            onPress={() => handleColorChange(entry.id, '#ff6b6b')}
+            onPress={() => handleColorChange(entry.id, "#ff6b6b")}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.colorButton, 
-              { backgroundColor: '#ffd93d' },
-              entry.todo.color === 'yellow' && styles.selectedColor
+              styles.colorButton,
+              { backgroundColor: "#ffd93d" },
+              entry.todo.color === "yellow" && styles.selectedColor,
             ]}
-            onPress={() => handleColorChange(entry.id, '#ffd93d')}
+            onPress={() => handleColorChange(entry.id, "#ffd93d")}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.colorButton, 
-              { backgroundColor: '#6bcb77' },
-              entry.todo.color === 'green' && styles.selectedColor
+              styles.colorButton,
+              { backgroundColor: "#6bcb77" },
+              entry.todo.color === "green" && styles.selectedColor,
             ]}
-            onPress={() => handleColorChange(entry.id, '#6bcb77')}
+            onPress={() => handleColorChange(entry.id, "#6bcb77")}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.colorButton, 
-              { backgroundColor: '#4d96ff' },
-              entry.todo.color === 'blue' && styles.selectedColor
+              styles.colorButton,
+              { backgroundColor: "#4d96ff" },
+              entry.todo.color === "blue" && styles.selectedColor,
             ]}
-            onPress={() => handleColorChange(entry.id, '#4d96ff')}
+            onPress={() => handleColorChange(entry.id, "#4d96ff")}
           />
         </View>
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.iconButton}
             onLongPress={() => handleUnarchiveEntry(entry)}
             delayLongPress={700}
           >
-            <Ionicons 
-              name="archive-outline" 
-              size={24} 
-              color="#4b5563" 
-              style={{ transform: [{ rotate: '180deg' }] }}
+            <Ionicons
+              name="archive-outline"
+              size={24}
+              color="#4b5563"
+              style={{ transform: [{ rotate: "180deg" }] }}
             />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.iconButton}
             onLongPress={() => handleDeleteEntry(entry.id)}
             delayLongPress={700}
@@ -285,13 +323,13 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       );
     }
     return (
-      <Text 
-        style={styles.todoText} 
+      <Text
+        style={styles.todoText}
         numberOfLines={1}
         onPress={() => handleTitlePress(entry.id)}
         onLongPress={() => handleStartTitleEditing(entry)}
       >
-        {entry.todo.text || 'Untitled Note'}
+        {entry.todo.text || "Untitled Note"}
       </Text>
     );
   };
@@ -304,11 +342,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         </View>
       );
     }
-  
+
     // Filter entries for the selected date and sort them by time
     const dateEntries = entries
-      .filter(entry => {
-        const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
+      .filter((entry) => {
+        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
         return entryDate === selectedDate;
       })
       .sort((a, b) => {
@@ -316,14 +354,14 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         const timeB = new Date(b.printedAt).getTime();
         return timeA - timeB;
       });
-  
+
     if (dateEntries.length === 0) {
       return <Text style={styles.placeholder}>No entries for this date</Text>;
     }
-  
+
     return (
       <ScrollView style={styles.dayContainer}>
-        {dateEntries.map(entry => (
+        {dateEntries.map((entry) => (
           <View key={entry.id} style={styles.entryContainer}>
             <View style={styles.header}>
               <View style={styles.headerLeft}>
@@ -337,7 +375,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                     const updatedEntry = { ...entry, printedAt: newTimestamp };
                     // Remove the old entry and add the updated one
                     const updatedEntries = entries
-                      .filter(e => e.id !== entry.id)
+                      .filter((e) => e.id !== entry.id)
                       .concat(updatedEntry)
                       // Re-sort after update
                       .sort((a, b) => {
@@ -345,9 +383,12 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                         const timeB = new Date(b.printedAt).getTime();
                         return timeA - timeB;
                       });
-                    
+
                     setEntries(updatedEntries);
-                    await AsyncStorage.setItem('calendarEntries', JSON.stringify(updatedEntries));
+                    await AsyncStorage.setItem(
+                      "calendarEntries",
+                      JSON.stringify(updatedEntries),
+                    );
                   }}
                 />
               </View>
@@ -370,21 +411,29 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       <View style={styles.weekContainer}>
         <ScrollView style={styles.weekContent}>
           <View style={styles.weekRow}>
-            {weekDates.map(date => {
-              const dateStr = date.toISOString().split('T')[0];
-              const dayEntries = entries.filter(entry => {
-                const entryDate = new Date(entry.printedAt).toISOString().split('T')[0];
+            {weekDates.map((date) => {
+              const dateStr = date.toISOString().split("T")[0];
+              const dayEntries = entries.filter((entry) => {
+                const entryDate = new Date(entry.printedAt)
+                  .toISOString()
+                  .split("T")[0];
                 return entryDate === dateStr;
               });
 
               return (
                 <View key={dateStr} style={styles.dayColumn}>
-                  {dayEntries.map(entry => (
+                  {dayEntries.map((entry) => (
                     <View key={entry.id} style={styles.weekEntryItem}>
-                      <View style={[
-                        styles.weekEntryContent,
-                        { backgroundColor: getBackgroundColor(entry.todo.color) }
-                      ]}>
+                      <View
+                        style={[
+                          styles.weekEntryContent,
+                          {
+                            backgroundColor: getBackgroundColor(
+                              entry.todo.color,
+                            ),
+                          },
+                        ]}
+                      >
                         {editingTitleId === entry.id ? (
                           <TextInput
                             value={editingText}
@@ -395,11 +444,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                             multiline
                           />
                         ) : (
-                          <Text 
-                            style={styles.weekEntryText} 
+                          <Text
+                            style={styles.weekEntryText}
                             onLongPress={() => handleStartTitleEditing(entry)}
                           >
-                            {entry.todo.text || ''}
+                            {entry.todo.text || ""}
                           </Text>
                         )}
                       </View>
@@ -416,60 +465,56 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
   const getBackgroundColor = (color: string): string => {
     switch (color) {
-      case 'red':
-        return '#fee2e2';
-      case 'yellow':
-        return '#fef3c7';
-      case 'green':
-        return '#d1fae5';
-      case 'blue':
-        return '#dbeafe';
+      case "red":
+        return "#fee2e2";
+      case "yellow":
+        return "#fef3c7";
+      case "green":
+        return "#d1fae5";
+      case "blue":
+        return "#dbeafe";
       default:
-        return '#f3f4f6';
+        return "#f3f4f6";
     }
   };
 
-  return viewMode === 'day' ? (
-    <View style={styles.container}>
-      {renderDayView()}
-    </View>
+  return viewMode === "day" ? (
+    <View style={styles.container}>{renderDayView()}</View>
   ) : (
-    <View style={styles.container}>
-      {renderWeekView()}
-    </View>
+    <View style={styles.container}>{renderWeekView()}</View>
   );
 };
 
-const TimeEditor = ({ 
+const TimeEditor = ({
   timestamp,
-  onSave
-}: { 
-  timestamp: string,
-  onSave: (newTimestamp: string) => void 
+  onSave,
+}: {
+  timestamp: string;
+  onSave: (newTimestamp: string) => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [hours, setHours] = useState('');
-  const [minutes, setMinutes] = useState('');
+  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
   const hoursRef = useRef<TextInput>(null);
   const minutesRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (isEditing) {
-      const time = new Date(timestamp).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
+      const time = new Date(timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
         hour12: false,
       });
-      const [h, m] = time.split(':');
+      const [h, m] = time.split(":");
       setHours(h);
       setMinutes(m);
     }
   }, [isEditing, timestamp]);
 
   const handleHoursChange = (text: string) => {
-    const numericText = text.replace(/\D/g, '');
+    const numericText = text.replace(/\D/g, "");
     const h = parseInt(numericText);
-    
+
     if (numericText.length === 2 || (h >= 0 && h <= 23)) {
       setHours(numericText);
       if (numericText.length === 2 && h >= 0 && h <= 23) {
@@ -479,9 +524,9 @@ const TimeEditor = ({
   };
 
   const handleMinutesChange = (text: string) => {
-    const numericText = text.replace(/\D/g, '');
+    const numericText = text.replace(/\D/g, "");
     const m = parseInt(numericText);
-    
+
     if (numericText.length === 2 || (m >= 0 && m <= 59)) {
       setMinutes(numericText);
       if (numericText.length === 2 && m >= 0 && m <= 59) {
@@ -491,7 +536,7 @@ const TimeEditor = ({
   };
 
   const saveTime = (h: number, m: number) => {
-    if ((h >= 0 && h <= 23) && (m >= 0 && m <= 59)) {
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
       const date = new Date(timestamp);
       date.setHours(h, m);
       onSave(date.toISOString());
@@ -516,12 +561,12 @@ const TimeEditor = ({
   };
 
   const resetTime = () => {
-    const time = new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
+    const time = new Date(timestamp).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
       hour12: false,
     });
-    const [h, m] = time.split(':');
+    const [h, m] = time.split(":");
     setHours(h);
     setMinutes(m);
     setIsEditing(false);
@@ -529,16 +574,16 @@ const TimeEditor = ({
 
   if (!isEditing) {
     return (
-      <Text 
+      <Text
         style={styles.timestamp}
         onLongPress={() => {
           setIsEditing(true);
           setTimeout(() => hoursRef.current?.focus(), 50);
         }}
       >
-        {new Date(timestamp).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
+        {new Date(timestamp).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
           hour12: false,
         })}
       </Text>
@@ -556,7 +601,6 @@ const TimeEditor = ({
         maxLength={2}
         selectTextOnFocus
         onBlur={handleHoursBlur}
-
       />
       <Text style={styles.timeColon}>:</Text>
       <TextInput
@@ -573,7 +617,6 @@ const TimeEditor = ({
   );
 };
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -583,33 +626,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   placeholder: {
-    textAlign: 'center',
-    color: '#666',
+    textAlign: "center",
+    color: "#666",
     padding: 20,
   },
   entryContainer: {
     marginBottom: 15,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   headerLeft: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginRight: 8,
   },
   headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   todoText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#1f2937',
+    fontWeight: "500",
+    color: "#1f2937",
     flex: 1,
   },
   todoInput: {
@@ -618,16 +661,16 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   deleteButton: {
     padding: 8,
     marginLeft: 8,
   },
   timerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -635,7 +678,7 @@ const styles = StyleSheet.create({
   },
   timerText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
     marginLeft: 4,
   },
   weekContainer: {
@@ -646,13 +689,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   weekRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingTop: 1,
   },
   dayColumn: {
     width: COLUMN_WIDTH,
     minHeight: 50,
-    alignItems: 'center',
+    alignItems: "center",
   },
   weekEntryItem: {
     paddingHorizontal: 3,
@@ -664,23 +707,23 @@ const styles = StyleSheet.create({
     padding: 2,
     borderRadius: 4,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   weekEntryText: {
     fontSize: 12,
-    color: '#1f2937',
-    flexWrap: 'wrap',
-    textAlign: 'center',
+    color: "#1f2937",
+    flexWrap: "wrap",
+    textAlign: "center",
   },
   settingsContainer: {
     padding: 12,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
     borderRadius: 4,
     marginTop: 8,
   },
   colorPalette: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 22,
     marginTop: 10,
   },
@@ -690,35 +733,35 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginTop: 10,
     marginBottom: 10,
   },
   iconButton: {
     padding: 10,
     borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   selectedColor: {
     borderWidth: 2,
-    borderColor: '#4b5563',
+    borderColor: "#4b5563",
   },
   timeEditContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   timeInput: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
     padding: 0,
     width: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   timeColon: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
     marginHorizontal: 2,
   },
 });
