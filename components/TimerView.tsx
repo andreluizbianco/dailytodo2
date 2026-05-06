@@ -152,6 +152,36 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     };
   }, [selectedTodo, currentHours, currentMinutes, updateTodo]);
 
+  useEffect(() => {
+  const syncNativeTimer = async () => {
+    if (!selectedTodo || !TimerModule?.getTimerState) return;
+
+    try {
+      const state = await TimerModule.getTimerState();
+
+    if (
+      state?.isRunning &&
+      Number(state.todoId) === Number(selectedTodo.id)
+    ) {
+      clearTimerInterval();
+
+      setIsPlaying(!state.isPaused);
+      setRemainingSeconds(state.remainingSeconds);
+      startTimeRef.current = state.startedAt;
+      endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
+
+      if (!state.isPaused) {
+        timerInterval.current = setInterval(tick, 1000);
+      }
+    }
+    } catch (error) {
+      console.log('Error syncing native timer state:', error);
+    }
+  };
+
+  syncNativeTimer();
+}, [selectedTodo?.id, tick]);
+
   const handleTimeChange = useCallback(
     (h: string, m: string) => {
       if (!isPlaying && selectedTodo) {
