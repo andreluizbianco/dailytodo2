@@ -23,7 +23,8 @@
     "react-native": "0.74.5",
     "react-native-calendar-strip": "^2.2.6",
     "react-native-calendars": "^1.1303.0",
-    "react-native-gesture-handler": "~2.16.1"
+    "react-native-gesture-handler": "~2.16.1",
+    "react-native-wheel-scrollview-picker": "^2.0.9"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

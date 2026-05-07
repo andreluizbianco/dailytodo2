@@ -1,121 +1,85 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet } from "react-native";
+import WheelPicker from "react-native-wheel-scrollview-picker";
 
 interface TimeWheelPickerProps {
   initialHours?: string;
   initialMinutes?: string;
   onTimeChange?: (hours: string, minutes: string) => void;
+  isPlaying?: boolean;
+  displayTime?: string;
 }
 
-const ITEM_HEIGHT = 44;
-const VISIBLE_ITEMS = 5;
 const MAX_MINUTES = 480;
 
 const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
   initialHours = "00",
   initialMinutes = "25",
   onTimeChange,
+  isPlaying = false,
+  displayTime = "00:00",
 }) => {
-  const scrollRef = useRef<ScrollView>(null);
-
   const minutesData = useMemo(
-    () => Array.from({ length: MAX_MINUTES + 1 }, (_, i) => i),
+    () => Array.from({ length: MAX_MINUTES + 1 }, (_, i) => String(i)),
     [],
   );
 
-  const getTotalMinutes = () =>
-    parseInt(initialHours || "0", 10) * 60 +
-    parseInt(initialMinutes || "0", 10);
+  const getTotalMinutes = () => {
+    const hours = parseInt(initialHours || "0", 10);
+    const minutes = parseInt(initialMinutes || "0", 10);
+    return Math.max(0, Math.min(MAX_MINUTES, hours * 60 + minutes));
+  };
 
-  const [selectedMinutes, setSelectedMinutes] = useState(getTotalMinutes());
+  const [selectedMinuteIndex, setSelectedMinuteIndex] =
+    useState(getTotalMinutes());
 
   useEffect(() => {
     const total = getTotalMinutes();
-    setSelectedMinutes(total);
 
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: total * ITEM_HEIGHT,
-        animated: false,
-      });
-    }, 0);
+    if (total !== selectedMinuteIndex) {
+      setSelectedMinuteIndex(total);
+    }
   }, [initialHours, initialMinutes]);
 
-  const commitMinutes = (minutes: number) => {
-    const safeMinutes = Math.max(0, Math.min(MAX_MINUTES, minutes));
-    setSelectedMinutes(safeMinutes);
+  const handleMinuteChange = (_value: string | undefined, index: number) => {
+    const safeIndex = Math.max(0, Math.min(MAX_MINUTES, index));
 
-    const hours = Math.floor(safeMinutes / 60);
-    const mins = safeMinutes % 60;
+    setSelectedMinuteIndex(safeIndex);
+
+    const hours = Math.floor(safeIndex / 60);
+    const minutes = safeIndex % 60;
 
     onTimeChange?.(
       String(hours).padStart(2, "0"),
-      String(mins).padStart(2, "0"),
+      String(minutes).padStart(2, "0"),
     );
   };
 
-  const snapToNearest = (offsetY: number) => {
-    const index = Math.max(
-      0,
-      Math.min(MAX_MINUTES, Math.round(offsetY / ITEM_HEIGHT)),
+  if (isPlaying) {
+    return (
+      <View style={styles.runningContainer}>
+        <Text style={styles.runningTime}>{displayTime}</Text>
+      </View>
     );
-
-    scrollRef.current?.scrollTo({
-      y: index * ITEM_HEIGHT,
-      animated: false,
-    });
-
-    commitMinutes(index);
-  };
-
-  const handleMomentumEnd = (
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    snapToNearest(event.nativeEvent.contentOffset.y);
-  };
-
-  const handleScrollEndDrag = (
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    snapToNearest(event.nativeEvent.contentOffset.y);
-  };
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.wheelWrapper}>
-        <View style={styles.highlight} />
+      <View style={styles.wheelContainer}>
+        <View style={styles.centerHighlight} />
+        <View style={styles.topFade} />
+        <View style={styles.bottomFade} />
 
-        <ScrollView
-          ref={scrollRef}
-          showsVerticalScrollIndicator={false}
-          snapToInterval={ITEM_HEIGHT}
-          snapToAlignment="start"
-          decelerationRate={0.85}
-          disableIntervalMomentum={true}
-          onMomentumScrollEnd={handleMomentumEnd}
-          onScrollEndDrag={handleScrollEndDrag}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {minutesData.map((minute) => (
-            <View key={minute} style={styles.item}>
-              <Text
-                style={[
-                  styles.itemText,
-                  selectedMinutes === minute && styles.selectedText,
-                ]}
-              >
-                {minute}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
+        <WheelPicker
+          dataSource={minutesData}
+          selectedIndex={selectedMinuteIndex}
+          onValueChange={handleMinuteChange}
+          wrapperHeight={180}
+          wrapperBackground="transparent"
+          itemHeight={42}
+          highlightColor="transparent"
+          highlightBorderWidth={0}
+        />
       </View>
     </View>
   );
@@ -125,42 +89,58 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 20,
+    marginVertical: 12,
   },
-  wheelWrapper: {
-    height: ITEM_HEIGHT * VISIBLE_ITEMS,
-    width: 160,
+  wheelContainer: {
+    width: 150,
+    height: 180,
     overflow: "hidden",
+    alignItems: "center",
     justifyContent: "center",
   },
-  scrollContent: {
-    paddingVertical: ITEM_HEIGHT * 2,
-  },
-  highlight: {
+
+  centerHighlight: {
     position: "absolute",
-    top: ITEM_HEIGHT * 2,
-    height: ITEM_HEIGHT,
-    width: "100%",
+    top: 69,
+    width: 128,
+    height: 42,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: "#D1D5DB",
     backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     zIndex: -1,
   },
-  item: {
-    height: ITEM_HEIGHT,
-    justifyContent: "center",
-    alignItems: "center",
+
+  topFade: {
+    position: "absolute",
+    top: 0,
+    height: 64,
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.62)",
+    zIndex: -1,
   },
-  itemText: {
-    fontSize: 20,
-    color: "#9CA3AF",
-    fontWeight: "500",
+
+  bottomFade: {
+    position: "absolute",
+    bottom: 0,
+    height: 64,
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.62)",
+    zIndex: -1,
   },
-  selectedText: {
-    fontSize: 24,
-    color: "#111827",
+
+  runningTime: {
+    fontSize: 42,
     fontWeight: "700",
+    color: "#111827",
+    fontVariant: ["tabular-nums"],
+  },
+  runningContainer: {
+    height: 150,
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 12,
   },
 });
 

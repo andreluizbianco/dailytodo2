@@ -1,17 +1,12 @@
 import React, { memo, useCallback, useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  NativeModules
-} from "react-native";
+import { View, Text, StyleSheet, NativeModules } from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
 import { Todo } from "../types";
 import { addTimerEntryToCalendar } from "../utils/calendarStorage";
 
 const { TimerModule } = NativeModules;
-console.log('TimerModule object:', TimerModule);
+console.log("TimerModule object:", TimerModule);
 
 interface TimerViewProps {
   selectedTodo: Todo | null;
@@ -85,62 +80,59 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     setDisplayTime(formatTimeDisplay(remainingSeconds));
   }, [remainingSeconds]);
 
-useEffect(() => {
-  const loadTimerForSelectedTodo = async () => {
-    clearTimerInterval();
+  useEffect(() => {
+    const loadTimerForSelectedTodo = async () => {
+      clearTimerInterval();
 
-    if (!selectedTodo) {
-      setCurrentHours('00');
-      setCurrentMinutes('25');
-      setIsPlaying(false);
-      setRemainingSeconds(25 * 60);
-      return;
-    }
-
-    try {
-      const state = await TimerModule.getTimerState();
-
-      if (
-        state?.isRunning &&
-        Number(state.todoId) === Number(selectedTodo.id)
-      ) {
-        setCurrentHours(selectedTodo.timer?.hours ?? '00');
-        setCurrentMinutes(selectedTodo.timer?.minutes ?? '25');
-        setIsPlaying(!state.isPaused);
-        setIsPaused(state.isPaused);
-        setRemainingSeconds(state.remainingSeconds);
-        startTimeRef.current = state.startedAt;
-        endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
-
-        if (!state.isPaused) {
-          timerInterval.current = setInterval(tick, 1000);
-        }
-
+      if (!selectedTodo) {
+        setCurrentHours("00");
+        setCurrentMinutes("25");
+        setIsPlaying(false);
+        setRemainingSeconds(25 * 60);
         return;
       }
-    } catch (error) {
-      console.log('Error syncing native timer state:', error);
-    }
 
-    const hours = selectedTodo.timer?.hours ?? '00';
-    const minutes = selectedTodo.timer?.minutes ?? '25';
+      try {
+        const state = await TimerModule.getTimerState();
 
-    setCurrentHours(hours);
-    setCurrentMinutes(minutes);
-    setIsPlaying(false);
-    setIsPaused(false);
+        if (
+          state?.isRunning &&
+          Number(state.todoId) === Number(selectedTodo.id)
+        ) {
+          setCurrentHours(selectedTodo.timer?.hours ?? "00");
+          setCurrentMinutes(selectedTodo.timer?.minutes ?? "25");
+          setIsPlaying(!state.isPaused);
+          setIsPaused(state.isPaused);
+          setRemainingSeconds(state.remainingSeconds);
+          startTimeRef.current = state.startedAt;
+          endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
 
-    const totalSeconds =
-      parseInt(hours || '0', 10) * 3600 +
-      parseInt(minutes || '0', 10) * 60;
+          if (!state.isPaused) {
+            timerInterval.current = setInterval(tick, 1000);
+          }
 
-    setRemainingSeconds(totalSeconds);
-  };
+          return;
+        }
+      } catch (error) {
+        console.log("Error syncing native timer state:", error);
+      }
 
-  loadTimerForSelectedTodo();
-}, [
-  selectedTodo?.id,
-]);
+      const hours = selectedTodo.timer?.hours ?? "00";
+      const minutes = selectedTodo.timer?.minutes ?? "25";
+
+      setCurrentHours(hours);
+      setCurrentMinutes(minutes);
+      setIsPlaying(false);
+      setIsPaused(false);
+
+      const totalSeconds =
+        parseInt(hours || "0", 10) * 3600 + parseInt(minutes || "0", 10) * 60;
+
+      setRemainingSeconds(totalSeconds);
+    };
+
+    loadTimerForSelectedTodo();
+  }, [selectedTodo?.id]);
 
   useEffect(() => {
     return () => {
@@ -148,55 +140,55 @@ useEffect(() => {
     };
   }, []);
 
-
   const handleTimeChange = useCallback(
     (h: string, m: string) => {
-if (!isPlaying && selectedTodo) {
-  console.log('Saving timer for todo:', selectedTodo.id, h, m);
-        setCurrentHours(h);
-        setCurrentMinutes(m);
+      if (isPlaying || !selectedTodo) return;
 
-        updateTodo(selectedTodo.id, {
-          timer: {
-            hours: h,
-            minutes: m,
-            isActive: false,
-          },
-        });
+      if (h === currentHours && m === currentMinutes) return;
 
-        const totalSeconds =
-          parseInt(h || "0", 10) * 3600 + parseInt(m || "0", 10) * 60;
+      setCurrentHours(h);
+      setCurrentMinutes(m);
 
-        setRemainingSeconds(totalSeconds);
-      }
+      updateTodo(selectedTodo.id, {
+        timer: {
+          hours: h,
+          minutes: m,
+          isActive: false,
+        },
+      });
+
+      const totalSeconds =
+        parseInt(h || "0", 10) * 3600 + parseInt(m || "0", 10) * 60;
+
+      setRemainingSeconds(totalSeconds);
     },
-    [isPlaying, selectedTodo, updateTodo],
+    [isPlaying, selectedTodo, updateTodo, currentHours, currentMinutes],
   );
 
-const handlePlay = async () => {
-  if (!selectedTodo || isPlaying) return;
+  const handlePlay = async () => {
+    if (!selectedTodo || isPlaying) return;
 
-  if (isPaused) {
-  TimerModule.resumeTimer();
+    if (isPaused) {
+      TimerModule.resumeTimer();
 
-  setIsPaused(false);
-  setIsPlaying(true);
-  endTimeRef.current = Date.now() + remainingSeconds * 1000;
-  timerInterval.current = setInterval(tick, 1000);
+      setIsPaused(false);
+      setIsPlaying(true);
+      endTimeRef.current = Date.now() + remainingSeconds * 1000;
+      timerInterval.current = setInterval(tick, 1000);
 
-  return;
-}
+      return;
+    }
 
-  const nativeState = await TimerModule.getTimerState();
+    const nativeState = await TimerModule.getTimerState();
 
-  if (
-    nativeState?.isRunning &&
-    Number(nativeState.todoId) !== Number(selectedTodo.id)
-  ) {
-    TimerModule.stopTimer();
+    if (
+      nativeState?.isRunning &&
+      Number(nativeState.todoId) !== Number(selectedTodo.id)
+    ) {
+      TimerModule.stopTimer();
 
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
 
     const totalSeconds =
       parseInt(currentHours || "0", 10) * 3600 +
@@ -223,11 +215,11 @@ const handlePlay = async () => {
       },
     });
 
-console.log('Calling native startTimer', {
-  todoId: selectedTodo.id,
-  totalSeconds,
-  startedAt: startTimeRef.current,
-});
+    console.log("Calling native startTimer", {
+      todoId: selectedTodo.id,
+      totalSeconds,
+      startedAt: startTimeRef.current,
+    });
 
     TimerModule.startTimer(selectedTodo.id, totalSeconds, startTimeRef.current);
 
@@ -235,14 +227,14 @@ console.log('Calling native startTimer', {
   };
 
   const handlePause = () => {
-  if (!selectedTodo || !isPlaying) return;
+    if (!selectedTodo || !isPlaying) return;
 
-  clearTimerInterval();
-  TimerModule.pauseTimer();
+    clearTimerInterval();
+    TimerModule.pauseTimer();
 
-  setIsPlaying(false);
-  setIsPaused(true);
-};
+    setIsPlaying(false);
+    setIsPaused(true);
+  };
 
   const handleStop = () => {
     if (!selectedTodo || (!isPlaying && !isPaused)) return;
@@ -267,23 +259,13 @@ console.log('Calling native startTimer', {
 
   return (
     <View style={styles.container}>
-      <View style={styles.countdownContainer}>
-        <Text
-          style={[
-            styles.countdownText,
-            isPlaying && styles.countdownTextActive,
-          ]}
-        >
-          {displayTime || "00:00"}
-        </Text>
-      </View>
-
       <TimeWheelPicker
         initialHours={currentHours}
         initialMinutes={currentMinutes}
         onTimeChange={handleTimeChange}
+        isPlaying={isPlaying}
+        displayTime={displayTime || "00:00"}
       />
-
       <View style={styles.controlsContainer}>
         <PlayStopControls
           onPlay={handlePlay}
@@ -293,8 +275,8 @@ console.log('Calling native startTimer', {
           isPaused={isPaused}
           disabled={
             !selectedTodo ||
-            (parseInt(currentHours || '0', 10) === 0 &&
-              parseInt(currentMinutes || '0', 10) === 0)
+            (parseInt(currentHours || "0", 10) === 0 &&
+              parseInt(currentMinutes || "0", 10) === 0)
           }
         />
       </View>
