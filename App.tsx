@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet, View, LogBox } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  SafeAreaView,
+  StyleSheet,
+  View,
+  LogBox,
+  NativeModules,
+  NativeEventEmitter,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TopBar from './components/TopBar';
@@ -9,6 +16,9 @@ import TodoNoteColumn from './components/TodoNoteColumn';
 import { Todo, CalendarEntry } from './types';
 import { useTodos } from './hooks/useTodos';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { addTimerEntryToCalendar } from './utils/calendarStorage';
+
+const { TimerModule } = NativeModules;
 
 // Ignore the specific warning about defaultProps
 LogBox.ignoreLogs(['Warning: ExpandableCalendar: Support for defaultProps']);
@@ -37,6 +47,51 @@ const App = () => {
     exportData,
     importData,
   } = useTodos();
+
+  const todosRef = useRef<Todo[]>([]);
+
+useEffect(() => {
+  todosRef.current = todos;
+}, [todos]);
+
+useEffect(() => {
+  if (!TimerModule) return;
+
+  const emitter = new NativeEventEmitter(TimerModule);
+
+  const subscription = emitter.addListener('TIMER_FINISHED', async event => {
+    const todoId = Number(event.todoId);
+    const todo = todosRef.current.find(t => Number(t.id) === todoId);
+
+    if (!todo) {
+      console.log('TIMER_FINISHED received, but todo was not found:', event);
+      return;
+    }
+
+    updateTodo(todo.id, {
+      timer: {
+        hours: todo.timer?.hours ?? '00',
+        minutes: todo.timer?.minutes ?? '25',
+        isActive: false,
+      },
+    });
+
+    const entry = await addTimerEntryToCalendar({
+      todo,
+      completed: event.completed,
+      startedAt: event.startedAt,
+      elapsedSeconds: event.activeElapsedSeconds,
+    });
+
+    if (entry) {
+      setCalendarEntries(prev => [...prev, entry]);
+    }
+  });
+
+  return () => {
+    subscription.remove();
+  };
+}, [updateTodo]);
 
   const handleAddTodo = async () => {
     if (activeView === 'calendar') {

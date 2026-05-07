@@ -3,8 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  NativeModules,
-  NativeEventEmitter,
+  NativeModules
 } from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
@@ -66,15 +65,6 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         isActive: false,
       },
     });
-
-    addTimerEntryToCalendar({
-      todo: selectedTodo,
-      completed: true,
-      startedAt: startTimeRef.current,
-      plannedMinutes:
-        parseInt(currentHours || "0", 10) * 60 +
-        parseInt(currentMinutes || "0", 10),
-    });
   }, [selectedTodo, currentHours, currentMinutes, updateTodo]);
 
   const tick = useCallback(() => {
@@ -121,36 +111,6 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       clearTimerInterval();
     };
   }, []);
-
-  useEffect(() => {
-    const emitter = new NativeEventEmitter(TimerModule);
-
-    const subscription = emitter.addListener("TIMER_FINISHED", (event) => {
-      if (!selectedTodo) return;
-
-      setIsPlaying(false);
-      setRemainingSeconds(0);
-
-      updateTodo(selectedTodo.id, {
-        timer: {
-          hours: currentHours,
-          minutes: currentMinutes,
-          isActive: false,
-        },
-      });
-
-      addTimerEntryToCalendar({
-        todo: selectedTodo,
-        completed: event.completed,
-        startedAt: event.startedAt,
-        elapsedSeconds: event.activeElapsedSeconds,
-      });
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [selectedTodo, currentHours, currentMinutes, updateTodo]);
 
   useEffect(() => {
   const syncNativeTimer = async () => {
