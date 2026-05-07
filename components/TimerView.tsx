@@ -170,8 +170,19 @@ if (!isPlaying && selectedTodo) {
     [isPlaying, selectedTodo, updateTodo],
   );
 
-  const handlePlay = () => {
-    if (!selectedTodo || isPlaying) return;
+const handlePlay = async () => {
+  if (!selectedTodo || isPlaying) return;
+
+  const nativeState = await TimerModule.getTimerState();
+
+  if (
+    nativeState?.isRunning &&
+    Number(nativeState.todoId) !== Number(selectedTodo.id)
+  ) {
+    TimerModule.stopTimer();
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
 
     const totalSeconds =
       parseInt(currentHours || "0", 10) * 3600 +
