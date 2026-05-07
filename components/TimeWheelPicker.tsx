@@ -1,204 +1,167 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
+  ScrollView,
   NativeSyntheticEvent,
   NativeScrollEvent,
-} from 'react-native';
+} from "react-native";
 
 interface TimeWheelPickerProps {
-  initialHours: string;
-  initialMinutes: string;
+  initialHours?: string;
+  initialMinutes?: string;
   onTimeChange?: (hours: string, minutes: string) => void;
-  itemHeight?: number;
-  visibleItems?: number;
-  fontSize?: number;
-  selectedFontSize?: number;
-  textColor?: string;
-  selectedTextColor?: string;
 }
 
-const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
-  initialHours = '00',
-  initialMinutes = '00',
-  onTimeChange,
-  itemHeight = 40,
-  visibleItems = 3,
-  fontSize = 16,
-  selectedFontSize = 20,
-  textColor = '#000000',
-  selectedTextColor = '#000000',
-}) => {
-  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
-  const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
-  const saveTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
+const ITEM_HEIGHT = 44;
+const VISIBLE_ITEMS = 5;
+const MAX_MINUTES = 480;
 
-  const handleTimeChange = useCallback((hours: string, minutes: string) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      onTimeChange?.(hours, minutes);
-    }, 400);
-  }, [onTimeChange]);
+const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
+  initialHours = "00",
+  initialMinutes = "25",
+  onTimeChange,
+}) => {
+  const scrollRef = useRef<ScrollView>(null);
+
+  const minutesData = useMemo(
+    () => Array.from({ length: MAX_MINUTES + 1 }, (_, i) => i),
+    [],
+  );
+
+  const getTotalMinutes = () =>
+    parseInt(initialHours || "0", 10) * 60 +
+    parseInt(initialMinutes || "0", 10);
+
+  const [selectedMinutes, setSelectedMinutes] = useState(getTotalMinutes());
 
   useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
+    const total = getTotalMinutes();
+    setSelectedMinutes(total);
 
-  const WheelPicker = ({ 
-    values, 
-    initialValue, 
-    onValueChange 
-  }: { 
-    values: string[],
-    initialValue: string,
-    onValueChange: (value: string) => void 
-  }) => {
-    const [currentCenterIndex, setCurrentCenterIndex] = useState(values.indexOf(initialValue));
-    const scrollViewRef = useRef<ScrollView>(null);
-    const currentValueRef = useRef(initialValue);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: total * ITEM_HEIGHT,
+        animated: false,
+      });
+    }, 0);
+  }, [initialHours, initialMinutes]);
 
-    useEffect(() => {
-      const initialIndex = values.indexOf(initialValue);
-      if (initialIndex !== -1 && scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({
-          y: initialIndex * itemHeight,
-          animated: false,
-        });
-        setCurrentCenterIndex(initialIndex);
-        currentValueRef.current = initialValue;
-      }
-    }, []);
+  const commitMinutes = (minutes: number) => {
+    const safeMinutes = Math.max(0, Math.min(MAX_MINUTES, minutes));
+    setSelectedMinutes(safeMinutes);
 
-    const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = event.nativeEvent.contentOffset.y;
-      const index = Math.round(y / itemHeight);
-      if (index !== currentCenterIndex) {
-        setCurrentCenterIndex(index);
-        currentValueRef.current = values[index];
-        onValueChange(values[index]);
-      }
-    }, [currentCenterIndex, onValueChange, values]);
+    const hours = Math.floor(safeMinutes / 60);
+    const mins = safeMinutes % 60;
 
-    const getItemStyle = (index: number) => {
-      const relativeIndex = index - currentCenterIndex;
-      const defaultStyle = {
-        fontSize: fontSize,
-        color: textColor,
-      };
+    onTimeChange?.(
+      String(hours).padStart(2, "0"),
+      String(mins).padStart(2, "0"),
+    );
+  };
 
-      if (relativeIndex === 0) {
-        return {
-          fontSize: selectedFontSize,
-          fontWeight: 'bold' as const,
-          color: selectedTextColor,
-        };
-      } else {
-        const opacity = Math.max(0.3, 1 - Math.abs(relativeIndex) * 0.7);
-        return {
-          ...defaultStyle,
-          opacity,
-        };
-      }
-    };
+  const snapToNearest = (offsetY: number) => {
+    const index = Math.max(
+      0,
+      Math.min(MAX_MINUTES, Math.round(offsetY / ITEM_HEIGHT)),
+    );
 
-    return (
-      <View style={[styles.wheelContainer, { height: itemHeight * visibleItems }]}>
-        <View
-          style={[
-            styles.selectionOverlay,
-            {
-              top: itemHeight,
-              height: itemHeight,
-            },
-          ]}
-          pointerEvents="none"
-        />
+    scrollRef.current?.scrollTo({
+      y: index * ITEM_HEIGHT,
+      animated: false,
+    });
+
+    commitMinutes(index);
+  };
+
+  const handleMomentumEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    snapToNearest(event.nativeEvent.contentOffset.y);
+  };
+
+  const handleScrollEndDrag = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    snapToNearest(event.nativeEvent.contentOffset.y);
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.wheelWrapper}>
+        <View style={styles.highlight} />
+
         <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollView}
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
-          snapToInterval={itemHeight}
-          onScroll={handleScroll}
-          onMomentumScrollEnd={handleScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={{
-            paddingVertical: itemHeight * Math.floor(visibleItems / 2),
-          }}>
-          {values.map((value, index) => (
-            <View
-              key={index}
-              style={[styles.itemContainer, { height: itemHeight }]}>
-              <Text style={getItemStyle(index)}>{value}</Text>
+          snapToInterval={ITEM_HEIGHT}
+          snapToAlignment="start"
+          decelerationRate={0.85}
+          disableIntervalMomentum={true}
+          onMomentumScrollEnd={handleMomentumEnd}
+          onScrollEndDrag={handleScrollEndDrag}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {minutesData.map((minute) => (
+            <View key={minute} style={styles.item}>
+              <Text
+                style={[
+                  styles.itemText,
+                  selectedMinutes === minute && styles.selectedText,
+                ]}
+              >
+                {minute}
+              </Text>
             </View>
           ))}
         </ScrollView>
       </View>
-    );
-  };
-
-  const handleHoursChange = useCallback((value: string) => {
-    handleTimeChange(value, initialMinutes);
-  }, [handleTimeChange, initialMinutes]);
-
-  const handleMinutesChange = useCallback((value: string) => {
-    handleTimeChange(initialHours, value);
-  }, [handleTimeChange, initialHours]);
-
-  return (
-    <View style={styles.container}>
-      <WheelPicker
-        values={hours}
-        initialValue={initialHours}
-        onValueChange={handleHoursChange}
-      />
-      <Text style={styles.separator}>:</Text>
-      <WheelPicker
-        values={minutes}
-        initialValue={initialMinutes}
-        onValueChange={handleMinutesChange}
-      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 20,
   },
-  wheelContainer: {
-    width: 70,
-    overflow: 'hidden',
+  wheelWrapper: {
+    height: ITEM_HEIGHT * VISIBLE_ITEMS,
+    width: 160,
+    overflow: "hidden",
+    justifyContent: "center",
   },
-  scrollView: {
-    flex: 1,
+  scrollContent: {
+    paddingVertical: ITEM_HEIGHT * 2,
   },
-  itemContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selectionOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+  highlight: {
+    position: "absolute",
+    top: ITEM_HEIGHT * 2,
+    height: ITEM_HEIGHT,
+    width: "100%",
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#D1D5DB",
+    backgroundColor: "#F9FAFB",
+    zIndex: -1,
   },
-  separator: {
+  item: {
+    height: ITEM_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemText: {
+    fontSize: 20,
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
+  selectedText: {
     fontSize: 24,
-    marginHorizontal: 10,
-    color: '#000000',
+    color: "#111827",
+    fontWeight: "700",
   },
 });
 
-export default React.memo(TimeWheelPicker);
+export default TimeWheelPicker;
