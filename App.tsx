@@ -186,7 +186,7 @@ useEffect(() => {
         </View>
         <View style={styles.todoNoteColumnContainer}>
           <TodoNoteColumn
-            selectedTodo={selectedTodo}
+            selectedTodo={currentSelectedTodo}
             activeView={activeView}
             updateTodo={updateTodo}
             removeTodo={handleRemoveTodo}  // Use the new handler
@@ -214,6 +214,11 @@ useEffect(() => {
       setCalendarViewMode(prev => prev === 'day' ? 'week' : 'day');
     }
   };
+
+const currentSelectedTodo =
+  selectedTodo
+    ? todos.find(todo => todo.id === selectedTodo.id) ?? selectedTodo
+    : null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
