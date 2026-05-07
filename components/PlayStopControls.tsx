@@ -1,35 +1,61 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 interface PlayStopControlsProps {
-  onPlay: () => void;
+  onPlay: () => void | Promise<void>;
+  onPause: () => void;
   onStop: () => void;
   isPlaying?: boolean;
+  isPaused?: boolean;
   disabled?: boolean;
 }
 
 const PlayStopControls: React.FC<PlayStopControlsProps> = ({
   onPlay,
+  onPause,
   onStop,
   isPlaying = false,
+  isPaused = false,
   disabled = false,
 }) => {
+  const canPlay = !isPlaying || isPaused;
+  const canPause = isPlaying && !isPaused;
+  const canStop = isPlaying || isPaused;
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
         style={[
           styles.button,
           styles.playButton,
-          isPlaying && styles.activeButton,
+          !canPlay && styles.disabledButton,
           disabled && styles.disabledButton,
         ]}
         onPress={onPlay}
-        disabled={disabled || isPlaying}>
+        disabled={disabled || !canPlay}
+      >
         <Ionicons
           name="play"
           size={24}
-          color={disabled ? '#9CA3AF' : isPlaying ? '#ffffff' : '#2563EB'}
+          color={disabled || !canPlay ? "#9CA3AF" : "#2563EB"}
+        />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.button,
+          styles.pauseButton,
+          !canPause && styles.disabledButton,
+          disabled && styles.disabledButton,
+        ]}
+        onPress={onPause}
+        disabled={disabled || !canPause}
+      >
+        <Ionicons
+          name="pause"
+          size={24}
+          color={disabled || !canPause ? "#9CA3AF" : "#F59E0B"}
         />
       </TouchableOpacity>
 
@@ -37,14 +63,16 @@ const PlayStopControls: React.FC<PlayStopControlsProps> = ({
         style={[
           styles.button,
           styles.stopButton,
-          !isPlaying && styles.disabledButton,
+          !canStop && styles.disabledButton,
+          disabled && styles.disabledButton,
         ]}
         onPress={onStop}
-        disabled={disabled || !isPlaying}>
+        disabled={disabled || !canStop}
+      >
         <Ionicons
           name="stop"
           size={24}
-          color={disabled || !isPlaying ? '#9CA3AF' : '#EF4444'}
+          color={disabled || !canStop ? "#9CA3AF" : "#EF4444"}
         />
       </TouchableOpacity>
     </View>
@@ -53,33 +81,33 @@ const PlayStopControls: React.FC<PlayStopControlsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 42,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 28,
   },
   button: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
   },
   playButton: {
-    borderColor: '#2563EB',
+    borderColor: "#2563EB",
+  },
+  pauseButton: {
+    borderColor: "#F59E0B",
   },
   stopButton: {
-    borderColor: '#EF4444',
-  },
-  activeButton: {
-    backgroundColor: '#2563EB',
+    borderColor: "#EF4444",
   },
   disabledButton: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
     opacity: 0.5,
   },
 });

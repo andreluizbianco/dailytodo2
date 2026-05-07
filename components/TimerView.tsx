@@ -20,6 +20,7 @@ interface TimerViewProps {
 
 const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [currentHours, setCurrentHours] = useState("00");
   const [currentMinutes, setCurrentMinutes] = useState("25");
   const [remainingSeconds, setRemainingSeconds] = useState(0);
@@ -106,6 +107,7 @@ useEffect(() => {
         setCurrentHours(selectedTodo.timer?.hours ?? '00');
         setCurrentMinutes(selectedTodo.timer?.minutes ?? '25');
         setIsPlaying(!state.isPaused);
+        setIsPaused(state.isPaused);
         setRemainingSeconds(state.remainingSeconds);
         startTimeRef.current = state.startedAt;
         endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
@@ -126,6 +128,7 @@ useEffect(() => {
     setCurrentHours(hours);
     setCurrentMinutes(minutes);
     setIsPlaying(false);
+    setIsPaused(false);
 
     const totalSeconds =
       parseInt(hours || '0', 10) * 3600 +
@@ -172,6 +175,17 @@ if (!isPlaying && selectedTodo) {
 
 const handlePlay = async () => {
   if (!selectedTodo || isPlaying) return;
+
+  if (isPaused) {
+  TimerModule.resumeTimer();
+
+  setIsPaused(false);
+  setIsPlaying(true);
+  endTimeRef.current = Date.now() + remainingSeconds * 1000;
+  timerInterval.current = setInterval(tick, 1000);
+
+  return;
+}
 
   const nativeState = await TimerModule.getTimerState();
 
@@ -220,12 +234,23 @@ console.log('Calling native startTimer', {
     timerInterval.current = setInterval(tick, 1000);
   };
 
+  const handlePause = () => {
+  if (!selectedTodo || !isPlaying) return;
+
+  clearTimerInterval();
+  TimerModule.pauseTimer();
+
+  setIsPlaying(false);
+  setIsPaused(true);
+};
+
   const handleStop = () => {
-    if (!selectedTodo || !isPlaying) return;
+    if (!selectedTodo || (!isPlaying && !isPaused)) return;
 
     clearTimerInterval();
 
     setIsPlaying(false);
+    setIsPaused(false);
 
     updateTodo(selectedTodo.id, {
       timer: {
@@ -262,12 +287,14 @@ console.log('Calling native startTimer', {
       <View style={styles.controlsContainer}>
         <PlayStopControls
           onPlay={handlePlay}
+          onPause={handlePause}
           onStop={handleStop}
           isPlaying={isPlaying}
+          isPaused={isPaused}
           disabled={
             !selectedTodo ||
-            (parseInt(currentHours || "0", 10) === 0 &&
-              parseInt(currentMinutes || "0", 10) === 0)
+            (parseInt(currentHours || '0', 10) === 0 &&
+              parseInt(currentMinutes || '0', 10) === 0)
           }
         />
       </View>
