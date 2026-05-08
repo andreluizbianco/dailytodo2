@@ -105,6 +105,55 @@ const App = () => {
     };
   }, [updateTodo]);
 
+  useEffect(() => {
+    const syncPendingTimerCompletion = async () => {
+      if (todos.length === 0) return;
+      if (!TimerModule?.getPendingCompletion) return;
+
+      try {
+        const event = await TimerModule.getPendingCompletion();
+
+        if (!event) return;
+
+        const todoId = String(event.todoId);
+        const todo = todosRef.current.find((t) => String(t.id) === todoId);
+
+        if (!todo) {
+          console.log(
+            "Pending timer completion found, but todo was not found:",
+            event,
+          );
+          return;
+        }
+
+        const entry = await addTimerEntryToCalendar({
+          todo,
+          completed: event.completed,
+          startedAt: event.startedAt,
+          elapsedSeconds: event.activeElapsedSeconds,
+        });
+
+        if (entry) {
+          setCalendarEntries((prev) => {
+            const alreadyExists = prev.some(
+              (existing) => existing.id === entry.id,
+            );
+
+            if (alreadyExists) return prev;
+
+            return [...prev, entry];
+          });
+        }
+
+        TimerModule.clearPendingCompletion();
+      } catch (error) {
+        console.log("Error syncing pending timer completion:", error);
+      }
+    };
+
+    syncPendingTimerCompletion();
+  }, [todos]);
+
   const handleAddTodo = async () => {
     if (activeView === "calendar") {
       const newTodo: Todo = {
