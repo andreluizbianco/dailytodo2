@@ -18,15 +18,15 @@ export const addTimerEntryToCalendar = async ({
   plannedMinutes,
   elapsedSeconds,
 }: AddTimerEntryParams): Promise<CalendarEntry | null> => {
-    const now = Date.now();
-    const elapsedMs = now - startedAt;
+  const now = Date.now();
+  const elapsedMs = now - startedAt;
 
-    const elapsedMinutes =
-      typeof elapsedSeconds === 'number'
-        ? Math.max(1, Math.round(elapsedSeconds / 60))
-        : completed && typeof plannedMinutes === 'number'
-          ? plannedMinutes
-          : Math.max(1, Math.round(elapsedMs / (1000 * 60)));
+  const elapsedMinutes =
+    typeof elapsedSeconds === "number"
+      ? Math.max(1, Math.round(elapsedSeconds / 60))
+      : completed && typeof plannedMinutes === "number"
+        ? plannedMinutes
+        : Math.max(1, Math.round(elapsedMs / (1000 * 60)));
 
   try {
     const savedData = await AsyncStorage.getItem("todosData");
@@ -44,7 +44,7 @@ export const addTimerEntryToCalendar = async ({
     const calendarEntry: CalendarEntry = {
       id: now,
       todo: { ...currentTodo },
-      printedAt: printedAt ?? new Date(now).toISOString(),
+      printedAt: printedAt ?? new Date(startedAt).toISOString(),
       timerCompleted: completed,
       timeSpent: {
         elapsed: elapsedMinutes,

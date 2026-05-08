@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Vibration,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
 import { CalendarEntry, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { softHaptic } from "../utils/haptics";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 7;
@@ -44,6 +46,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
     null,
   );
+  const [editingTimerId, setEditingTimerId] = useState<number | null>(null);
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
@@ -275,7 +278,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.iconButton}
-            onLongPress={() => handleUnarchiveEntry(entry)}
+            onLongPress={() => {
+              softHaptic();
+              handleUnarchiveEntry(entry);
+            }}
             delayLongPress={700}
           >
             <Ionicons
@@ -298,15 +304,59 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const renderTimerInfo = (entry: CalendarEntry) => {
-    if (!entry.timeSpent) return null;
+    const elapsed = entry.timeSpent?.elapsed ?? 0;
+
+    const isEditing = editingTimerId === entry.id;
 
     return (
-      <View style={styles.timerInfo}>
-        <Ionicons name="time" size={14} color="#6b7280" />
-        <Text style={styles.timerText}>
-          {formatElapsedTime(entry.timeSpent.elapsed)}
-        </Text>
-      </View>
+      <TouchableOpacity
+        style={styles.timerInfo}
+        onLongPress={() => {
+          Vibration.vibrate(30);
+          setEditingTimerId(entry.id);
+        }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="time" size={13} color="#6b7280" />
+
+        {isEditing ? (
+          <TextInput
+            style={styles.timerInput}
+            value={String(elapsed)}
+            keyboardType="number-pad"
+            autoFocus
+            selectTextOnFocus
+            onBlur={() => setEditingTimerId(null)}
+            onChangeText={async (text) => {
+              const numericText = text.replace(/\D/g, "");
+              const newElapsed = numericText ? parseInt(numericText, 10) : 0;
+
+              const updatedEntries = entries.map((e) =>
+                e.id === entry.id
+                  ? {
+                      ...e,
+                      timeSpent: {
+                        elapsed: newElapsed,
+                      },
+                    }
+                  : e,
+              );
+
+              setEntries(updatedEntries);
+
+              await AsyncStorage.setItem(
+                "calendarEntries",
+                JSON.stringify(updatedEntries),
+              );
+            }}
+          />
+        ) : elapsed > 0 ? (
+          <>
+            <Text style={styles.timerNumber}>{elapsed}</Text>
+            <Text style={styles.timerText}>m</Text>
+          </>
+        ) : null}
+      </TouchableOpacity>
     );
   };
 
@@ -366,7 +416,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 {renderTodoText(entry)}
-                {entry.timeSpent && renderTimerInfo(entry)}
+                {renderTimerInfo(entry)}
               </View>
               <View style={styles.headerRight}>
                 <TimeEditor
@@ -671,15 +721,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f3f4f6",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginTop: 2,
+    gap: 0,
   },
-  timerText: {
+  timerNumber: {
     fontSize: 12,
     color: "#6b7280",
-    marginLeft: 4,
+    marginLeft: 1,
+    marginRight: 0,
+  },
+  timerText: {
+    fontSize: 11,
+    color: "#6b7280",
+    marginLeft: 0,
   },
   weekContainer: {
     flex: 1,
@@ -763,6 +821,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6b7280",
     marginHorizontal: 2,
+  },
+  timerInput: {
+    fontSize: 12,
+    color: "#6b7280",
+    padding: 0,
+    margin: 0,
+    width: 18,
+    textAlign: "center",
   },
 });
 
