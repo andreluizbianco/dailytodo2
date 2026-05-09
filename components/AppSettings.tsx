@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -21,6 +21,8 @@ import {
   TimerAlertSound,
   TimerAlertVibration,
 } from "../utils/timerAlertPreferences";
+import { NOTE_COLOR_STRENGTH_MIN, useTheme } from "../utils/theme";
+import type { ThemePreference } from "../utils/theme";
 
 type PermissionState = "granted" | "denied" | "undetermined";
 
@@ -39,12 +41,31 @@ const vibrationOptions: Array<{
   { label: "Off", value: "off" },
 ];
 
+const themeOptions: Array<{ label: string; value: ThemePreference }> = [
+  { label: "System", value: "system" },
+  { label: "Light", value: "light" },
+  { label: "Dark", value: "dark" },
+];
+
 const AppSettings: React.FC = () => {
+  const {
+    darkIntensity,
+    isDarkMode,
+    lightIntensity,
+    lightNoteColorStrength,
+    noteColorStrength,
+    resetThemeTuning,
+    setCurrentIntensity,
+    setCurrentNoteColorStrength,
+    setThemePreference,
+    theme,
+    themeMode,
+    themePreference,
+  } = useTheme();
   const [notificationStatus, setNotificationStatus] =
     useState<PermissionState>("undetermined");
   const [alertPreferences, setAlertPreferences] =
     useState<TimerAlertPreferences>(DEFAULT_TIMER_ALERT_PREFERENCES);
-  const [volumeTrackWidth, setVolumeTrackWidth] = useState(1);
 
   const refreshNotificationStatus = useCallback(async () => {
     const permissions = await Notifications.getPermissionsAsync();
@@ -80,31 +101,6 @@ const AppSettings: React.FC = () => {
     }
   };
 
-  const setVolumeFromX = (x: number, previewSound = false) => {
-    const nextVolume = Math.max(0, Math.min(1, x / volumeTrackWidth));
-
-    if (previewSound) {
-      updateAlertPreferences({ volume: nextVolume }, true);
-      return;
-    }
-
-    setAlertPreferences((current) => ({ ...current, volume: nextVolume }));
-  };
-
-  const volumePanResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (event) => {
-      setVolumeFromX(event.nativeEvent.locationX);
-    },
-    onPanResponderMove: (event) => {
-      setVolumeFromX(event.nativeEvent.locationX);
-    },
-    onPanResponderRelease: (event) => {
-      setVolumeFromX(event.nativeEvent.locationX, true);
-    },
-  });
-
   const requestNotificationPermission = async () => {
     const permissions = await Notifications.requestPermissionsAsync();
     setNotificationStatus(permissions.status as PermissionState);
@@ -120,9 +116,77 @@ const AppSettings: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
+      <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
 
-      <View style={styles.row}>
+      <View style={[styles.themeSection, { borderBottomColor: theme.border }]}>
+        <View style={styles.labelGroup}>
+          <Ionicons
+            name={isDarkMode ? "moon" : "sunny-outline"}
+            size={22}
+            color={theme.mutedText}
+          />
+          <Text style={[styles.label, { color: theme.text }]}>Theme</Text>
+        </View>
+        <View style={[styles.themeControl, { backgroundColor: theme.control }]}>
+          {themeOptions.map((option) => {
+            const isSelected = themePreference === option.value;
+
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.themeOption,
+                  isSelected && {
+                    backgroundColor: theme.selected,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => setThemePreference(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.themeOptionText,
+                    { color: isSelected ? theme.text : theme.mutedText },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.themeTuning}>
+          <ThemeSlider
+            label={`${themeMode === "dark" ? "Dark" : "Light"} intensity`}
+            value={isDarkMode ? darkIntensity : lightIntensity}
+            onValueChange={setCurrentIntensity}
+            min={0}
+            max={1}
+            minLabel="Softer"
+            maxLabel="Deeper"
+          />
+          <ThemeSlider
+            label="Note color strength"
+            value={isDarkMode ? noteColorStrength : lightNoteColorStrength}
+            onValueChange={setCurrentNoteColorStrength}
+            min={NOTE_COLOR_STRENGTH_MIN}
+            max={1}
+            minLabel="Muted"
+            maxLabel="Vivid"
+          />
+          <TouchableOpacity
+            style={[styles.resetButton, { borderColor: theme.border }]}
+            onPress={resetThemeTuning}
+          >
+            <Text style={[styles.resetButtonText, { color: theme.text }]}>
+              Reset {themeMode} theme
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={[styles.row, { borderBottomColor: theme.border }]}>
         <View style={styles.labelGroup}>
           <Ionicons
             name={
@@ -131,15 +195,21 @@ const AppSettings: React.FC = () => {
                 : "notifications-outline"
             }
             size={22}
-            color={notificationStatus === "granted" ? "#16A34A" : "#4B5563"}
+            color={
+              notificationStatus === "granted" ? theme.success : theme.mutedText
+            }
           />
-          <Text style={styles.label}>Notifications</Text>
+          <Text style={[styles.label, { color: theme.text }]}>
+            Notifications
+          </Text>
         </View>
-        <Text style={styles.status}>{notificationStatus}</Text>
+        <Text style={[styles.status, { color: theme.mutedText }]}>
+          {notificationStatus}
+        </Text>
       </View>
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: theme.primary }]}
         onPress={requestNotificationPermission}
       >
         <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
@@ -148,32 +218,50 @@ const AppSettings: React.FC = () => {
 
       {Platform.OS === "android" && (
         <TouchableOpacity
-          style={styles.secondaryButton}
+          style={[styles.secondaryButton, { borderColor: theme.border }]}
           onPress={openAppSettings}
         >
-          <Ionicons name="settings-outline" size={20} color="#111827" />
-          <Text style={styles.secondaryButtonText}>Android app settings</Text>
+          <Ionicons name="settings-outline" size={20} color={theme.text} />
+          <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+            Android app settings
+          </Text>
         </TouchableOpacity>
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Timer alert</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Timer alert
+        </Text>
 
-        <Text style={styles.optionLabel}>Sound</Text>
-        <View style={styles.segmentedControl}>
+        <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+          Sound
+        </Text>
+        <View
+          style={[styles.segmentedControl, { backgroundColor: theme.control }]}
+        >
           {soundOptions.map((option) => {
             const isSelected = alertPreferences.sound === option.value;
 
             return (
               <TouchableOpacity
                 key={option.value}
-                style={[styles.segment, isSelected && styles.segmentSelected]}
+                style={[
+                  styles.segment,
+                  isSelected && [
+                    styles.segmentSelected,
+                    {
+                      backgroundColor: theme.selected,
+                      borderColor: theme.border,
+                    },
+                  ],
+                ]}
                 onPress={() => updateAlertPreferences({ sound: option.value })}
               >
                 <Text
                   style={[
                     styles.segmentText,
-                    isSelected && styles.segmentTextSelected,
+                    { color: theme.mutedText },
+                    isSelected && { color: theme.text },
                   ]}
                 >
                   {option.label}
@@ -183,15 +271,28 @@ const AppSettings: React.FC = () => {
           })}
         </View>
 
-        <Text style={styles.optionLabel}>Vibration</Text>
-        <View style={styles.segmentedControl}>
+        <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+          Vibration
+        </Text>
+        <View
+          style={[styles.segmentedControl, { backgroundColor: theme.control }]}
+        >
           {vibrationOptions.map((option) => {
             const isSelected = alertPreferences.vibration === option.value;
 
             return (
               <TouchableOpacity
                 key={option.value}
-                style={[styles.segment, isSelected && styles.segmentSelected]}
+                style={[
+                  styles.segment,
+                  isSelected && [
+                    styles.segmentSelected,
+                    {
+                      backgroundColor: theme.selected,
+                      borderColor: theme.border,
+                    },
+                  ],
+                ]}
                 onPress={() =>
                   updateAlertPreferences({ vibration: option.value })
                 }
@@ -199,7 +300,8 @@ const AppSettings: React.FC = () => {
                 <Text
                   style={[
                     styles.segmentText,
-                    isSelected && styles.segmentTextSelected,
+                    { color: theme.mutedText },
+                    isSelected && { color: theme.text },
                   ]}
                 >
                   {option.label}
@@ -209,32 +311,124 @@ const AppSettings: React.FC = () => {
           })}
         </View>
 
-        <View style={styles.volumeHeader}>
-          <Text style={styles.optionLabel}>Volume</Text>
-          <Text style={styles.volumeValue}>
-            {Math.round(alertPreferences.volume * 100)}%
-          </Text>
-        </View>
-        <View
-          style={styles.sliderTrack}
-          onLayout={(event) =>
-            setVolumeTrackWidth(Math.max(1, event.nativeEvent.layout.width))
+        <ThemeSlider
+          label="Volume"
+          value={alertPreferences.volume}
+          onValueChange={(volume) =>
+            setAlertPreferences((current) => ({ ...current, volume }))
           }
-          {...volumePanResponder.panHandlers}
-        >
-          <View
-            style={[
-              styles.sliderFill,
-              { width: `${alertPreferences.volume * 100}%` },
-            ]}
-          />
-          <View
-            style={[
-              styles.sliderThumb,
-              { left: `${alertPreferences.volume * 100}%` },
-            ]}
-          />
-        </View>
+          onSlidingComplete={(volume) =>
+            updateAlertPreferences({ volume }, true)
+          }
+          min={0}
+          max={1}
+          minLabel="Quiet"
+          maxLabel="Loud"
+        />
+      </View>
+    </View>
+  );
+};
+
+interface ThemeSliderProps {
+  label: string;
+  value: number;
+  onValueChange: (value: number) => void;
+  onSlidingComplete?: (value: number) => void;
+  min: number;
+  max: number;
+  minLabel: string;
+  maxLabel: string;
+}
+
+const ThemeSlider: React.FC<ThemeSliderProps> = ({
+  label,
+  value,
+  onValueChange,
+  onSlidingComplete,
+  min,
+  max,
+  minLabel,
+  maxLabel,
+}) => {
+  const { theme } = useTheme();
+  const trackRef = useRef<View>(null);
+  const [trackWidth, setTrackWidth] = useState(1);
+  const [trackPageX, setTrackPageX] = useState(0);
+
+  const valueRatio = Math.max(0, Math.min(1, (value - min) / (max - min)));
+
+  const measureTrack = () => {
+    trackRef.current?.measure((_x, _y, width, _height, pageX) => {
+      setTrackWidth(Math.max(1, width));
+      setTrackPageX(pageX);
+    });
+  };
+
+  const getValueFromPageX = (pageX: number) => {
+    const ratio = Math.max(0, Math.min(1, (pageX - trackPageX) / trackWidth));
+    return min + ratio * (max - min);
+  };
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (event) => {
+      measureTrack();
+      onValueChange(getValueFromPageX(event.nativeEvent.pageX));
+    },
+    onPanResponderMove: (event) => {
+      onValueChange(getValueFromPageX(event.nativeEvent.pageX));
+    },
+    onPanResponderRelease: (event) => {
+      onSlidingComplete?.(getValueFromPageX(event.nativeEvent.pageX));
+    },
+  });
+
+  return (
+    <View style={styles.themeSliderGroup}>
+      <View style={styles.themeSliderHeader}>
+        <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+          {label}
+        </Text>
+        <Text style={[styles.volumeValue, { color: theme.text }]}>
+          {Math.round(value * 100)}%
+        </Text>
+      </View>
+      <View
+        ref={trackRef}
+        style={styles.sliderTouchArea}
+        onLayout={measureTrack}
+        {...panResponder.panHandlers}
+      >
+        <View style={[styles.sliderRail, { backgroundColor: theme.border }]} />
+        <View
+          style={[
+            styles.sliderFill,
+            {
+              width: `${valueRatio * 100}%`,
+              backgroundColor: theme.primary,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.sliderThumb,
+            {
+              left: `${valueRatio * 100}%`,
+              backgroundColor: theme.elevated,
+              borderColor: theme.primary,
+            },
+          ]}
+        />
+      </View>
+      <View style={styles.sliderLabelRow}>
+        <Text style={[styles.sliderRangeLabel, { color: theme.subtleText }]}>
+          {minLabel}
+        </Text>
+        <Text style={[styles.sliderRangeLabel, { color: theme.subtleText }]}>
+          {maxLabel}
+        </Text>
       </View>
     </View>
   );
@@ -259,6 +453,62 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     marginBottom: 18,
+  },
+  themeSection: {
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    marginBottom: 18,
+    gap: 14,
+  },
+  themeControl: {
+    flexDirection: "row",
+    borderRadius: 6,
+    padding: 3,
+  },
+  themeOption: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  themeOptionText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  themeTuning: {
+    gap: 12,
+  },
+  themeSliderGroup: {
+    gap: 6,
+  },
+  themeSliderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sliderLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: -2,
+  },
+  sliderRangeLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  resetButton: {
+    minHeight: 36,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resetButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   labelGroup: {
     flexDirection: "row",
@@ -360,26 +610,28 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 8,
   },
-  sliderTrack: {
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#E5E7EB",
+  sliderTouchArea: {
+    height: 30,
     justifyContent: "center",
     marginBottom: 4,
+  },
+  sliderRail: {
+    height: 3,
+    borderRadius: 2,
   },
   sliderFill: {
     position: "absolute",
     left: 0,
-    height: 8,
-    borderRadius: 4,
+    height: 3,
+    borderRadius: 2,
     backgroundColor: "#2563EB",
   },
   sliderThumb: {
     position: "absolute",
-    width: 24,
-    height: 24,
-    marginLeft: -12,
-    borderRadius: 12,
+    width: 18,
+    height: 18,
+    marginLeft: -9,
+    borderRadius: 9,
     backgroundColor: "#FFFFFF",
     borderWidth: 2,
     borderColor: "#2563EB",

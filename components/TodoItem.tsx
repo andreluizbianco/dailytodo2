@@ -11,6 +11,7 @@ import { TapGestureHandler, State } from "react-native-gesture-handler";
 import { Todo } from "../types";
 import { Ionicons } from "@expo/vector-icons";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
+import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 interface TodoItemProps {
   todo: Todo;
@@ -50,6 +51,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     },
     ref,
   ) => {
+    const { theme } = useTheme();
     const [isEditing, setIsEditing] = React.useState(todo.isEditing);
     const [editedText, setEditedText] = React.useState(todo.text);
     const inputRef = useRef<TextInput>(null);
@@ -118,18 +120,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     };
 
     const getColorStyle = () => {
-      switch (todo.color) {
-        case "red":
-          return styles.redTodo;
-        case "yellow":
-          return styles.yellowTodo;
-        case "green":
-          return styles.greenTodo;
-        case "blue":
-          return styles.blueTodo;
-        default:
-          return {};
-      }
+      return { backgroundColor: getNoteBackgroundColor(todo.color, theme) };
     };
 
     const getSelectionStyle = () => {
@@ -175,14 +166,24 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
               {isEditing ? (
                 <TextInput
                   ref={inputRef}
-                  style={styles.input}
+                  style={[styles.input, { color: theme.text }]}
+                  placeholderTextColor={theme.subtleText}
                   value={editedText}
                   onChangeText={handleChangeText}
                   onBlur={handleBlur}
                   multiline
                 />
               ) : (
-                <Text style={[styles.text, !todo.text && styles.emptyText]}>
+                <Text
+                  style={[
+                    styles.text,
+                    { color: theme.text },
+                    !todo.text && [
+                      styles.emptyText,
+                      { color: theme.subtleText },
+                    ],
+                  ]}
+                >
                   {todo.text || ""}
                 </Text>
               )}
@@ -197,7 +198,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
                 <Ionicons
                   name="archive-outline"
                   size={20}
-                  color="#6b7280"
+                  color={theme.mutedText}
                   style={{ transform: [{ rotate: "180deg" }] }}
                 />
               </TouchableOpacity>
@@ -227,7 +228,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    color: "#1f2937",
   },
   emptyText: {
     color: "#9ca3af",
@@ -235,7 +235,6 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 14,
-    color: "#1f2937",
     padding: 0,
     margin: 0,
   },

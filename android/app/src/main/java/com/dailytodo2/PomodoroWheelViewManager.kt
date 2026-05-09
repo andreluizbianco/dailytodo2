@@ -30,6 +30,11 @@ class PomodoroWheelViewManager(
     view.setInteractionEnabled(enabled)
   }
 
+  @ReactProp(name = "darkMode", defaultBoolean = false)
+  fun setDarkMode(view: PomodoroWheelView, enabled: Boolean) {
+    view.setDarkMode(enabled)
+  }
+
   override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> {
     return MapBuilder.of(
       "topValueChange",

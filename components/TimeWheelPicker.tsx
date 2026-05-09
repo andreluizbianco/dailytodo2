@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import WheelPicker from "react-native-wheel-scrollview-picker";
+import { useTheme } from "../utils/theme";
 
 interface TimeWheelPickerProps {
   initialHours?: string;
@@ -30,6 +31,7 @@ interface NativePomodoroWheelProps {
   valueMinutes: number;
   maxMinutes: number;
   enabled: boolean;
+  darkMode: boolean;
   onValueChange?: (event: NativeSyntheticEvent<NativeWheelChangeEvent>) => void;
   style?: object;
 }
@@ -46,6 +48,7 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
   isPlaying = false,
   displayTime = "00:00",
 }) => {
+  const { theme, isDarkMode } = useTheme();
   const minutesData = useMemo(
     () => Array.from({ length: MAX_MINUTES + 1 }, (_, i) => String(i)),
     [],
@@ -96,7 +99,9 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
   if (isPlaying) {
     return (
       <View style={styles.runningContainer}>
-        <Text style={styles.runningTime}>{displayTime}</Text>
+        <Text style={[styles.runningTime, { color: theme.text }]}>
+          {displayTime}
+        </Text>
       </View>
     );
   }
@@ -108,14 +113,24 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
           valueMinutes={selectedMinuteIndex}
           maxMinutes={MAX_MINUTES}
           enabled={!isPlaying}
+          darkMode={isDarkMode}
           onValueChange={handleNativeChange}
           style={styles.nativeWheel}
         />
       ) : (
         <View style={styles.wheelContainer}>
-          <View style={styles.centerHighlight} />
-          <View style={styles.topFade} />
-          <View style={styles.bottomFade} />
+          <View
+            style={[
+              styles.centerHighlight,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          />
+          <View
+            style={[styles.topFade, { backgroundColor: theme.background }]}
+          />
+          <View
+            style={[styles.bottomFade, { backgroundColor: theme.background }]}
+          />
 
           <WheelPicker
             dataSource={minutesData}
@@ -192,7 +207,6 @@ const styles = StyleSheet.create({
     fontSize: 41,
     fontWeight: "300",
     fontFamily: "sans-serif-light",
-    color: "#111827",
     fontVariant: ["tabular-nums"],
   },
   runningContainer: {

@@ -13,6 +13,7 @@ import TodoItemNote from "./TodoItemNote";
 import { CalendarEntry, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
+import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 7;
@@ -40,6 +41,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   setTodos,
   updateTodo,
 }) => {
+  const { theme } = useTheme();
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
@@ -239,13 +241,21 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     if (showSettingsForId !== entry.id) return null;
 
     return (
-      <View style={styles.settingsContainer}>
+      <View
+        style={[
+          styles.settingsContainer,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
+      >
         <View style={styles.colorPalette}>
           <TouchableOpacity
             style={[
               styles.colorButton,
               { backgroundColor: "#ff6b6b" },
-              entry.todo.color === "red" && styles.selectedColor,
+              entry.todo.color === "red" && [
+                styles.selectedColor,
+                { borderColor: theme.text },
+              ],
             ]}
             onPress={() => handleColorChange(entry.id, "#ff6b6b")}
           />
@@ -253,7 +263,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             style={[
               styles.colorButton,
               { backgroundColor: "#ffd93d" },
-              entry.todo.color === "yellow" && styles.selectedColor,
+              entry.todo.color === "yellow" && [
+                styles.selectedColor,
+                { borderColor: theme.text },
+              ],
             ]}
             onPress={() => handleColorChange(entry.id, "#ffd93d")}
           />
@@ -261,7 +274,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             style={[
               styles.colorButton,
               { backgroundColor: "#6bcb77" },
-              entry.todo.color === "green" && styles.selectedColor,
+              entry.todo.color === "green" && [
+                styles.selectedColor,
+                { borderColor: theme.text },
+              ],
             ]}
             onPress={() => handleColorChange(entry.id, "#6bcb77")}
           />
@@ -269,7 +285,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             style={[
               styles.colorButton,
               { backgroundColor: "#4d96ff" },
-              entry.todo.color === "blue" && styles.selectedColor,
+              entry.todo.color === "blue" && [
+                styles.selectedColor,
+                { borderColor: theme.text },
+              ],
             ]}
             onPress={() => handleColorChange(entry.id, "#4d96ff")}
           />
@@ -286,7 +305,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             <Ionicons
               name="archive-outline"
               size={24}
-              color="#4b5563"
+              color={theme.mutedText}
               style={{ transform: [{ rotate: "180deg" }] }}
             />
           </TouchableOpacity>
@@ -295,7 +314,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             onLongPress={withLongPressHaptic(() => handleDeleteEntry(entry.id))}
             delayLongPress={700}
           >
-            <Ionicons name="trash-outline" size={24} color="#ef4444" />
+            <Ionicons name="trash-outline" size={24} color={theme.danger} />
           </TouchableOpacity>
         </View>
       </View>
@@ -309,18 +328,21 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
     return (
       <TouchableOpacity
-        style={styles.timerInfo}
+        style={[
+          styles.timerInfo,
+          { backgroundColor: theme.control, borderColor: theme.border },
+        ]}
         onLongPress={() => {
           softHaptic();
           setEditingTimerId(entry.id);
         }}
         activeOpacity={0.7}
       >
-        <Ionicons name="time" size={13} color="#6b7280" />
+        <Ionicons name="time" size={13} color={theme.mutedText} />
 
         {isEditing ? (
           <TextInput
-            style={styles.timerInput}
+            style={[styles.timerInput, { color: theme.mutedText }]}
             value={String(elapsed)}
             keyboardType="number-pad"
             autoFocus
@@ -351,8 +373,12 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           />
         ) : elapsed > 0 ? (
           <>
-            <Text style={styles.timerNumber}>{elapsed}</Text>
-            <Text style={styles.timerText}>m</Text>
+            <Text style={[styles.timerNumber, { color: theme.mutedText }]}>
+              {elapsed}
+            </Text>
+            <Text style={[styles.timerText, { color: theme.mutedText }]}>
+              m
+            </Text>
           </>
         ) : null}
       </TouchableOpacity>
@@ -366,14 +392,14 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           value={editingText}
           onChangeText={setEditingText}
           onBlur={() => handleEndTitleEditing(entry.id)}
-          style={[styles.todoText, styles.todoInput]}
+          style={[styles.todoText, styles.todoInput, { color: theme.text }]}
           autoFocus
         />
       );
     }
     return (
       <Text
-        style={styles.todoText}
+        style={[styles.todoText, { color: theme.text }]}
         numberOfLines={1}
         onPress={() => handleTitlePress(entry.id)}
         onLongPress={withLongPressHaptic(() => handleStartTitleEditing(entry))}
@@ -387,7 +413,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     if (!selectedDate) {
       return (
         <View style={styles.container}>
-          <Text style={styles.placeholder}>Select a date to view entries</Text>
+          <Text style={[styles.placeholder, { color: theme.mutedText }]}>
+            Select a date to view entries
+          </Text>
         </View>
       );
     }
@@ -405,7 +433,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       });
 
     if (dateEntries.length === 0) {
-      return <Text style={styles.placeholder}>No entries for this date</Text>;
+      return (
+        <Text style={[styles.placeholder, { color: theme.mutedText }]}>
+          No entries for this date
+        </Text>
+      );
     }
 
     return (
@@ -477,8 +509,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                         style={[
                           styles.weekEntryContent,
                           {
-                            backgroundColor: getBackgroundColor(
+                            backgroundColor: getNoteBackgroundColor(
                               entry.todo.color,
+                              theme,
                             ),
                           },
                         ]}
@@ -488,13 +521,20 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                             value={editingText}
                             onChangeText={setEditingText}
                             onBlur={() => handleEndTitleEditing(entry.id)}
-                            style={[styles.weekEntryText, styles.todoInput]}
+                            style={[
+                              styles.weekEntryText,
+                              styles.todoInput,
+                              { color: theme.text },
+                            ]}
                             autoFocus
                             multiline
                           />
                         ) : (
                           <Text
-                            style={styles.weekEntryText}
+                            style={[
+                              styles.weekEntryText,
+                              { color: theme.text },
+                            ]}
                             onLongPress={withLongPressHaptic(() =>
                               handleStartTitleEditing(entry),
                             )}
@@ -514,21 +554,6 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     );
   };
 
-  const getBackgroundColor = (color: string): string => {
-    switch (color) {
-      case "red":
-        return "#fee2e2";
-      case "yellow":
-        return "#fef3c7";
-      case "green":
-        return "#d1fae5";
-      case "blue":
-        return "#dbeafe";
-      default:
-        return "#f3f4f6";
-    }
-  };
-
   return viewMode === "day" ? (
     <View style={styles.container}>{renderDayView()}</View>
   ) : (
@@ -543,6 +568,7 @@ const TimeEditor = ({
   timestamp: string;
   onSave: (newTimestamp: string) => void;
 }) => {
+  const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
@@ -626,7 +652,7 @@ const TimeEditor = ({
   if (!isEditing) {
     return (
       <Text
-        style={styles.timestamp}
+        style={[styles.timestamp, { color: theme.mutedText }]}
         onLongPress={() => {
           softHaptic();
           setIsEditing(true);
@@ -643,10 +669,15 @@ const TimeEditor = ({
   }
 
   return (
-    <View style={styles.timeEditContainer}>
+    <View
+      style={[
+        styles.timeEditContainer,
+        { backgroundColor: theme.control, borderColor: theme.border },
+      ]}
+    >
       <TextInput
         ref={hoursRef}
-        style={styles.timeInput}
+        style={[styles.timeInput, { color: theme.mutedText }]}
         value={hours}
         onChangeText={handleHoursChange}
         keyboardType="number-pad"
@@ -654,10 +685,10 @@ const TimeEditor = ({
         selectTextOnFocus
         onBlur={handleHoursBlur}
       />
-      <Text style={styles.timeColon}>:</Text>
+      <Text style={[styles.timeColon, { color: theme.mutedText }]}>:</Text>
       <TextInput
         ref={minutesRef}
-        style={styles.timeInput}
+        style={[styles.timeInput, { color: theme.mutedText }]}
         value={minutes}
         onChangeText={handleMinutesChange}
         keyboardType="number-pad"
@@ -723,6 +754,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "transparent",
     paddingHorizontal: 3,
     paddingVertical: 1,
     borderRadius: 6,
@@ -778,6 +811,7 @@ const styles = StyleSheet.create({
   settingsContainer: {
     padding: 12,
     backgroundColor: "#f9fafb",
+    borderWidth: 1,
     borderRadius: 4,
     marginTop: 8,
   },
@@ -811,6 +845,10 @@ const styles = StyleSheet.create({
   timeEditContainer: {
     flexDirection: "row",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderRadius: 6,
+    paddingHorizontal: 4,
   },
   timeInput: {
     fontSize: 12,

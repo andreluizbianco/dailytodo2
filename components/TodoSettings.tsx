@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Todo } from "../types";
 import NoteTypeSelector from "./NoteTypeSelector";
 import { softHaptic } from "../utils/haptics";
+import { useTheme } from "../utils/theme";
 
 const colors: string[] = ["red", "yellow", "green", "blue"];
 
@@ -22,6 +23,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   archiveTodo,
   printOnCalendar,
 }) => {
+  const { theme } = useTheme();
   const [deleteState, setDeleteState] = useState<"initial" | "confirm">(
     "initial",
   );
@@ -79,7 +81,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.surface }]}>
       <View style={styles.colorPalette}>
         {colors.map((color) => (
           <TouchableOpacity
@@ -87,7 +89,10 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
             style={[
               styles.colorButton,
               { backgroundColor: getColorValue(color) },
-              todo.color === color && styles.selectedColor,
+              todo.color === color && [
+                styles.selectedColor,
+                { borderColor: theme.text },
+              ],
             ]}
             onPress={() => handleColorChange(color)}
           />
@@ -116,7 +121,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
           <Ionicons
             name="calendar-outline"
             size={24}
-            color={isPrintPressed ? "#ffffff" : "#4b5563"}
+            color={isPrintPressed ? theme.elevated : theme.mutedText}
           />
         </TouchableOpacity>
 
@@ -135,7 +140,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
           <Ionicons
             name="archive-outline"
             size={24}
-            color={isArchivePressed ? "#ffffff" : "#4b5563"}
+            color={isArchivePressed ? theme.elevated : theme.mutedText}
           />
         </TouchableOpacity>
 
@@ -154,7 +159,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
           <Ionicons
             name="trash-outline"
             size={24}
-            color={isDeletePressed ? "#ffffff" : "#ef4444"}
+            color={isDeletePressed ? theme.elevated : theme.danger}
           />
         </TouchableOpacity>
       </View>

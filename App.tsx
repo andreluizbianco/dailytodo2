@@ -6,6 +6,7 @@ import {
   LogBox,
   NativeModules,
   NativeEventEmitter,
+  Animated,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -16,6 +17,7 @@ import TodoNoteColumn from "./components/TodoNoteColumn";
 import { Todo, CalendarEntry } from "./types";
 import { useTodos } from "./hooks/useTodos";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ThemeProvider, useTheme } from "./utils/theme";
 import { addTimerEntryToCalendar } from "./utils/calendarStorage";
 import {
   applyTimerAlertPreferences,
@@ -34,7 +36,9 @@ LogBox.ignoreLogs(["Warning: ExpandableCalendar: Support for defaultProps"]);
 type ViewType = "notes" | "timer" | "settings" | "archive" | "calendar";
 type CalendarViewMode = "day" | "week";
 
-const App = () => {
+const AppContent = () => {
+  const { isDarkMode, theme } = useTheme();
+  const themeAnimation = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
   const [activeView, setActiveView] = useState<ViewType>("notes");
   const [showSettings, setShowSettings] = useState(false);
   const [calendarViewMode, setCalendarViewMode] =
@@ -62,6 +66,14 @@ const App = () => {
   } = useTodos();
 
   const todosRef = useRef<Todo[]>([]);
+
+  useEffect(() => {
+    Animated.timing(themeAnimation, {
+      toValue: isDarkMode ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [isDarkMode, themeAnimation]);
 
   const handleSelectTodo = useCallback((todo: Todo | null) => {
     setSelectedTodo(todo);
@@ -369,22 +381,42 @@ const App = () => {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="auto" />
-        <TopBar
-          onAddTodo={handleAddTodo}
-          onAddLongPress={handleAddLongPress}
-          activeView={activeView}
-          setActiveView={setActiveView}
-          showSettings={showSettings}
-          setShowSettings={setShowSettings}
-          onCalendarPress={handleCalendarPress}
-        />
-        {renderMainContent()}
-      </SafeAreaView>
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            backgroundColor: themeAnimation.interpolate({
+              inputRange: [0, 1],
+              outputRange: ["#FFFFFF", theme.background],
+            }),
+          },
+        ]}
+      >
+        <SafeAreaView
+          style={[styles.container, { backgroundColor: "transparent" }]}
+        >
+          <StatusBar style={isDarkMode ? "light" : "dark"} />
+          <TopBar
+            onAddTodo={handleAddTodo}
+            onAddLongPress={handleAddLongPress}
+            activeView={activeView}
+            setActiveView={setActiveView}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            onCalendarPress={handleCalendarPress}
+          />
+          {renderMainContent()}
+        </SafeAreaView>
+      </Animated.View>
     </GestureHandlerRootView>
   );
 };
+
+const App = () => (
+  <ThemeProvider>
+    <AppContent />
+  </ThemeProvider>
+);
 
 const styles = StyleSheet.create({
   container: {

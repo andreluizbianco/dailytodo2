@@ -48,6 +48,8 @@ class PomodoroWheelView(context: Context) : View(context) {
   private var pendingSettle = false
   private var snapTargetValue: Int? = null
   private var interactionEnabled = true
+  private var textColor = Color.rgb(17, 24, 39)
+  private var fadeColor = Color.WHITE
 
   private val itemHeight: Float
     get() = 40f * resources.displayMetrics.density
@@ -83,6 +85,12 @@ class PomodoroWheelView(context: Context) : View(context) {
     alpha = if (enabled) 1f else 0.72f
   }
 
+  fun setDarkMode(enabled: Boolean) {
+    textColor = if (enabled) Color.rgb(229, 231, 235) else Color.rgb(17, 24, 39)
+    fadeColor = if (enabled) Color.rgb(16, 18, 20) else Color.WHITE
+    redraw()
+  }
+
   override fun onDraw(canvas: Canvas) {
     super.onDraw(canvas)
 
@@ -110,6 +118,7 @@ class PomodoroWheelView(context: Context) : View(context) {
       val scaleX = 0.94f + focus * 0.06f
       val scaleY = 0.74f + focus * 0.26f
 
+      textPaint.color = textColor
       textPaint.alpha = alpha
       textPaint.textSize = sizeSp * digitScale * resources.displayMetrics.scaledDensity
       textPaint.typeface = Typeface.create(
@@ -331,7 +340,7 @@ class PomodoroWheelView(context: Context) : View(context) {
       0f,
       0f,
       topFadeHeight,
-      Color.WHITE,
+      fadeColor,
       Color.TRANSPARENT,
       Shader.TileMode.CLAMP,
     )
@@ -342,7 +351,7 @@ class PomodoroWheelView(context: Context) : View(context) {
       height.toFloat(),
       0f,
       height - topFadeHeight,
-      Color.WHITE,
+      fadeColor,
       Color.TRANSPARENT,
       Shader.TileMode.CLAMP,
     )

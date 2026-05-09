@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  StyleSheet,
+  Text,
+  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  StyleSheet,
-  TextInput,
-  Text,
+  View,
 } from "react-native";
 import { Todo } from "../types";
 import { softHaptic } from "../utils/haptics";
+import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 interface TodoItemNoteProps {
   todo: Todo;
@@ -23,6 +24,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   onStartEditing,
   onEndEditing,
 }) => {
+  const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [localNote, setLocalNote] = useState(todo.note);
 
@@ -33,19 +35,17 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   const handleChangeText = (text: string) => {
     let processedText = text;
 
-    // Check if a new line was added
     if (
       text.length > localNote.length &&
       text.includes("\n", localNote.length - 1)
     ) {
       let prefix = "";
       if (todo.noteType === "bullet") {
-        prefix = "• ";
+        prefix = "- ";
       } else if (todo.noteType === "checkbox") {
         prefix = "[ ] ";
       }
 
-      // Get the text before the newline and everything after
       const insertPos = text.lastIndexOf("\n") + 1;
       processedText = text.slice(0, insertPos) + prefix + text.slice(insertPos);
     }
@@ -86,12 +86,13 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     if (isEditing) {
       return (
         <TextInput
+          autoFocus
           multiline
           value={localNote}
           onChangeText={handleChangeText}
           onBlur={handleEndEditing}
-          style={styles.noteInput}
-          autoFocus
+          style={[styles.noteInput, { color: theme.text }]}
+          placeholderTextColor={theme.subtleText}
         />
       );
     }
@@ -109,17 +110,29 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                   style={styles.checkboxTouchable}
                 >
                   {isChecked ? (
-                    <Text style={styles.checkmark}>✓</Text>
+                    <Text
+                      style={[styles.checkmark, { color: theme.mutedText }]}
+                    >
+                      ✓
+                    </Text>
                   ) : (
-                    <View style={styles.checkbox} />
+                    <View
+                      style={[
+                        styles.checkbox,
+                        { borderColor: theme.mutedText },
+                      ]}
+                    />
                   )}
                 </TouchableOpacity>
-                <Text style={styles.noteText}>{line.substring(4)}</Text>
+                <Text style={[styles.noteText, { color: theme.text }]}>
+                  {line.substring(4)}
+                </Text>
               </View>
             );
           }
+
           return (
-            <Text key={index} style={styles.noteText}>
+            <Text key={index} style={[styles.noteText, { color: theme.text }]}>
               {line}
             </Text>
           );
@@ -133,28 +146,13 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
       <View
         style={[
           styles.container,
-          { backgroundColor: getBackgroundColor(todo.color) },
+          { backgroundColor: getNoteBackgroundColor(todo.color, theme) },
         ]}
       >
         {renderNoteContent()}
       </View>
     </TouchableWithoutFeedback>
   );
-};
-
-const getBackgroundColor = (color: string): string => {
-  switch (color) {
-    case "red":
-      return "#fee2e2";
-    case "yellow":
-      return "#fef3c7";
-    case "green":
-      return "#d1fae5";
-    case "blue":
-      return "#dbeafe";
-    default:
-      return "#f3f4f6";
-  }
 };
 
 const styles = StyleSheet.create({
@@ -165,13 +163,11 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     fontSize: 16,
-    color: "#1f2937",
     minHeight: 100,
     textAlignVertical: "top",
   },
   noteText: {
     fontSize: 16,
-    color: "#1f2937",
     lineHeight: 24,
   },
   checkboxLine: {
@@ -183,21 +179,19 @@ const styles = StyleSheet.create({
     width: 13,
     height: 13,
     borderWidth: 2,
-    borderColor: "#4b5563",
     borderRadius: 4,
   },
   checkmark: {
-    color: "#4b5563",
     fontSize: 14,
     width: 13,
   },
   checkboxTouchable: {
-    width: 24, // Wider than the checkbox to make it easier to tap
-    height: 24, // Taller than the checkbox to make it easier to tap
+    width: 24,
+    height: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: -4, // Adjusted to align properly
-    marginRight: 4, // Added to maintain spacing
+    marginLeft: -4,
+    marginRight: 4,
   },
 });
 

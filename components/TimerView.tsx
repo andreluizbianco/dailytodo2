@@ -10,6 +10,7 @@ import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
 import { TimerMode, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTheme } from "../utils/theme";
 
 const { TimerModule } = NativeModules;
 console.log("TimerModule object:", TimerModule);
@@ -32,6 +33,7 @@ interface TimerViewProps {
 }
 
 const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
+  const { theme } = useTheme();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [timerMode, setTimerMode] = useState<TimerMode>("pomodoro");
@@ -487,7 +489,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         )
       ) : (
         <View style={styles.stopwatchContainer}>
-          <Text style={styles.stopwatchText}>
+          <Text style={[styles.stopwatchText, { color: theme.text }]}>
             {formatStopwatchDisplay(stopwatchSeconds)}
           </Text>
         </View>
@@ -509,11 +511,15 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         />
       </View>
 
-      <View style={styles.modeSwitch}>
+      <View style={[styles.modeSwitch, { backgroundColor: theme.control }]}>
         <Text
           style={[
             styles.modeOption,
-            timerMode === "pomodoro" && styles.modeOptionActive,
+            { color: theme.mutedText },
+            timerMode === "pomodoro" && [
+              styles.modeOptionActive,
+              { backgroundColor: theme.selected, color: theme.text },
+            ],
           ]}
           onPress={async () => {
             if (!isPlaying && !isPaused && selectedTodo) {
@@ -529,7 +535,11 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         <Text
           style={[
             styles.modeOption,
-            timerMode === "stopwatch" && styles.modeOptionActive,
+            { color: theme.mutedText },
+            timerMode === "stopwatch" && [
+              styles.modeOptionActive,
+              { backgroundColor: theme.selected, color: theme.text },
+            ],
           ]}
           onPress={async () => {
             if (!isPlaying && !isPaused && selectedTodo) {

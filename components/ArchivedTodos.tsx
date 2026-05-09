@@ -13,6 +13,7 @@ import TodoItemNote from "./TodoItemNote";
 import { Todo, CalendarEntry } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { softHaptic } from "../utils/haptics";
+import { useTheme } from "../utils/theme";
 
 interface SearchResult {
   type: "todo" | "archived" | "calendar";
@@ -45,6 +46,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   setTodos,
   updateTodo,
 }) => {
+  const { theme } = useTheme();
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(
     null,
   );
@@ -175,7 +177,11 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     }
 
     if (searchResults.length === 0) {
-      return <Text style={styles.emptyText}>No results found</Text>;
+      return (
+        <Text style={[styles.emptyText, { color: theme.mutedText }]}>
+          No results found
+        </Text>
+      );
     }
 
     const getItemText = (result: SearchResult): string => {
@@ -313,10 +319,19 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     return (
       <ScrollView style={styles.searchResults}>
         {searchResults.map((result, index) => (
-          <View key={index} style={styles.searchResult}>
+          <View
+            key={index}
+            style={[
+              styles.searchResult,
+              { backgroundColor: theme.elevated, borderColor: theme.border },
+            ]}
+          >
             <View style={styles.resultHeader}>
               <View style={styles.resultTitleContainer}>
-                <Text style={styles.resultText} numberOfLines={2}>
+                <Text
+                  style={[styles.resultText, { color: theme.text }]}
+                  numberOfLines={2}
+                >
                   {" "}
                   {/* Changed to 2 lines */}
                   {getItemText(result)}
@@ -335,17 +350,27 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                     <Ionicons
                       name="archive-outline"
                       size={20}
-                      color="#6b7280"
+                      color={theme.mutedText}
                       style={{ transform: [{ rotate: "180deg" }] }}
                     />
                   </TouchableOpacity>
                 )}
-                <View style={styles.resultType}>
+                <View
+                  style={[
+                    styles.resultType,
+                    {
+                      backgroundColor: theme.control,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                >
                   {result.type === "archived" && (
-                    <Text style={styles.typeText}>Archived</Text>
+                    <Text style={[styles.typeText, { color: theme.mutedText }]}>
+                      Archived
+                    </Text>
                   )}
                   {result.type === "calendar" && (
-                    <Text style={styles.dateText}>
+                    <Text style={[styles.dateText, { color: theme.mutedText }]}>
                       {new Date(
                         (result.item as CalendarEntry).printedAt,
                       ).toLocaleDateString("en-US", {
@@ -374,12 +399,20 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     return (
       <View style={styles.container}>
         <View style={styles.settingsContainer}>
-          <Text style={styles.title}>Data Management</Text>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Data Management
+          </Text>
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.button} onPress={exportData}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={exportData}
+            >
               <Text style={styles.buttonText}>Export</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={importData}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={importData}
+            >
               <Text style={styles.buttonText}>Import</Text>
             </TouchableOpacity>
           </View>
@@ -390,12 +423,20 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Archived Notes</Text>
+      <Text style={[styles.title, { color: theme.text }]}>Archived Notes</Text>
 
       <View style={styles.searchContainer}>
         <TextInput
-          style={styles.searchInput}
+          style={[
+            styles.searchInput,
+            {
+              backgroundColor: theme.elevated,
+              borderColor: theme.border,
+              color: theme.text,
+            },
+          ]}
           placeholder="Search in all notes..."
+          placeholderTextColor={theme.subtleText}
           value={searchQuery}
           onChangeText={handleSearch}
           autoCapitalize="none"
@@ -415,7 +456,9 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           unarchiveTodo={unarchiveTodo}
         />
       ) : (
-        <Text style={styles.emptyText}>No archived notes</Text>
+        <Text style={[styles.emptyText, { color: theme.mutedText }]}>
+          No archived notes
+        </Text>
       )}
     </View>
   );
@@ -424,7 +467,6 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
     borderRadius: 4,
     padding: 10,
   },
@@ -501,6 +543,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "transparent",
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 4,

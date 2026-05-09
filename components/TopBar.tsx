@@ -2,6 +2,7 @@ import React from "react";
 import { View, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { withLongPressHaptic } from "../utils/haptics";
+import { useTheme } from "../utils/theme";
 
 interface TopBarProps {
   onAddTodo: () => void;
@@ -24,6 +25,7 @@ const TopBar: React.FC<TopBarProps> = ({
   setShowSettings,
   onCalendarPress,
 }) => {
+  const { theme } = useTheme();
   const handleNotesPress = () => {
     if (activeView !== "notes") {
       setActiveView("notes");
@@ -51,7 +53,8 @@ const TopBar: React.FC<TopBarProps> = ({
           delayLongPress={650}
           style={[
             styles.addButton,
-            activeView === "settings" && styles.addButtonSettings,
+            { backgroundColor: theme.primary },
+            activeView === "settings" && { backgroundColor: theme.text },
           ]}
         >
           <View style={styles.plusIcon}>
@@ -65,7 +68,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="document-text"
             size={28}
-            color={activeView === "notes" ? "#3b82f6" : "#6b7280"}
+            color={activeView === "notes" ? theme.primary : theme.mutedText}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -75,14 +78,14 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="time"
             size={28}
-            color={activeView === "timer" ? "#3b82f6" : "#6b7280"}
+            color={activeView === "timer" ? theme.primary : theme.mutedText}
           />
         </TouchableOpacity>
         <TouchableOpacity onPress={onCalendarPress} style={styles.iconButton}>
           <Ionicons
             name="calendar"
             size={28}
-            color={activeView === "calendar" ? "#3b82f6" : "#6b7280"}
+            color={activeView === "calendar" ? theme.primary : theme.mutedText}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -92,7 +95,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="archive"
             size={28}
-            color={activeView === "archive" ? "#3b82f6" : "#6b7280"}
+            color={activeView === "archive" ? theme.primary : theme.mutedText}
           />
         </TouchableOpacity>
       </View>
@@ -125,9 +128,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-  },
-  addButtonSettings: {
-    backgroundColor: "#111827",
   },
   plusIcon: {
     width: 20,
