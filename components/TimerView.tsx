@@ -587,7 +587,8 @@ const styles = StyleSheet.create({
   },
   stopwatchText: {
     fontSize: 42,
-    fontWeight: "700",
+    fontWeight: "300",
+    fontFamily: "sans-serif-light",
     color: "#111827",
     fontVariant: ["tabular-nums"],
   },

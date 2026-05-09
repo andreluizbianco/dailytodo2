@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import {
+  NativeSyntheticEvent,
+  Platform,
+  requireNativeComponent,
+  View,
+  Text,
+  StyleSheet,
+} from "react-native";
 import WheelPicker from "react-native-wheel-scrollview-picker";
 
 interface TimeWheelPickerProps {
@@ -11,6 +18,26 @@ interface TimeWheelPickerProps {
 }
 
 const MAX_MINUTES = 480;
+const NATIVE_WHEEL_WIDTH = 190;
+const NATIVE_WHEEL_HEIGHT = 200;
+const NATIVE_WHEEL_ACTIVE_TOP = NATIVE_WHEEL_HEIGHT * 0.46;
+
+type NativeWheelChangeEvent = {
+  valueMinutes: number;
+};
+
+interface NativePomodoroWheelProps {
+  valueMinutes: number;
+  maxMinutes: number;
+  enabled: boolean;
+  onValueChange?: (event: NativeSyntheticEvent<NativeWheelChangeEvent>) => void;
+  style?: object;
+}
+
+const NativePomodoroWheel =
+  Platform.OS === "android"
+    ? requireNativeComponent<NativePomodoroWheelProps>("PomodoroWheelView")
+    : null;
 
 const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
   initialHours = "00",
@@ -43,6 +70,11 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
 
   const handleMinuteChange = (_value: string | undefined, index: number) => {
     const safeIndex = Math.max(0, Math.min(MAX_MINUTES, index));
+    applyMinuteChange(safeIndex);
+  };
+
+  const applyMinuteChange = (minuteValue: number) => {
+    const safeIndex = Math.max(0, Math.min(MAX_MINUTES, minuteValue));
 
     setSelectedMinuteIndex(safeIndex);
 
@@ -55,6 +87,12 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
     );
   };
 
+  const handleNativeChange = (
+    event: NativeSyntheticEvent<NativeWheelChangeEvent>,
+  ) => {
+    applyMinuteChange(event.nativeEvent.valueMinutes);
+  };
+
   if (isPlaying) {
     return (
       <View style={styles.runningContainer}>
@@ -65,22 +103,32 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={styles.wheelContainer}>
-        <View style={styles.centerHighlight} />
-        <View style={styles.topFade} />
-        <View style={styles.bottomFade} />
-
-        <WheelPicker
-          dataSource={minutesData}
-          selectedIndex={selectedMinuteIndex}
-          onValueChange={handleMinuteChange}
-          wrapperHeight={180}
-          wrapperBackground="transparent"
-          itemHeight={42}
-          highlightColor="transparent"
-          highlightBorderWidth={0}
+      {NativePomodoroWheel ? (
+        <NativePomodoroWheel
+          valueMinutes={selectedMinuteIndex}
+          maxMinutes={MAX_MINUTES}
+          enabled={!isPlaying}
+          onValueChange={handleNativeChange}
+          style={styles.nativeWheel}
         />
-      </View>
+      ) : (
+        <View style={styles.wheelContainer}>
+          <View style={styles.centerHighlight} />
+          <View style={styles.topFade} />
+          <View style={styles.bottomFade} />
+
+          <WheelPicker
+            dataSource={minutesData}
+            selectedIndex={selectedMinuteIndex}
+            onValueChange={handleMinuteChange}
+            wrapperHeight={180}
+            wrapperBackground="transparent"
+            itemHeight={42}
+            highlightColor="transparent"
+            highlightBorderWidth={0}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -90,6 +138,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 12,
+  },
+  nativeWheel: {
+    width: NATIVE_WHEEL_WIDTH,
+    height: NATIVE_WHEEL_HEIGHT,
   },
   wheelContainer: {
     width: 150,
@@ -131,15 +183,22 @@ const styles = StyleSheet.create({
   },
 
   runningTime: {
-    fontSize: 42,
-    fontWeight: "700",
+    position: "absolute",
+    top: NATIVE_WHEEL_ACTIVE_TOP,
+    left: 0,
+    width: NATIVE_WHEEL_WIDTH,
+    transform: [{ translateY: -25 }],
+    textAlign: "center",
+    fontSize: 41,
+    fontWeight: "300",
+    fontFamily: "sans-serif-light",
     color: "#111827",
     fontVariant: ["tabular-nums"],
   },
   runningContainer: {
-    height: 150,
+    width: NATIVE_WHEEL_WIDTH,
+    height: NATIVE_WHEEL_HEIGHT,
     alignItems: "center",
-    justifyContent: "center",
     marginVertical: 12,
   },
 });
