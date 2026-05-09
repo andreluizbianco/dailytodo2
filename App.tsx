@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -21,6 +21,10 @@ import {
   applyTimerAlertPreferences,
   loadTimerAlertPreferences,
 } from "./utils/timerAlertPreferences";
+import {
+  loadLastSelectedTodoId,
+  saveLastSelectedTodoId,
+} from "./utils/appUiPersistence";
 
 const { TimerModule } = NativeModules;
 
@@ -36,12 +40,14 @@ const App = () => {
   const [calendarViewMode, setCalendarViewMode] =
     useState<CalendarViewMode>("day");
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [didRestoreSelectedTodo, setDidRestoreSelectedTodo] = useState(false);
   const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
   const {
     todos,
+    isLoaded: todosLoaded,
     setTodos,
     archivedTodos,
     setArchivedTodos,
@@ -57,9 +63,35 @@ const App = () => {
 
   const todosRef = useRef<Todo[]>([]);
 
+  const handleSelectTodo = useCallback((todo: Todo | null) => {
+    setSelectedTodo(todo);
+    saveLastSelectedTodoId(todo?.id ?? null);
+  }, []);
+
   useEffect(() => {
     todosRef.current = todos;
   }, [todos]);
+
+  useEffect(() => {
+    if (!todosLoaded || didRestoreSelectedTodo) return;
+
+    const restoreSelectedTodo = async () => {
+      const savedTodoId = await loadLastSelectedTodoId();
+      const restoredTodo = savedTodoId
+        ? todos.find((todo) => Number(todo.id) === Number(savedTodoId))
+        : null;
+
+      if (restoredTodo) {
+        handleSelectTodo(restoredTodo);
+      } else {
+        handleSelectTodo(todos[0] ?? null);
+      }
+
+      setDidRestoreSelectedTodo(true);
+    };
+
+    restoreSelectedTodo();
+  }, [didRestoreSelectedTodo, handleSelectTodo, todos, todosLoaded]);
 
   useEffect(() => {
     const syncTimerAlertPreferences = async () => {
@@ -187,16 +219,16 @@ const App = () => {
       );
 
       if (runningTodo) {
-        setSelectedTodo(runningTodo);
+        handleSelectTodo(runningTodo);
       }
     };
 
     syncRunningTodoSelection();
-  }, [activeView, todos]);
+  }, [activeView, handleSelectTodo, todos]);
 
   const handleAddTodo = async () => {
     if (activeView === "settings") {
-      return null;
+      return undefined;
     }
 
     if (activeView === "calendar") {
@@ -235,7 +267,7 @@ const App = () => {
       return calendarEntry;
     } else {
       const newTodo = addTodo();
-      setSelectedTodo(newTodo);
+      handleSelectTodo(newTodo);
       return newTodo;
     }
   };
@@ -262,7 +294,7 @@ const App = () => {
 
   const handleRemoveTodo = (id: number): Todo | null => {
     const nextTodo = removeTodo(id);
-    setSelectedTodo(nextTodo);
+    handleSelectTodo(nextTodo);
     return nextTodo;
   };
 
@@ -292,7 +324,7 @@ const App = () => {
             setTodos={setTodos}
             updateTodo={updateTodo}
             selectedTodo={selectedTodo}
-            setSelectedTodo={setSelectedTodo}
+            setSelectedTodo={handleSelectTodo}
           />
         </View>
         <View style={styles.todoNoteColumnContainer}>

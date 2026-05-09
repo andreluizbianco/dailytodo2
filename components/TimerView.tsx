@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
-import { Todo } from "../types";
+import { TimerMode, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { TimerModule } = NativeModules;
@@ -23,7 +23,7 @@ type NativeTimerState = {
   activeElapsedSeconds: number;
   isRunning: boolean;
   isPaused: boolean;
-  timerMode: "pomodoro" | "stopwatch";
+  timerMode: TimerMode;
 };
 
 interface TimerViewProps {
@@ -34,9 +34,7 @@ interface TimerViewProps {
 const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [timerMode, setTimerMode] = useState<"pomodoro" | "stopwatch">(
-    "pomodoro",
-  );
+  const [timerMode, setTimerMode] = useState<TimerMode>("pomodoro");
   const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
   const [currentHours, setCurrentHours] = useState("00");
   const [currentMinutes, setCurrentMinutes] = useState("25");
@@ -105,6 +103,15 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     }
   };
 
+  const persistTimerMode = useCallback(
+    (mode: TimerMode) => {
+      if (!selectedTodo || selectedTodo.timerMode === mode) return;
+
+      updateTodo(selectedTodo.id, { timerMode: mode });
+    },
+    [selectedTodo, updateTodo],
+  );
+
   const finishTimer = useCallback(() => {
     if (!selectedTodo || hasPrintedRef.current) return;
 
@@ -153,6 +160,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
       const mode = state.timerMode === "stopwatch" ? "stopwatch" : "pomodoro";
       setTimerMode(mode);
+      persistTimerMode(mode);
       setIsPaused(state.isPaused);
       setIsPlaying(state.isRunning && !state.isPaused);
       startTimeRef.current = state.startedAt;
@@ -192,7 +200,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         timerInterval.current = setInterval(tick, 1000);
       }
     },
-    [getSelectedDurationSeconds, selectedTodo?.id, tick],
+    [getSelectedDurationSeconds, persistTimerMode, selectedTodo?.id, tick],
   );
 
   useEffect(() => {
@@ -215,12 +223,19 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         return;
       }
 
-      const savedMode = await AsyncStorage.getItem(
+      const legacySavedMode = await AsyncStorage.getItem(
         `timerMode:${selectedTodo.id}`,
       );
+      const restoredMode =
+        selectedTodo.timerMode ??
+        (legacySavedMode === "pomodoro" || legacySavedMode === "stopwatch"
+          ? legacySavedMode
+          : "pomodoro");
 
-      if (savedMode === "pomodoro" || savedMode === "stopwatch") {
-        setTimerMode(savedMode);
+      setTimerMode(restoredMode);
+
+      if (!selectedTodo.timerMode) {
+        updateTodo(selectedTodo.id, { timerMode: restoredMode });
       }
 
       try {
@@ -347,6 +362,15 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       setIsPlaying(true);
       setIsPaused(false);
 
+      updateTodo(selectedTodo.id, {
+        timerMode: "stopwatch",
+        timer: {
+          hours: currentHours,
+          minutes: currentMinutes,
+          isActive: true,
+        },
+      });
+
       TimerModule.startTimer(
         selectedTodo.id,
         0,
@@ -377,6 +401,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     setIsPaused(false);
 
     updateTodo(selectedTodo.id, {
+      timerMode: "pomodoro",
       timer: {
         hours: currentHours,
         minutes: currentMinutes,
@@ -416,6 +441,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     setStopwatchSeconds(0);
 
     updateTodo(selectedTodo.id, {
+      timerMode,
       timer: {
         hours: currentHours,
         minutes: currentMinutes,
@@ -468,10 +494,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           onPress={async () => {
             if (!isPlaying && !isPaused && selectedTodo) {
               setTimerMode("pomodoro");
-              await AsyncStorage.setItem(
-                `timerMode:${selectedTodo.id}`,
-                "pomodoro",
-              );
+              updateTodo(selectedTodo.id, { timerMode: "pomodoro" });
             }
           }}
         >
@@ -487,10 +510,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
             if (!isPlaying && !isPaused && selectedTodo) {
               setTimerMode("stopwatch");
               setStopwatchSeconds(0);
-              await AsyncStorage.setItem(
-                `timerMode:${selectedTodo.id}`,
-                "stopwatch",
-              );
+              updateTodo(selectedTodo.id, { timerMode: "stopwatch" });
             }
           }}
         >

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
-import { Alert } from 'react-native';
-import { Todo, CalendarEntry } from '../types';
+import { useCallback, useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
+import { Alert } from "react-native";
+import { Todo, CalendarEntry } from "../types";
 
 const CURRENT_VERSION = 1;
 
@@ -18,11 +18,33 @@ interface StoredData {
 export const useTodos = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const saveQueueRef = useRef(Promise.resolve());
+
+  const saveStoredTodos = useCallback(
+    (nextTodos: Todo[], nextArchivedTodos: Todo[]) => {
+      const dataToSave: StoredData = {
+        version: CURRENT_VERSION,
+        todos: nextTodos,
+        archivedTodos: nextArchivedTodos,
+      };
+
+      saveQueueRef.current = saveQueueRef.current
+        .catch(() => undefined)
+        .then(() =>
+          AsyncStorage.setItem("todosData", JSON.stringify(dataToSave)),
+        )
+        .catch((e) => {
+          console.error("Failed to save todos", e);
+        });
+    },
+    [],
+  );
 
   useEffect(() => {
     const loadTodos = async () => {
       try {
-        const savedData = await AsyncStorage.getItem('todosData');
+        const savedData = await AsyncStorage.getItem("todosData");
         if (savedData) {
           const parsedData = JSON.parse(savedData);
           if (parsedData && parsedData.version === CURRENT_VERSION) {
@@ -34,74 +56,68 @@ export const useTodos = () => {
           }
         }
       } catch (e) {
-        console.error('Failed to load todos', e);
+        console.error("Failed to load todos", e);
+      } finally {
+        setIsLoaded(true);
       }
     };
     loadTodos();
   }, []);
 
   useEffect(() => {
-    const saveTodos = async () => {
-      try {
-        const dataToSave: StoredData = {
-          version: CURRENT_VERSION,
-          todos,
-          archivedTodos,
-        };
-        await AsyncStorage.setItem('todosData', JSON.stringify(dataToSave));
-      } catch (e) {
-        console.error('Failed to save todos', e);
-      }
-    };
-    saveTodos();
-  }, [todos, archivedTodos]);
+    if (!isLoaded) return;
+
+    saveStoredTodos(todos, archivedTodos);
+  }, [todos, archivedTodos, isLoaded, saveStoredTodos]);
 
   const addTodo = (): Todo => {
     const newTodo: Todo = {
       id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
-      text: '',
-      note: '',
-      color: 'blue',
+      text: "",
+      note: "",
+      color: "blue",
       isEditing: true,
-      noteType: 'text',
-      createdAt: new Date().toISOString()
+      noteType: "text",
+      createdAt: new Date().toISOString(),
+      timerMode: "pomodoro",
+      timer: {
+        hours: "00",
+        minutes: "25",
+        isActive: false,
+      },
     };
-    setTodos(prevTodos => [...prevTodos, newTodo]);
+    setTodos((prevTodos) => [...prevTodos, newTodo]);
     return newTodo;
   };
 
-  const updateTodo = async (id: number, updates: Partial<Todo>): Promise<void> => {
-    // Update state immediately
-    setTodos(prevTodos =>
-      prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo))
-    );
-    
-    // Save to storage immediately
-    try {
-      const savedData = await AsyncStorage.getItem('todosData');
-      const currentData = savedData ? JSON.parse(savedData) : { todos: [], archivedTodos: [], version: 1 };
-      
-      currentData.todos = currentData.todos.map((todo: Todo) => 
-        todo.id === id ? { ...todo, ...updates } : todo
+  const updateTodo = async (
+    id: number,
+    updates: Partial<Todo>,
+  ): Promise<void> => {
+    setTodos((prevTodos) => {
+      const nextTodos = prevTodos.map((todo) =>
+        todo.id === id ? { ...todo, ...updates } : todo,
       );
-      
-      await AsyncStorage.setItem('todosData', JSON.stringify(currentData));
-    } catch (error) {
-      console.error('Error saving todo update:', error);
-    }
+
+      saveStoredTodos(nextTodos, archivedTodos);
+
+      return nextTodos;
+    });
   };
-  
+
   const updateArchivedTodo = (id: number, updates: Partial<Todo>): void => {
-    setArchivedTodos(prevTodos =>
-      prevTodos.map(todo => (todo.id === id ? { ...todo, ...updates } : todo)),
+    setArchivedTodos((prevTodos) =>
+      prevTodos.map((todo) =>
+        todo.id === id ? { ...todo, ...updates } : todo,
+      ),
     );
   };
 
   const removeTodo = (id: number): Todo | null => {
     let nextSelectedTodo: Todo | null = null;
-    
-    setTodos(prevTodos => {
-      const todoIndex = prevTodos.findIndex(todo => todo.id === id);
+
+    setTodos((prevTodos) => {
+      const todoIndex = prevTodos.findIndex((todo) => todo.id === id);
       if (todoIndex === -1) return prevTodos;
 
       const newTodos = [...prevTodos];
@@ -125,106 +141,115 @@ export const useTodos = () => {
   };
 
   const archiveTodo = (id: number): void => {
-    const todoToArchive = todos.find(todo => todo.id === id);
+    const todoToArchive = todos.find((todo) => todo.id === id);
     if (todoToArchive) {
-      setArchivedTodos(prevArchivedTodos => [
+      setArchivedTodos((prevArchivedTodos) => [
         ...prevArchivedTodos,
         { ...todoToArchive, isEditing: false },
       ]);
-      setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
+      setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
     }
   };
 
   const unarchiveTodo = (id: number): void => {
-    const todoToUnarchive = archivedTodos.find(todo => todo.id === id);
+    const todoToUnarchive = archivedTodos.find((todo) => todo.id === id);
     if (todoToUnarchive) {
-      setTodos(prevTodos => [...prevTodos, { ...todoToUnarchive, isEditing: false }]);
-      setArchivedTodos(prevArchivedTodos =>
-        prevArchivedTodos.filter(todo => todo.id !== id),
+      setTodos((prevTodos) => [
+        ...prevTodos,
+        { ...todoToUnarchive, isEditing: false },
+      ]);
+      setArchivedTodos((prevArchivedTodos) =>
+        prevArchivedTodos.filter((todo) => todo.id !== id),
       );
     }
   };
 
   const exportData = async () => {
     try {
-      const calendarEntriesStr = await AsyncStorage.getItem('calendarEntries');
-      const calendarEntries = calendarEntriesStr ? JSON.parse(calendarEntriesStr) : [];
-  
+      const calendarEntriesStr = await AsyncStorage.getItem("calendarEntries");
+      const calendarEntries = calendarEntriesStr
+        ? JSON.parse(calendarEntriesStr)
+        : [];
+
       const dataToExport: StoredData = {
         version: CURRENT_VERSION,
         todos,
         archivedTodos,
-        calendarEntries
+        calendarEntries,
       };
 
       const jsonString = JSON.stringify(dataToExport, null, 2);
       const fileUri = `${FileSystem.documentDirectory}todos_backup.json`;
-      
+
       await FileSystem.writeAsStringAsync(fileUri, jsonString, {
-        encoding: FileSystem.EncodingType.UTF8
+        encoding: FileSystem.EncodingType.UTF8,
       });
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         try {
           await Sharing.shareAsync(fileUri, {
-            mimeType: 'application/json',
-            dialogTitle: 'Export Todos Data',
-            UTI: 'public.json' // for iOS
+            mimeType: "application/json",
+            dialogTitle: "Export Todos Data",
+            UTI: "public.json", // for iOS
           }).then(() => {
             // Show success message after the share sheet is dismissed and the share was completed
             setTimeout(() => {
-              Alert.alert('Success', 'Data exported successfully!');
+              Alert.alert("Success", "Data exported successfully!");
             }, 500);
           });
         } catch (error) {
           if (error instanceof Error) {
-            console.error('Share error:', error.message);
-            Alert.alert('Error', 'Failed to share data. Please try again.');
+            console.error("Share error:", error.message);
+            Alert.alert("Error", "Failed to share data. Please try again.");
           }
         }
       } else {
-        Alert.alert('Error', 'Sharing is not available on this device');
+        Alert.alert("Error", "Sharing is not available on this device");
       }
     } catch (error) {
-      console.error('Error exporting data:', error);
-      Alert.alert('Error', 'Failed to export data. Please try again.');
+      console.error("Error exporting data:", error);
+      Alert.alert("Error", "Failed to export data. Please try again.");
     }
   };
 
   const importData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
-        copyToCacheDirectory: true
+        type: "application/json",
+        copyToCacheDirectory: true,
       });
 
       if (!result.canceled) {
-        const fileContents = await FileSystem.readAsStringAsync(result.assets[0].uri);
+        const fileContents = await FileSystem.readAsStringAsync(
+          result.assets[0].uri,
+        );
         const importedData = JSON.parse(fileContents);
 
         if (importedData.version === CURRENT_VERSION) {
           setTodos(importedData.todos);
           setArchivedTodos(importedData.archivedTodos);
-          
+
           if (importedData.calendarEntries) {
-            await AsyncStorage.setItem('calendarEntries', 
-              JSON.stringify(importedData.calendarEntries)
+            await AsyncStorage.setItem(
+              "calendarEntries",
+              JSON.stringify(importedData.calendarEntries),
             );
           }
 
-          Alert.alert('Success', 'Data imported successfully!');
+          Alert.alert("Success", "Data imported successfully!");
         } else {
-          Alert.alert('Error', 'Incompatible data format');
+          Alert.alert("Error", "Incompatible data format");
         }
       }
     } catch (error) {
-      console.error('Error importing data:', error);
-      Alert.alert('Error', 'Failed to import data. Please try again.');
+      console.error("Error importing data:", error);
+      Alert.alert("Error", "Failed to import data. Please try again.");
     }
   };
 
   return {
+    isLoaded,
     todos,
     setTodos,
     archivedTodos,

@@ -1,8 +1,10 @@
 export interface RestoredFrom {
-  type: 'calendar' | 'archive';
+  type: "calendar" | "archive";
   originalId: number;
   timestamp: string;
 }
+
+export type TimerMode = "pomodoro" | "stopwatch";
 
 export interface Todo {
   id: number;
@@ -10,13 +12,14 @@ export interface Todo {
   note: string;
   color: string;
   isEditing: boolean;
-  noteType: 'text' | 'bullet' | 'checkbox';
-  createdAt?: string;  // ISO timestamp of creation
+  noteType: "text" | "bullet" | "checkbox";
+  createdAt?: string; // ISO timestamp of creation
   restoredFrom?: {
-    type: 'calendar' | 'archive';
+    type: "calendar" | "archive";
     originalId: number;
     timestamp: string;
   };
+  timerMode?: TimerMode;
   timer?: {
     hours: string;
     minutes: string;
