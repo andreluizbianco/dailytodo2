@@ -95,7 +95,13 @@ const App = () => {
         });
 
         if (entry) {
-          setCalendarEntries((prev) => [...prev, entry]);
+          setCalendarEntries((prev) => {
+            const alreadyExists = prev.some(
+              (existing) => existing.id === entry.id,
+            );
+            if (alreadyExists) return prev;
+            return [...prev, entry];
+          });
         }
       },
     );
@@ -153,6 +159,28 @@ const App = () => {
 
     syncPendingTimerCompletion();
   }, [todos]);
+
+  useEffect(() => {
+    const syncRunningTodoSelection = async () => {
+      if (activeView !== "notes") return;
+      if (!TimerModule?.getTimerState) return;
+      if (todos.length === 0) return;
+
+      const state = await TimerModule.getTimerState();
+
+      if (!state?.isRunning) return;
+
+      const runningTodo = todos.find(
+        (todo) => String(todo.id) === String(state.todoId),
+      );
+
+      if (runningTodo) {
+        setSelectedTodo(runningTodo);
+      }
+    };
+
+    syncRunningTodoSelection();
+  }, [activeView, todos]);
 
   const handleAddTodo = async () => {
     if (activeView === "calendar") {
