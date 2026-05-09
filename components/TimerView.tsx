@@ -40,6 +40,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [currentMinutes, setCurrentMinutes] = useState("25");
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [displayTime, setDisplayTime] = useState<string>("");
+  const [loadedTodoId, setLoadedTodoId] = useState<number | null>(null);
 
   const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -213,6 +214,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       clearStopwatchInterval();
 
       if (!selectedTodo) {
+        setLoadedTodoId(null);
         setCurrentHours("00");
         setCurrentMinutes("25");
         setIsPlaying(false);
@@ -247,6 +249,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         ) {
           setCurrentHours(selectedTodo.timer?.hours ?? "00");
           setCurrentMinutes(selectedTodo.timer?.minutes ?? "25");
+          setLoadedTodoId(selectedTodo.id);
           applyNativeTimerState(state);
           return;
         }
@@ -262,6 +265,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       setIsPlaying(false);
       setIsPaused(false);
       setStopwatchSeconds(0);
+      setLoadedTodoId(selectedTodo.id);
 
       const totalSeconds =
         parseInt(hours || "0", 10) * 3600 + parseInt(minutes || "0", 10) * 60;
@@ -270,7 +274,13 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     };
 
     loadTimerForSelectedTodo();
-  }, [applyNativeTimerState, selectedTodo?.id]);
+  }, [
+    selectedTodo?.id,
+    selectedTodo?.timer?.hours,
+    selectedTodo?.timer?.minutes,
+    selectedTodo?.timerMode,
+    updateTodo,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -295,6 +305,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const handleTimeChange = useCallback(
     (h: string, m: string) => {
       if (isPlaying || isPaused || !selectedTodo) return;
+
+      if (loadedTodoId !== selectedTodo.id) return;
 
       if (h === currentHours && m === currentMinutes) return;
 
@@ -321,11 +333,13 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       updateTodo,
       currentHours,
       currentMinutes,
+      loadedTodoId,
     ],
   );
 
   const handlePlay = async () => {
     if (!selectedTodo) return;
+    if (loadedTodoId !== selectedTodo.id) return;
 
     // If paused, Play means RESUME, not start a new timer.
     if (isPaused) {
@@ -422,6 +436,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
   const handlePause = () => {
     if (!selectedTodo || !isPlaying) return;
+    if (loadedTodoId !== selectedTodo.id) return;
 
     clearTimerInterval();
     TimerModule.pauseTimer();
@@ -432,6 +447,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
   const handleStop = () => {
     if (!selectedTodo || (!isPlaying && !isPaused)) return;
+    if (loadedTodoId !== selectedTodo.id) return;
 
     clearTimerInterval();
     clearStopwatchInterval();
@@ -454,14 +470,21 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
   return (
     <View style={styles.container}>
-      {timerMode === "pomodoro" ? (
-        <TimeWheelPicker
-          initialHours={currentHours}
-          initialMinutes={currentMinutes}
-          onTimeChange={handleTimeChange}
-          isPlaying={isPlaying || isPaused}
-          displayTime={displayTime || "00:00"}
-        />
+      {selectedTodo && loadedTodoId !== selectedTodo.id ? (
+        <View style={styles.loadingTimerContainer} />
+      ) : timerMode === "pomodoro" ? (
+        selectedTodo ? (
+          <TimeWheelPicker
+            key={selectedTodo.id}
+            initialHours={currentHours}
+            initialMinutes={currentMinutes}
+            onTimeChange={handleTimeChange}
+            isPlaying={isPlaying || isPaused}
+            displayTime={displayTime || "00:00"}
+          />
+        ) : (
+          <View style={styles.loadingTimerContainer} />
+        )
       ) : (
         <View style={styles.stopwatchContainer}>
           <Text style={styles.stopwatchText}>
@@ -478,6 +501,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           isPaused={isPaused}
           disabled={
             !selectedTodo ||
+            loadedTodoId !== selectedTodo.id ||
             (timerMode === "pomodoro" &&
               parseInt(currentHours || "0", 10) === 0 &&
               parseInt(currentMinutes || "0", 10) === 0)
@@ -493,6 +517,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           ]}
           onPress={async () => {
             if (!isPlaying && !isPaused && selectedTodo) {
+              if (loadedTodoId !== selectedTodo.id) return;
               setTimerMode("pomodoro");
               updateTodo(selectedTodo.id, { timerMode: "pomodoro" });
             }
@@ -508,6 +533,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           ]}
           onPress={async () => {
             if (!isPlaying && !isPaused && selectedTodo) {
+              if (loadedTodoId !== selectedTodo.id) return;
               setTimerMode("stopwatch");
               setStopwatchSeconds(0);
               updateTodo(selectedTodo.id, { timerMode: "stopwatch" });
@@ -553,6 +579,10 @@ const styles = StyleSheet.create({
     height: 150,
     alignItems: "center",
     justifyContent: "center",
+    marginVertical: 12,
+  },
+  loadingTimerContainer: {
+    height: 150,
     marginVertical: 12,
   },
   stopwatchText: {
