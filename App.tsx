@@ -6,7 +6,6 @@ import {
   LogBox,
   NativeModules,
   NativeEventEmitter,
-  Vibration,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -18,13 +17,17 @@ import { Todo, CalendarEntry } from "./types";
 import { useTodos } from "./hooks/useTodos";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { addTimerEntryToCalendar } from "./utils/calendarStorage";
+import {
+  applyTimerAlertPreferences,
+  loadTimerAlertPreferences,
+} from "./utils/timerAlertPreferences";
 
 const { TimerModule } = NativeModules;
 
 // Ignore the specific warning about defaultProps
 LogBox.ignoreLogs(["Warning: ExpandableCalendar: Support for defaultProps"]);
 
-type ViewType = "notes" | "settings" | "archive" | "calendar";
+type ViewType = "notes" | "timer" | "settings" | "archive" | "calendar";
 type CalendarViewMode = "day" | "week";
 
 const App = () => {
@@ -59,6 +62,15 @@ const App = () => {
   }, [todos]);
 
   useEffect(() => {
+    const syncTimerAlertPreferences = async () => {
+      const preferences = await loadTimerAlertPreferences();
+      applyTimerAlertPreferences(preferences);
+    };
+
+    syncTimerAlertPreferences();
+  }, []);
+
+  useEffect(() => {
     if (!TimerModule) return;
 
     const emitter = new NativeEventEmitter(TimerModule);
@@ -67,10 +79,6 @@ const App = () => {
       "TIMER_FINISHED",
       async (event) => {
         TimerModule.clearPendingCompletion?.();
-
-        if (event.completed) {
-          Vibration.vibrate([0, 500, 200, 500]);
-        }
 
         const todoId = Number(event.todoId);
         const todo = todosRef.current.find((t) => Number(t.id) === todoId);
@@ -187,6 +195,10 @@ const App = () => {
   }, [activeView, todos]);
 
   const handleAddTodo = async () => {
+    if (activeView === "settings") {
+      return null;
+    }
+
     if (activeView === "calendar") {
       const newTodo: Todo = {
         id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
@@ -314,6 +326,11 @@ const App = () => {
     }
   };
 
+  const handleAddLongPress = () => {
+    setShowSettings(false);
+    setActiveView((prev) => (prev === "settings" ? "notes" : "settings"));
+  };
+
   const currentSelectedTodo = selectedTodo
     ? (todos.find((todo) => todo.id === selectedTodo.id) ?? selectedTodo)
     : null;
@@ -324,6 +341,7 @@ const App = () => {
         <StatusBar style="auto" />
         <TopBar
           onAddTodo={handleAddTodo}
+          onAddLongPress={handleAddLongPress}
           activeView={activeView}
           setActiveView={setActiveView}
           showSettings={showSettings}

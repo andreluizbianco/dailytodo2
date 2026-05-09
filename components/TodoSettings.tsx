@@ -1,32 +1,30 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Todo } from '../types';
-import NoteTypeSelector from './NoteTypeSelector';
+import React, { useState, useRef } from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Todo } from "../types";
+import NoteTypeSelector from "./NoteTypeSelector";
+import { softHaptic } from "../utils/haptics";
 
-const colors: string[] = ['red', 'yellow', 'green', 'blue'];
+const colors: string[] = ["red", "yellow", "green", "blue"];
 
 interface TodoSettingsProps {
-    todo: Todo;
-    updateTodo: (updates: Partial<Todo>) => void;
-    removeTodo: () => void;
-    archiveTodo: () => void;
-    printOnCalendar: (todo: Todo) => void;
-  }
-  
-  const TodoSettings: React.FC<TodoSettingsProps> = ({
-    todo,
-    updateTodo,
-    removeTodo,
-    archiveTodo,
-    printOnCalendar
-  }) => {
-  const [deleteState, setDeleteState] = useState<'initial' | 'confirm'>('initial');
+  todo: Todo;
+  updateTodo: (updates: Partial<Todo>) => void;
+  removeTodo: () => void;
+  archiveTodo: () => void;
+  printOnCalendar: (todo: Todo) => void;
+}
+
+const TodoSettings: React.FC<TodoSettingsProps> = ({
+  todo,
+  updateTodo,
+  removeTodo,
+  archiveTodo,
+  printOnCalendar,
+}) => {
+  const [deleteState, setDeleteState] = useState<"initial" | "confirm">(
+    "initial",
+  );
   const [localNoteType, setLocalNoteType] = useState(todo.noteType);
   const timeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPrintPressed, setIsPrintPressed] = useState(false);
@@ -38,51 +36,52 @@ interface TodoSettingsProps {
   };
 
   const handleDeletePress = () => {
-    if (deleteState === 'initial') {
-      setDeleteState('confirm');
-      timeoutRef.current = setTimeout(() => setDeleteState('initial'), 3000);
+    if (deleteState === "initial") {
+      setDeleteState("confirm");
+      timeoutRef.current = setTimeout(() => setDeleteState("initial"), 3000);
     }
   };
 
   const handleDeleteLongPress = () => {
-    if (deleteState === 'confirm') {
+    if (deleteState === "confirm") {
       removeTodo();
-      setDeleteState('initial');
+      setDeleteState("initial");
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
     }
   };
 
-  const handleNoteTypeSelect = (type: 'text' | 'bullet' | 'checkbox') => {
+  const handleNoteTypeSelect = (type: "text" | "bullet" | "checkbox") => {
     setLocalNoteType(type);
     updateTodo({ noteType: type });
   };
-  
+
   const handleColorSelect = (color: string) => {
     updateTodo({ color });
   };
-  
-  const handleLongPress = (action: 'print' | 'archive' | 'delete') => {
+
+  const handleLongPress = (action: "print" | "archive" | "delete") => {
+    softHaptic();
+
     switch (action) {
-      case 'print':
+      case "print":
         // Don't update the todo, just print it as is
         printOnCalendar(todo);
         break;
-      case 'archive':
+      case "archive":
         archiveTodo();
         break;
-      case 'delete':
+      case "delete":
         removeTodo();
         break;
     }
   };
-  
 
   return (
     <View style={styles.container}>
       <View style={styles.colorPalette}>
-        {colors.map(color => (
+        {colors.map((color) => (
           <TouchableOpacity
             key={color}
             style={[
@@ -100,93 +99,93 @@ interface TodoSettingsProps {
         onSelectType={handleNoteTypeSelect}
       />
 
-<View style={styles.actionButtons}>
-      <TouchableOpacity 
-        style={[
-          styles.iconButton,
-          isPrintPressed && styles.iconButtonPressed
-        ]}
-        onLongPress={() => {
-          setIsPrintPressed(true);
-          handleLongPress('print');
-          // Reset the pressed state after a short delay
-          setTimeout(() => setIsPrintPressed(false), 200);
-        }}
-        delayLongPress={800}
-      >
-        <Ionicons 
-          name="calendar-outline" 
-          size={24} 
-          color={isPrintPressed ? "#ffffff" : "#4b5563"} 
-        />
-      </TouchableOpacity>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[
+            styles.iconButton,
+            isPrintPressed && styles.iconButtonPressed,
+          ]}
+          onLongPress={() => {
+            setIsPrintPressed(true);
+            handleLongPress("print");
+            // Reset the pressed state after a short delay
+            setTimeout(() => setIsPrintPressed(false), 200);
+          }}
+          delayLongPress={800}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={24}
+            color={isPrintPressed ? "#ffffff" : "#4b5563"}
+          />
+        </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={[
-          styles.iconButton,
-          isArchivePressed && styles.iconButtonPressed
-        ]}
-        onLongPress={() => {
-          setIsArchivePressed(true);
-          handleLongPress('archive');
-          setTimeout(() => setIsArchivePressed(false), 200);
-        }}
-        delayLongPress={800}
-      >
-        <Ionicons 
-          name="archive-outline" 
-          size={24} 
-          color={isArchivePressed ? "#ffffff" : "#4b5563"} 
-        />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.iconButton,
+            isArchivePressed && styles.iconButtonPressed,
+          ]}
+          onLongPress={() => {
+            setIsArchivePressed(true);
+            handleLongPress("archive");
+            setTimeout(() => setIsArchivePressed(false), 200);
+          }}
+          delayLongPress={800}
+        >
+          <Ionicons
+            name="archive-outline"
+            size={24}
+            color={isArchivePressed ? "#ffffff" : "#4b5563"}
+          />
+        </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={[
-          styles.iconButton,
-          isDeletePressed && styles.iconButtonPressed
-        ]}
-        onLongPress={() => {
-          setIsDeletePressed(true);
-          handleLongPress('delete');
-          setTimeout(() => setIsDeletePressed(false), 200);
-        }}
-        delayLongPress={800}
-      >
-        <Ionicons 
-          name="trash-outline" 
-          size={24} 
-          color={isDeletePressed ? "#ffffff" : "#ef4444"} 
-        />
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={[
+            styles.iconButton,
+            isDeletePressed && styles.iconButtonPressed,
+          ]}
+          onLongPress={() => {
+            setIsDeletePressed(true);
+            handleLongPress("delete");
+            setTimeout(() => setIsDeletePressed(false), 200);
+          }}
+          delayLongPress={800}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={24}
+            color={isDeletePressed ? "#ffffff" : "#ef4444"}
+          />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 const getColorValue = (color: string): string => {
   switch (color) {
-    case 'red':
-      return '#ff6b6b';
-    case 'yellow':
-      return '#ffd93d';
-    case 'green':
-      return '#6bcb77';
-    case 'blue':
-      return '#4d96ff';
+    case "red":
+      return "#ff6b6b";
+    case "yellow":
+      return "#ffd93d";
+    case "green":
+      return "#6bcb77";
+    case "blue":
+      return "#4d96ff";
     default:
-      return '#4d96ff';
+      return "#4d96ff";
   }
 };
 
 const styles = StyleSheet.create({
   container: {
     padding: 12,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
     borderRadius: 4,
   },
   colorPalette: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 22,
     marginTop: 10,
   },
@@ -197,22 +196,21 @@ const styles = StyleSheet.create({
   },
   selectedColor: {
     borderWidth: 2,
-    borderColor: '#4b5563',
+    borderColor: "#4b5563",
   },
   actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginTop: 10,
     marginBottom: 10,
   },
   iconButton: {
     padding: 10,
     borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconButtonPressed: {
-
     transform: [{ scale: 0.95 }], // optional: adds a slight scale effect
   },
 });

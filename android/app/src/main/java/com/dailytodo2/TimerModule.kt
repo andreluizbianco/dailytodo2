@@ -121,6 +121,34 @@ fun startTimer(
   }
 
   @ReactMethod
+  fun setAlertPreferences(soundEnabled: Boolean, vibrationPattern: String, volume: Double) {
+    Log.d(
+      "TimerModule",
+      "setAlertPreferences soundEnabled=$soundEnabled vibrationPattern=$vibrationPattern volume=$volume"
+    )
+
+    val prefs = reactContext.getSharedPreferences("timer_prefs", Context.MODE_PRIVATE)
+
+    prefs.edit()
+      .putBoolean("alertSoundEnabled", soundEnabled)
+      .putString("alertVibrationPattern", vibrationPattern)
+      .putFloat("alertVolume", volume.toFloat().coerceIn(0f, 1f))
+      .apply()
+  }
+
+  @ReactMethod
+  fun previewAlertSound(volume: Double) {
+    Log.d("TimerModule", "previewAlertSound volume=$volume")
+
+    val intent = Intent(reactContext, TimerService::class.java).apply {
+      action = "PREVIEW_ALERT_SOUND"
+      putExtra("alertVolume", volume.toFloat().coerceIn(0f, 1f))
+    }
+
+    reactContext.startService(intent)
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) {}
 
   @ReactMethod

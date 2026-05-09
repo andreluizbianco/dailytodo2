@@ -1,11 +1,15 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { View, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { withLongPressHaptic } from "../utils/haptics";
 
 interface TopBarProps {
   onAddTodo: () => void;
-  activeView: 'notes' | 'settings' | 'archive' | 'calendar';
-  setActiveView: (view: 'notes' | 'settings' | 'archive' | 'calendar') => void;
+  onAddLongPress: () => void;
+  activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
+  setActiveView: (
+    view: "notes" | "timer" | "settings" | "archive" | "calendar",
+  ) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
   onCalendarPress: () => void;
@@ -13,6 +17,7 @@ interface TopBarProps {
 
 const TopBar: React.FC<TopBarProps> = ({
   onAddTodo,
+  onAddLongPress,
   activeView,
   setActiveView,
   showSettings,
@@ -20,8 +25,8 @@ const TopBar: React.FC<TopBarProps> = ({
   onCalendarPress,
 }) => {
   const handleNotesPress = () => {
-    if (activeView !== 'notes') {
-      setActiveView('notes');
+    if (activeView !== "notes") {
+      setActiveView("notes");
       setShowSettings(false);
     } else {
       setShowSettings(!showSettings);
@@ -29,8 +34,8 @@ const TopBar: React.FC<TopBarProps> = ({
   };
 
   const handleArchivePress = () => {
-    if (activeView !== 'archive') {
-      setActiveView('archive');
+    if (activeView !== "archive") {
+      setActiveView("archive");
       setShowSettings(false);
     } else {
       setShowSettings(!showSettings);
@@ -40,7 +45,15 @@ const TopBar: React.FC<TopBarProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.addButtonSection}>
-        <TouchableOpacity onPress={onAddTodo} style={styles.addButton}>
+        <TouchableOpacity
+          onPress={onAddTodo}
+          onLongPress={withLongPressHaptic(onAddLongPress)}
+          delayLongPress={650}
+          style={[
+            styles.addButton,
+            activeView === "settings" && styles.addButtonSettings,
+          ]}
+        >
           <View style={styles.plusIcon}>
             <View style={styles.plusIconHorizontal} />
             <View style={styles.plusIconVertical} />
@@ -52,27 +65,24 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="document-text"
             size={28}
-            color={activeView === 'notes' ? '#3b82f6' : '#6b7280'}
+            color={activeView === "notes" ? "#3b82f6" : "#6b7280"}
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveView('settings')}
+          onPress={() => setActiveView("timer")}
           style={styles.iconButton}
         >
           <Ionicons
             name="time"
             size={28}
-            color={activeView === 'settings' ? '#3b82f6' : '#6b7280'}
+            color={activeView === "timer" ? "#3b82f6" : "#6b7280"}
           />
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onCalendarPress}
-          style={styles.iconButton}
-        >
+        <TouchableOpacity onPress={onCalendarPress} style={styles.iconButton}>
           <Ionicons
             name="calendar"
             size={28}
-            color={activeView === 'calendar' ? '#3b82f6' : '#6b7280'}
+            color={activeView === "calendar" ? "#3b82f6" : "#6b7280"}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -82,7 +92,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <Ionicons
             name="archive"
             size={28}
-            color={activeView === 'archive' ? '#3b82f6' : '#6b7280'}
+            color={activeView === "archive" ? "#3b82f6" : "#6b7280"}
           />
         </TouchableOpacity>
       </View>
@@ -92,44 +102,47 @@ const TopBar: React.FC<TopBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    paddingTop: Platform.OS === 'android' ? 16 : 8,
+    flexDirection: "row",
+    paddingTop: Platform.OS === "android" ? 16 : 8,
   },
   addButtonSection: {
-    width: '40%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "40%",
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 10,
   },
   iconsSection: {
-    width: '60%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "60%",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 10,
   },
   addButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: "#2563eb",
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addButtonSettings: {
+    backgroundColor: "#111827",
   },
   plusIcon: {
     width: 20,
     height: 20,
   },
   plusIconHorizontal: {
-    position: 'absolute',
-    backgroundColor: 'white',
+    position: "absolute",
+    backgroundColor: "white",
     width: 20,
     height: 2,
     top: 9,
   },
   plusIconVertical: {
-    position: 'absolute',
-    backgroundColor: 'white',
+    position: "absolute",
+    backgroundColor: "white",
     width: 2,
     height: 20,
     left: 9,

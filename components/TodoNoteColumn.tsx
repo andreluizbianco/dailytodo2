@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import TodoItemNote from './TodoItemNote';
-import TodoSettings from './TodoSettings';
-import TimerView from './TimerView';
-import ArchivedTodos from './ArchivedTodos';
-import { Todo } from '../types';
+import React, { useState } from "react";
+import { View, StyleSheet, ScrollView } from "react-native";
+import TodoItemNote from "./TodoItemNote";
+import TodoSettings from "./TodoSettings";
+import TimerView from "./TimerView";
+import ArchivedTodos from "./ArchivedTodos";
+import AppSettings from "./AppSettings";
+import { Todo } from "../types";
 
 interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
-  activeView: 'notes' | 'settings' | 'archive' | 'calendar';
+  activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
   updateTodo: (id: number, updates: Partial<Todo>) => void;
-  removeTodo: (id: number) => Todo | null; 
+  removeTodo: (id: number) => Todo | null;
   archiveTodo: (id: number) => void;
   archivedTodos: Todo[];
   setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
@@ -42,7 +43,9 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   setTodos,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(selectedTodo);
+  const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(
+    selectedTodo,
+  );
 
   React.useEffect(() => {
     setLocalSelectedTodo(selectedTodo);
@@ -57,11 +60,15 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   };
 
   const renderContent = () => {
-    if (activeView === 'settings') {
+    if (activeView === "timer") {
       return <TimerView selectedTodo={selectedTodo} updateTodo={updateTodo} />;
     }
 
-    if (activeView === 'archive') {
+    if (activeView === "settings") {
+      return <AppSettings />;
+    }
+
+    if (activeView === "archive") {
       return (
         <ArchivedTodos
           archivedTodos={archivedTodos}
@@ -83,11 +90,13 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
         <>
           <TodoItemNote
             todo={localSelectedTodo}
-            updateNote={(noteText: string) => handleTodoUpdate({ note: noteText })}
+            updateNote={(noteText: string) =>
+              handleTodoUpdate({ note: noteText })
+            }
             onStartEditing={() => setIsEditing(true)}
             onEndEditing={() => setIsEditing(false)}
           />
-          {activeView === 'notes' && showSettings && (
+          {activeView === "notes" && showSettings && (
             <View style={styles.settingsContainer}>
               <TodoSettings
                 todo={localSelectedTodo}
@@ -110,9 +119,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {renderContent()}
-      </ScrollView>
+      <ScrollView style={styles.scrollView}>{renderContent()}</ScrollView>
     </View>
   );
 };

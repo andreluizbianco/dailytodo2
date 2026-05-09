@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, forwardRef } from 'react';
+import React, { useRef, useEffect, forwardRef } from "react";
 import {
   View,
   Text,
@@ -6,13 +6,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
-} from 'react-native';
-import {
-  TapGestureHandler,
-  State,
-} from 'react-native-gesture-handler';
-import { Todo } from '../types';
-import { Ionicons } from '@expo/vector-icons';
+} from "react-native";
+import { TapGestureHandler, State } from "react-native-gesture-handler";
+import { Todo } from "../types";
+import { Ionicons } from "@expo/vector-icons";
+import { softHaptic, withLongPressHaptic } from "../utils/haptics";
 
 interface TodoItemProps {
   todo: Todo;
@@ -22,7 +20,12 @@ interface TodoItemProps {
   stopOtherEdits: () => void;
   onDragStart: () => void;
   isDragging: boolean;
-  onLayout: (layout: { x: number; y: number; width: number; height: number; }) => void;
+  onLayout: (layout: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
   isArchiveView?: boolean;
   unarchiveTodo?: (id: number) => void;
 }
@@ -32,18 +35,21 @@ export interface TodoItemRef {
 }
 
 const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
-  ({
-    todo,
-    selectTodo,
-    isSelected,
-    updateTodo,
-    stopOtherEdits,
-    onDragStart,
-    isDragging,
-    onLayout,
-    isArchiveView = false,
-    unarchiveTodo,
-  }, ref) => {
+  (
+    {
+      todo,
+      selectTodo,
+      isSelected,
+      updateTodo,
+      stopOtherEdits,
+      onDragStart,
+      isDragging,
+      onLayout,
+      isArchiveView = false,
+      unarchiveTodo,
+    },
+    ref,
+  ) => {
     const [isEditing, setIsEditing] = React.useState(todo.isEditing);
     const [editedText, setEditedText] = React.useState(todo.text);
     const inputRef = useRef<TextInput>(null);
@@ -80,9 +86,9 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     const handleEndEditing = () => {
       setIsEditing(false);
       // Immediately save the current text when ending edit mode
-      updateTodo(todo.id, { 
+      updateTodo(todo.id, {
         text: editedText,
-        isEditing: false 
+        isEditing: false,
       });
     };
 
@@ -105,6 +111,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     };
 
     const onLongPress = () => {
+      softHaptic();
       stopOtherEdits();
       selectTodo();
       handleStartEditing();
@@ -112,13 +119,13 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
 
     const getColorStyle = () => {
       switch (todo.color) {
-        case 'red':
+        case "red":
           return styles.redTodo;
-        case 'yellow':
+        case "yellow":
           return styles.yellowTodo;
-        case 'green':
+        case "green":
           return styles.greenTodo;
-        case 'blue':
+        case "blue":
           return styles.blueTodo;
         default:
           return {};
@@ -128,27 +135,29 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     const getSelectionStyle = () => {
       if (!isSelected) return {};
       switch (todo.color) {
-        case 'red':
-          return { borderLeftColor: '#ef4444' };
-        case 'yellow':
-          return { borderLeftColor: '#f59e0b' };
-        case 'green':
-          return { borderLeftColor: '#10b981' };
-        case 'blue':
-          return { borderLeftColor: '#3b82f6' };
+        case "red":
+          return { borderLeftColor: "#ef4444" };
+        case "yellow":
+          return { borderLeftColor: "#f59e0b" };
+        case "green":
+          return { borderLeftColor: "#10b981" };
+        case "blue":
+          return { borderLeftColor: "#3b82f6" };
         default:
-          return { borderLeftColor: '#3b82f6' };
+          return { borderLeftColor: "#3b82f6" };
       }
     };
 
     return (
       <TapGestureHandler
         onHandlerStateChange={onSingleTap}
-        waitFor={doubleTapRef}>
+        waitFor={doubleTapRef}
+      >
         <TapGestureHandler
           ref={doubleTapRef}
           onHandlerStateChange={onDoubleTap}
-          numberOfTaps={2}>
+          numberOfTaps={2}
+        >
           <View
             style={[
               styles.container,
@@ -156,7 +165,8 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
               getSelectionStyle(),
               isDragging && styles.dragging,
             ]}
-            onLayout={event => onLayout(event.nativeEvent.layout)}>
+            onLayout={(event) => onLayout(event.nativeEvent.layout)}
+          >
             <TouchableOpacity
               onLongPress={onLongPress}
               style={styles.todoContent}
@@ -168,35 +178,35 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
                   style={styles.input}
                   value={editedText}
                   onChangeText={handleChangeText}
-                  onBlur={handleBlur} 
+                  onBlur={handleBlur}
                   multiline
                 />
               ) : (
                 <Text style={[styles.text, !todo.text && styles.emptyText]}>
-                  {todo.text || ''}
+                  {todo.text || ""}
                 </Text>
               )}
             </TouchableOpacity>
-            
+
             {isArchiveView && unarchiveTodo && (
-  <TouchableOpacity
-    onLongPress={() => unarchiveTodo(todo.id)}
-    delayLongPress={650}
-    style={styles.unarchiveButton}
-  >
-    <Ionicons 
-      name="archive-outline" 
-      size={20} 
-      color="#6b7280" 
-      style={{ transform: [{ rotate: '180deg' }] }}
-    />
-  </TouchableOpacity>
-)}
+              <TouchableOpacity
+                onLongPress={withLongPressHaptic(() => unarchiveTodo(todo.id))}
+                delayLongPress={650}
+                style={styles.unarchiveButton}
+              >
+                <Ionicons
+                  name="archive-outline"
+                  size={20}
+                  color="#6b7280"
+                  style={{ transform: [{ rotate: "180deg" }] }}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         </TapGestureHandler>
       </TapGestureHandler>
     );
-  }
+  },
 );
 
 const styles = StyleSheet.create({
@@ -205,46 +215,46 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     minHeight: 44,
     borderRadius: 4,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderLeftWidth: 4,
-    borderLeftColor: 'transparent',
+    borderLeftColor: "transparent",
     marginHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   todoContent: {
     flex: 1,
   },
   text: {
     fontSize: 14,
-    color: '#1f2937',
+    color: "#1f2937",
   },
   emptyText: {
-    color: '#9ca3af',
-    fontStyle: 'italic',
+    color: "#9ca3af",
+    fontStyle: "italic",
   },
   input: {
     fontSize: 14,
-    color: '#1f2937',
+    color: "#1f2937",
     padding: 0,
     margin: 0,
   },
   redTodo: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: "#fee2e2",
   },
   yellowTodo: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: "#fef3c7",
   },
   greenTodo: {
-    backgroundColor: '#d1fae5',
+    backgroundColor: "#d1fae5",
   },
   blueTodo: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: "#dbeafe",
   },
   dragging: {
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: {
           width: 0,
           height: 4,
@@ -265,7 +275,7 @@ const styles = StyleSheet.create({
     // alignItems: 'center',
   },
   unarchiveButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
   },
 });

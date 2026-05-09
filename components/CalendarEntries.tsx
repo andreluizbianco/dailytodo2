@@ -7,13 +7,12 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
-  Vibration,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
 import { CalendarEntry, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { softHaptic } from "../utils/haptics";
+import { softHaptic, withLongPressHaptic } from "../utils/haptics";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 7;
@@ -293,7 +292,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconButton}
-            onLongPress={() => handleDeleteEntry(entry.id)}
+            onLongPress={withLongPressHaptic(() => handleDeleteEntry(entry.id))}
             delayLongPress={700}
           >
             <Ionicons name="trash-outline" size={24} color="#ef4444" />
@@ -312,7 +311,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       <TouchableOpacity
         style={styles.timerInfo}
         onLongPress={() => {
-          Vibration.vibrate(30);
+          softHaptic();
           setEditingTimerId(entry.id);
         }}
         activeOpacity={0.7}
@@ -377,7 +376,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         style={styles.todoText}
         numberOfLines={1}
         onPress={() => handleTitlePress(entry.id)}
-        onLongPress={() => handleStartTitleEditing(entry)}
+        onLongPress={withLongPressHaptic(() => handleStartTitleEditing(entry))}
       >
         {entry.todo.text || "Untitled Note"}
       </Text>
@@ -496,7 +495,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                         ) : (
                           <Text
                             style={styles.weekEntryText}
-                            onLongPress={() => handleStartTitleEditing(entry)}
+                            onLongPress={withLongPressHaptic(() =>
+                              handleStartTitleEditing(entry),
+                            )}
                           >
                             {entry.todo.text || ""}
                           </Text>
@@ -627,6 +628,7 @@ const TimeEditor = ({
       <Text
         style={styles.timestamp}
         onLongPress={() => {
+          softHaptic();
           setIsEditing(true);
           setTimeout(() => hoursRef.current?.focus(), 50);
         }}
