@@ -66,7 +66,11 @@ const App = () => {
     const subscription = emitter.addListener(
       "TIMER_FINISHED",
       async (event) => {
-        Vibration.vibrate([0, 500, 200, 500]);
+        TimerModule.clearPendingCompletion?.();
+
+        if (event.completed) {
+          Vibration.vibrate([0, 500, 200, 500]);
+        }
 
         const todoId = Number(event.todoId);
         const todo = todosRef.current.find((t) => Number(t.id) === todoId);

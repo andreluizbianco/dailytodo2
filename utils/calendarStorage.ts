@@ -55,6 +55,20 @@ export const addTimerEntryToCalendar = async ({
     const currentEntries: CalendarEntry[] = savedEntries
       ? JSON.parse(savedEntries)
       : [];
+
+    const alreadyExists = currentEntries.some((entry) => {
+      return (
+        Number(entry.todo.id) === Number(calendarEntry.todo.id) &&
+        entry.printedAt === calendarEntry.printedAt &&
+        entry.timerCompleted === calendarEntry.timerCompleted &&
+        entry.timeSpent?.elapsed === calendarEntry.timeSpent?.elapsed
+      );
+    });
+
+    if (alreadyExists) {
+      return null;
+    }
+
     const updatedEntries = [...currentEntries, calendarEntry];
 
     await AsyncStorage.setItem(

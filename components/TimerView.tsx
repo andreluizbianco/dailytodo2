@@ -1,13 +1,30 @@
 import React, { memo, useCallback, useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, NativeModules } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  NativeModules,
+  NativeEventEmitter,
+} from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
 import { Todo } from "../types";
-import { addTimerEntryToCalendar } from "../utils/calendarStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { TimerModule } = NativeModules;
 console.log("TimerModule object:", TimerModule);
+
+type NativeTimerState = {
+  todoId: number;
+  startedAt: number;
+  lastStartedAt?: number;
+  durationSeconds: number;
+  remainingSeconds: number;
+  activeElapsedSeconds: number;
+  isRunning: boolean;
+  isPaused: boolean;
+  timerMode: "pomodoro" | "stopwatch";
+};
 
 interface TimerViewProps {
   selectedTodo: Todo | null;
@@ -31,11 +48,30 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const endTimeRef = useRef<number>(0);
   const hasPrintedRef = useRef(false);
   const stopwatchInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopwatchBaseSecondsRef = useRef(0);
+  const stopwatchLastStartedAtRef = useRef(0);
   const clearStopwatchInterval = () => {
     if (stopwatchInterval.current) {
       clearInterval(stopwatchInterval.current);
       stopwatchInterval.current = null;
     }
+  };
+  const startStopwatchVisualInterval = (
+    baseSeconds: number,
+    lastStartedAt: number,
+  ) => {
+    clearStopwatchInterval();
+
+    stopwatchBaseSecondsRef.current = baseSeconds;
+    stopwatchLastStartedAtRef.current = lastStartedAt;
+
+    stopwatchInterval.current = setInterval(() => {
+      const extraSeconds = Math.floor(
+        (Date.now() - stopwatchLastStartedAtRef.current) / 1000,
+      );
+
+      setStopwatchSeconds(stopwatchBaseSecondsRef.current + extraSeconds);
+    }, 1000);
   };
 
   const formatTimeDisplay = (totalSeconds: number) => {
@@ -100,6 +136,65 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     }
   }, [finishTimer]);
 
+  const getSelectedDurationSeconds = useCallback(() => {
+    return (
+      parseInt(currentHours || "0", 10) * 3600 +
+      parseInt(currentMinutes || "0", 10) * 60
+    );
+  }, [currentHours, currentMinutes]);
+
+  const applyNativeTimerState = useCallback(
+    (state: NativeTimerState) => {
+      if (!selectedTodo) return;
+      if (Number(state.todoId) !== Number(selectedTodo.id)) return;
+
+      clearTimerInterval();
+      clearStopwatchInterval();
+
+      const mode = state.timerMode === "stopwatch" ? "stopwatch" : "pomodoro";
+      setTimerMode(mode);
+      setIsPaused(state.isPaused);
+      setIsPlaying(state.isRunning && !state.isPaused);
+      startTimeRef.current = state.startedAt;
+
+      if (!state.isRunning) {
+        setIsPaused(false);
+        setIsPlaying(false);
+
+        if (mode === "stopwatch") {
+          setStopwatchSeconds(0);
+        } else {
+          setRemainingSeconds(getSelectedDurationSeconds());
+        }
+
+        return;
+      }
+
+      if (mode === "stopwatch") {
+        setStopwatchSeconds(state.activeElapsedSeconds);
+        stopwatchBaseSecondsRef.current = state.activeElapsedSeconds;
+        stopwatchLastStartedAtRef.current = state.lastStartedAt || Date.now();
+
+        if (!state.isPaused) {
+          startStopwatchVisualInterval(
+            state.activeElapsedSeconds,
+            state.lastStartedAt || Date.now(),
+          );
+        }
+
+        return;
+      }
+
+      setRemainingSeconds(state.remainingSeconds);
+      endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
+
+      if (!state.isPaused) {
+        timerInterval.current = setInterval(tick, 1000);
+      }
+    },
+    [getSelectedDurationSeconds, selectedTodo?.id, tick],
+  );
+
   useEffect(() => {
     setDisplayTime(formatTimeDisplay(remainingSeconds));
   }, [remainingSeconds]);
@@ -135,39 +230,9 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           state?.isRunning &&
           Number(state.todoId) === Number(selectedTodo.id)
         ) {
-          const mode =
-            state.timerMode === "stopwatch" ? "stopwatch" : "pomodoro";
-
-          setTimerMode(mode);
           setCurrentHours(selectedTodo.timer?.hours ?? "00");
           setCurrentMinutes(selectedTodo.timer?.minutes ?? "25");
-          setIsPlaying(!state.isPaused);
-          setIsPaused(state.isPaused);
-          startTimeRef.current = state.startedAt;
-
-          if (mode === "stopwatch") {
-            const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
-
-            setStopwatchSeconds(elapsed);
-
-            if (!state.isPaused) {
-              stopwatchInterval.current = setInterval(() => {
-                setStopwatchSeconds(
-                  Math.floor((Date.now() - state.startedAt) / 1000),
-                );
-              }, 1000);
-            }
-
-            return;
-          }
-
-          setRemainingSeconds(state.remainingSeconds);
-          endTimeRef.current = Date.now() + state.remainingSeconds * 1000;
-
-          if (!state.isPaused) {
-            timerInterval.current = setInterval(tick, 1000);
-          }
-
+          applyNativeTimerState(state);
           return;
         }
       } catch (error) {
@@ -190,7 +255,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     };
 
     loadTimerForSelectedTodo();
-  }, [selectedTodo?.id]);
+  }, [applyNativeTimerState, selectedTodo?.id]);
 
   useEffect(() => {
     return () => {
@@ -199,9 +264,22 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!TimerModule) return;
+
+    const emitter = new NativeEventEmitter(TimerModule);
+
+    const sub = emitter.addListener(
+      "TIMER_STATE_CHANGED",
+      applyNativeTimerState,
+    );
+
+    return () => sub.remove();
+  }, [applyNativeTimerState]);
+
   const handleTimeChange = useCallback(
     (h: string, m: string) => {
-      if (isPlaying || !selectedTodo) return;
+      if (isPlaying || isPaused || !selectedTodo) return;
 
       if (h === currentHours && m === currentMinutes) return;
 
@@ -221,50 +299,28 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
       setRemainingSeconds(totalSeconds);
     },
-    [isPlaying, selectedTodo, updateTodo, currentHours, currentMinutes],
+    [
+      isPlaying,
+      isPaused,
+      selectedTodo,
+      updateTodo,
+      currentHours,
+      currentMinutes,
+    ],
   );
 
   const handlePlay = async () => {
-    if (!selectedTodo || isPlaying) return;
+    if (!selectedTodo) return;
 
-    if (timerMode === "stopwatch") {
-      clearTimerInterval();
-      clearStopwatchInterval();
-
-      const now = Date.now();
-
-      startTimeRef.current = now;
-      setStopwatchSeconds(0);
-      setIsPlaying(true);
-      setIsPaused(false);
-
-      TimerModule.startTimer(
-        selectedTodo.id,
-        24 * 60 * 60,
-        startTimeRef.current,
-        "stopwatch",
-        selectedTodo.text || "Untitled",
-      );
-
-      stopwatchInterval.current = setInterval(() => {
-        setStopwatchSeconds(
-          Math.floor((Date.now() - startTimeRef.current) / 1000),
-        );
-      }, 1000);
-
-      return;
-    }
-
+    // If paused, Play means RESUME, not start a new timer.
     if (isPaused) {
       TimerModule.resumeTimer();
 
-      setIsPaused(false);
-      setIsPlaying(true);
-      endTimeRef.current = Date.now() + remainingSeconds * 1000;
-      timerInterval.current = setInterval(tick, 1000);
-
       return;
     }
+
+    // If already playing, do nothing.
+    if (isPlaying) return;
 
     const nativeState = await TimerModule.getTimerState();
 
@@ -277,9 +333,34 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
 
-    const totalSeconds =
-      parseInt(currentHours || "0", 10) * 3600 +
-      parseInt(currentMinutes || "0", 10) * 60;
+    if (timerMode === "stopwatch") {
+      clearTimerInterval();
+      clearStopwatchInterval();
+
+      const now = Date.now();
+
+      startTimeRef.current = now;
+      stopwatchBaseSecondsRef.current = 0;
+      stopwatchLastStartedAtRef.current = now;
+
+      setStopwatchSeconds(0);
+      setIsPlaying(true);
+      setIsPaused(false);
+
+      TimerModule.startTimer(
+        selectedTodo.id,
+        0,
+        startTimeRef.current,
+        "stopwatch",
+        selectedTodo.text || "Untitled",
+      );
+
+      startStopwatchVisualInterval(0, now);
+
+      return;
+    }
+
+    const totalSeconds = getSelectedDurationSeconds();
 
     if (totalSeconds <= 0) return;
 
@@ -293,6 +374,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
 
     setRemainingSeconds(totalSeconds);
     setIsPlaying(true);
+    setIsPaused(false);
 
     updateTodo(selectedTodo.id, {
       timer: {
@@ -300,12 +382,6 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         minutes: currentMinutes,
         isActive: true,
       },
-    });
-
-    console.log("Calling native startTimer", {
-      todoId: selectedTodo.id,
-      totalSeconds,
-      startedAt: startTimeRef.current,
     });
 
     TimerModule.startTimer(
@@ -357,7 +433,7 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           initialHours={currentHours}
           initialMinutes={currentMinutes}
           onTimeChange={handleTimeChange}
-          isPlaying={isPlaying}
+          isPlaying={isPlaying || isPaused}
           displayTime={displayTime || "00:00"}
         />
       ) : (

@@ -19,43 +19,24 @@ const PlayStopControls: React.FC<PlayStopControlsProps> = ({
   isPaused = false,
   disabled = false,
 }) => {
-  const canPlay = !isPlaying || isPaused;
-  const canPause = isPlaying && !isPaused;
   const canStop = isPlaying || isPaused;
+  const isRunning = isPlaying && !isPaused;
 
   return (
     <View style={styles.container}>
       <TouchableOpacity
         style={[
           styles.button,
-          styles.playButton,
-          !canPlay && styles.disabledButton,
+          isRunning ? styles.pauseButton : styles.playButton,
           disabled && styles.disabledButton,
         ]}
-        onPress={onPlay}
-        disabled={disabled || !canPlay}
+        onPress={isRunning ? onPause : onPlay}
+        disabled={disabled}
       >
         <Ionicons
-          name="play"
+          name={isRunning ? "pause" : "play"}
           size={24}
-          color={disabled || !canPlay ? "#9CA3AF" : "#2563EB"}
-        />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.button,
-          styles.pauseButton,
-          !canPause && styles.disabledButton,
-          disabled && styles.disabledButton,
-        ]}
-        onPress={onPause}
-        disabled={disabled || !canPause}
-      >
-        <Ionicons
-          name="pause"
-          size={24}
-          color={disabled || !canPause ? "#9CA3AF" : "#F59E0B"}
+          color={disabled ? "#9CA3AF" : isRunning ? "#F59E0B" : "#2563EB"}
         />
       </TouchableOpacity>
 
