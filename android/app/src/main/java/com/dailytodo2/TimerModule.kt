@@ -1,6 +1,8 @@
 package com.dailytodo2
 
 import android.content.*
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.os.Build
 import android.util.Log
 import com.facebook.react.bridge.*
@@ -146,6 +148,67 @@ fun startTimer(
     }
 
     reactContext.startService(intent)
+  }
+
+  @ReactMethod
+  fun scheduleReminder(
+    reminderId: Double,
+    triggerAtMillis: Double,
+    title: String,
+    body: String
+  ) {
+    val id = reminderId.toInt()
+    val triggerAt = triggerAtMillis.toLong()
+    val alarmManager = reactContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val pendingIntent = createReminderPendingIntent(id, title, body)
+
+    Log.d("TimerModule", "scheduleReminder id=$id triggerAt=$triggerAt title=$title")
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      alarmManager.setExactAndAllowWhileIdle(
+        AlarmManager.RTC_WAKEUP,
+        triggerAt,
+        pendingIntent
+      )
+    } else {
+      alarmManager.setExact(
+        AlarmManager.RTC_WAKEUP,
+        triggerAt,
+        pendingIntent
+      )
+    }
+  }
+
+  @ReactMethod
+  fun cancelReminder(reminderId: Double) {
+    val id = reminderId.toInt()
+    val alarmManager = reactContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val pendingIntent = createReminderPendingIntent(id, "", "")
+
+    Log.d("TimerModule", "cancelReminder id=$id")
+
+    alarmManager.cancel(pendingIntent)
+    pendingIntent.cancel()
+  }
+
+  private fun createReminderPendingIntent(
+    reminderId: Int,
+    title: String,
+    body: String
+  ): PendingIntent {
+    val intent = Intent(reactContext, ReminderReceiver::class.java).apply {
+      action = ReminderReceiver.ACTION_REMINDER
+      putExtra("reminderId", reminderId)
+      putExtra("title", title)
+      putExtra("body", body)
+    }
+
+    return PendingIntent.getBroadcast(
+      reactContext,
+      reminderId,
+      intent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
   }
 
   @ReactMethod

@@ -1,4 +1,10 @@
-import { ScheduleMode, ScheduleUnit, TodoSchedule } from "../types";
+import {
+  ReminderUnit,
+  ScheduleMode,
+  ScheduleUnit,
+  TodoReminder,
+  TodoSchedule,
+} from "../types";
 
 export const SCHEDULE_MODES: ScheduleMode[] = ["every", "in"];
 export const SCHEDULE_UNITS: ScheduleUnit[] = [
@@ -7,6 +13,7 @@ export const SCHEDULE_UNITS: ScheduleUnit[] = [
   "months",
   "years",
 ];
+export const REMINDER_UNITS: ReminderUnit[] = ["minutes", "hours", "days"];
 export const WEEKDAYS = [
   { label: "M", value: 1 },
   { label: "T", value: 2 },
@@ -19,6 +26,8 @@ export const WEEKDAYS = [
 
 export const SCHEDULE_AMOUNT_MIN = 1;
 export const SCHEDULE_AMOUNT_MAX = 365;
+export const REMINDER_AMOUNT_MIN = 1;
+export const REMINDER_AMOUNT_MAX = 365;
 
 export const createDefaultSchedule = (): TodoSchedule => {
   const now = new Date().toISOString();
@@ -71,6 +80,34 @@ export const updateSchedule = (
   });
 };
 
+export const createDefaultReminder = (): TodoReminder => ({
+  amount: 10,
+  unit: "minutes",
+});
+
+export const normalizeReminder = (
+  reminder?: Partial<TodoReminder>,
+): TodoReminder => {
+  const defaultReminder = createDefaultReminder();
+
+  return {
+    ...defaultReminder,
+    ...reminder,
+    amount: clampReminderAmount(reminder?.amount),
+    unit: isReminderUnit(reminder?.unit) ? reminder.unit : defaultReminder.unit,
+  };
+};
+
+export const updateReminder = (
+  currentReminder: TodoReminder | undefined,
+  updates: Partial<TodoReminder>,
+): TodoReminder => {
+  return normalizeReminder({
+    ...(currentReminder ?? createDefaultReminder()),
+    ...updates,
+  });
+};
+
 export const toggleScheduleWeekday = (
   schedule: TodoSchedule | undefined,
   weekday: number,
@@ -88,17 +125,64 @@ export const toggleScheduleWeekday = (
 };
 
 const calculateNextScheduleDate = (schedule: TodoSchedule): string => {
-  const baseDate = schedule.startsAt ? new Date(schedule.startsAt) : new Date();
+  const now = new Date();
+  const baseDate = schedule.startsAt ? new Date(schedule.startsAt) : now;
 
   if (schedule.mode === "date" && schedule.targetDate) {
-    return schedule.targetDate;
+    return applyScheduleTime(new Date(schedule.targetDate), schedule.time);
   }
 
   if (schedule.mode === "in") {
-    return addScheduleInterval(baseDate, schedule.amount, schedule.unit);
+    return applyScheduleTime(
+      new Date(addScheduleInterval(baseDate, schedule.amount, schedule.unit)),
+      schedule.time,
+    );
   }
 
-  return addScheduleInterval(baseDate, schedule.amount, schedule.unit);
+  return calculateNextRepeatingDate(schedule, now);
+};
+
+const calculateNextRepeatingDate = (
+  schedule: TodoSchedule,
+  now: Date,
+): string => {
+  if (schedule.unit === "weeks" && schedule.weekdays?.length) {
+    return calculateNextWeeklyDate(schedule, now);
+  }
+
+  let candidate = applyScheduleTimeToDate(now, schedule.time);
+
+  if (candidate.getTime() <= now.getTime()) {
+    candidate = new Date(
+      addScheduleInterval(candidate, schedule.amount, schedule.unit),
+    );
+    candidate = applyScheduleTimeToDate(candidate, schedule.time);
+  }
+
+  return candidate.toISOString();
+};
+
+const calculateNextWeeklyDate = (schedule: TodoSchedule, now: Date): string => {
+  const weekdays = schedule.weekdays ?? WEEKDAYS.map((day) => day.value);
+  let bestDate: Date | null = null;
+
+  for (const weekday of weekdays) {
+    const candidate = applyScheduleTimeToDate(now, schedule.time);
+    const daysUntil = (weekday - candidate.getDay() + 7) % 7;
+    candidate.setDate(candidate.getDate() + daysUntil);
+
+    if (candidate.getTime() <= now.getTime()) {
+      candidate.setDate(candidate.getDate() + 7 * schedule.amount);
+    }
+
+    if (!bestDate || candidate.getTime() < bestDate.getTime()) {
+      bestDate = candidate;
+    }
+  }
+
+  return (
+    bestDate ?? applyScheduleTimeToDate(now, schedule.time)
+  ).toISOString();
 };
 
 const addScheduleInterval = (
@@ -124,6 +208,19 @@ const addScheduleInterval = (
   }
 
   return nextDate.toISOString();
+};
+
+const applyScheduleTime = (date: Date, time?: string): string => {
+  return applyScheduleTimeToDate(date, time).toISOString();
+};
+
+const applyScheduleTimeToDate = (date: Date, time?: string): Date => {
+  const [hours, minutes] = normalizeScheduleTime(time).split(":").map(Number);
+  const nextDate = new Date(date);
+
+  nextDate.setHours(hours, minutes, 0, 0);
+
+  return nextDate;
 };
 
 export const normalizeScheduleTime = (time?: string): string => {
@@ -172,4 +269,17 @@ const isScheduleUnit = (unit?: string): unit is ScheduleUnit => {
   return (
     unit === "days" || unit === "weeks" || unit === "months" || unit === "years"
   );
+};
+
+const clampReminderAmount = (amount?: number) => {
+  if (!Number.isFinite(amount)) return createDefaultReminder().amount;
+
+  return Math.max(
+    REMINDER_AMOUNT_MIN,
+    Math.min(REMINDER_AMOUNT_MAX, Math.round(Number(amount))),
+  );
+};
+
+const isReminderUnit = (unit?: string): unit is ReminderUnit => {
+  return unit === "minutes" || unit === "hours" || unit === "days";
 };

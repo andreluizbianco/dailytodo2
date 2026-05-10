@@ -27,6 +27,10 @@ import {
   loadLastSelectedTodoId,
   saveLastSelectedTodoId,
 } from "./utils/appUiPersistence";
+import {
+  createCalendarReminderTodo,
+  reconcileTodoReminders,
+} from "./utils/reminders";
 
 const { TimerModule } = NativeModules;
 
@@ -83,6 +87,22 @@ const AppContent = () => {
   useEffect(() => {
     todosRef.current = todos;
   }, [todos]);
+
+  useEffect(() => {
+    if (!todosLoaded) return;
+
+    const calendarReminderTodos = calendarEntries.map(
+      createCalendarReminderTodo,
+    );
+
+    reconcileTodoReminders([
+      ...todos,
+      ...archivedTodos,
+      ...calendarReminderTodos,
+    ]).catch((error) => {
+      console.error("Failed to reconcile reminders", error);
+    });
+  }, [archivedTodos, calendarEntries, todos, todosLoaded]);
 
   useEffect(() => {
     if (!todosLoaded || didRestoreSelectedTodo) return;

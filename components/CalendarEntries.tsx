@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
+import NoteScheduleSettings from "./NoteScheduleSettings";
 import { CalendarEntry, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
@@ -108,6 +109,61 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       "calendarEntries",
       JSON.stringify(updatedEntries),
     );
+  };
+
+  const handleUpdateEntry = async (
+    entryId: number,
+    updates: Partial<CalendarEntry>,
+  ) => {
+    const updatedEntries = entries.map((entry) =>
+      entry.id === entryId ? { ...entry, ...updates } : entry,
+    );
+
+    setEntries(updatedEntries);
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
+  };
+
+  const handleUpdateEntryTodo = async (
+    entry: CalendarEntry,
+    updates: Partial<Todo>,
+  ) => {
+    await handleUpdateEntry(entry.id, {
+      todo: { ...entry.todo, ...updates },
+    });
+  };
+
+  const updateEntryTimeFromSchedule = (entry: CalendarEntry, time?: string) => {
+    if (!time) return entry.printedAt;
+
+    const match = time.match(/^(\d{2}):(\d{2})$/);
+    if (!match) return entry.printedAt;
+
+    const nextPrintedAt = new Date(entry.printedAt);
+    nextPrintedAt.setHours(Number(match[1]), Number(match[2]), 0, 0);
+
+    return nextPrintedAt.toISOString();
+  };
+
+  const updateScheduleTimeFromEntry = (
+    entry: CalendarEntry,
+    timestamp: string,
+  ) => {
+    if (!entry.todo.schedule) return undefined;
+
+    const nextDate = new Date(timestamp);
+    const time = `${String(nextDate.getHours()).padStart(2, "0")}:${String(
+      nextDate.getMinutes(),
+    ).padStart(2, "0")}`;
+
+    return {
+      ...entry.todo.schedule,
+      time,
+      targetDate: timestamp,
+      nextAt: timestamp,
+    };
   };
 
   const handleTitlePress = (entryId: number) => {
@@ -315,6 +371,19 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             onPress={() => handleColorChange(entry.id, "#4d96ff")}
           />
         </View>
+        <NoteScheduleSettings
+          schedule={entry.todo.schedule}
+          reminder={entry.todo.reminder}
+          onChange={(schedule) =>
+            handleUpdateEntry(entry.id, {
+              printedAt: updateEntryTimeFromSchedule(entry, schedule?.time),
+              todo: { ...entry.todo, schedule },
+            })
+          }
+          onReminderChange={(reminder) =>
+            handleUpdateEntryTodo(entry, { reminder })
+          }
+        />
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.iconButton}
@@ -479,7 +548,17 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 <TimeEditor
                   timestamp={entry.printedAt}
                   onSave={async (newTimestamp) => {
-                    const updatedEntry = { ...entry, printedAt: newTimestamp };
+                    const updatedEntry = {
+                      ...entry,
+                      printedAt: newTimestamp,
+                      todo: {
+                        ...entry.todo,
+                        schedule: updateScheduleTimeFromEntry(
+                          entry,
+                          newTimestamp,
+                        ),
+                      },
+                    };
                     // Remove the old entry and add the updated one
                     const updatedEntries = entries
                       .filter((e) => e.id !== entry.id)

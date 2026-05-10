@@ -9,14 +9,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { TodoSchedule } from "../types";
+import { TodoReminder, TodoSchedule } from "../types";
 import { softHaptic } from "../utils/haptics";
 import {
+  REMINDER_AMOUNT_MAX,
+  REMINDER_UNITS,
   SCHEDULE_AMOUNT_MAX,
   SCHEDULE_MODES,
   SCHEDULE_UNITS,
   normalizeScheduleTime,
   toggleScheduleWeekday,
+  updateReminder,
   updateSchedule,
   WEEKDAYS,
 } from "../utils/schedule";
@@ -31,15 +34,20 @@ const WHEEL_VELOCITY_PROJECTION = 78;
 
 interface NoteScheduleSettingsProps {
   schedule?: TodoSchedule;
+  reminder?: TodoReminder;
   onChange: (schedule: TodoSchedule | undefined) => void;
+  onReminderChange: (reminder: TodoReminder | undefined) => void;
 }
 
 const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
   schedule,
+  reminder,
   onChange,
+  onReminderChange,
 }) => {
   const { theme } = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isReminderExpanded, setIsReminderExpanded] = useState(false);
   const [editingTimePart, setEditingTimePart] = useState<
     "hours" | "minutes" | null
   >(null);
@@ -51,12 +59,21 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
   const finishingTimeRef = useRef(false);
   const weekdayOpacity = useRef(new Animated.Value(0)).current;
   const isScheduleEnabled = Boolean(schedule);
+  const isReminderEnabled = Boolean(reminder);
   const activeSchedule = useMemo(
     () => updateSchedule(schedule, {}),
     [schedule],
   );
+  const activeReminder = useMemo(
+    () => updateReminder(reminder, {}),
+    [reminder],
+  );
   const amountValues = useMemo(
     () => Array.from({ length: SCHEDULE_AMOUNT_MAX }, (_, index) => index + 1),
+    [],
+  );
+  const reminderAmountValues = useMemo(
+    () => Array.from({ length: REMINDER_AMOUNT_MAX }, (_, index) => index + 1),
     [],
   );
 
@@ -79,6 +96,27 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
   const handleToggleExpanded = () => {
     softHaptic();
     setIsExpanded((current) => !current);
+  };
+
+  const handleReminderChange = (updates: Partial<TodoReminder>) => {
+    softHaptic();
+    onReminderChange(updateReminder(activeReminder, updates));
+  };
+
+  const handleToggleReminderEnabled = () => {
+    softHaptic();
+    if (isReminderEnabled) {
+      onReminderChange(undefined);
+      return;
+    }
+
+    setIsReminderExpanded(true);
+    onReminderChange(activeReminder);
+  };
+
+  const handleToggleReminderExpanded = () => {
+    softHaptic();
+    setIsReminderExpanded((current) => !current);
   };
 
   const shouldShowWeekdays =
@@ -225,7 +263,7 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.enableRow, { borderColor: theme.border }]}>
+      <View style={styles.enableRow}>
         <TouchableOpacity
           style={styles.enableLabelGroup}
           onPress={handleToggleExpanded}
@@ -418,6 +456,67 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
           </Animated.View>
         </>
       )}
+
+      <View style={styles.enableRow}>
+        <TouchableOpacity
+          style={styles.enableLabelGroup}
+          onPress={handleToggleReminderExpanded}
+          disabled={!isReminderEnabled}
+        >
+          <Text
+            style={[
+              styles.disclosureIcon,
+              {
+                color: isReminderEnabled ? theme.mutedText : theme.subtleText,
+                transform: [{ rotate: isReminderExpanded ? "90deg" : "0deg" }],
+              },
+            ]}
+          >
+            {">"}
+          </Text>
+          <Text style={[styles.enableLabel, { color: theme.text }]}>
+            Reminder
+          </Text>
+        </TouchableOpacity>
+        <Switch
+          value={isReminderEnabled}
+          onValueChange={handleToggleReminderEnabled}
+          trackColor={{ false: theme.border, true: theme.primary }}
+          thumbColor={theme.elevated}
+        />
+      </View>
+
+      {!isReminderEnabled || !isReminderExpanded ? null : (
+        <View style={styles.reminderRow}>
+          <MiniWheelPicker
+            values={reminderAmountValues}
+            selectedValue={activeReminder.amount}
+            formatValue={(value) => String(value)}
+            onChange={(amount) => handleReminderChange({ amount })}
+            dragSensitivity={0.92}
+            velocityProjection={180}
+          />
+          <MiniWheelPicker
+            values={REMINDER_UNITS}
+            selectedValue={activeReminder.unit}
+            formatValue={(value, isSelected) =>
+              isSelected
+                ? activeReminder.amount === 1
+                  ? value.replace(/s$/, "")
+                  : value
+                : value
+            }
+            onChange={(unit) => handleReminderChange({ unit })}
+            dragSensitivity={0.42}
+            velocityProjection={42}
+          />
+          <View style={styles.beforeColumn}>
+            <Text style={[styles.beforeText, { color: theme.text }]}>
+              before
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -599,7 +698,6 @@ const styles = StyleSheet.create({
   },
   enableRow: {
     minHeight: 34,
-    borderBottomWidth: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -624,6 +722,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+  },
+  reminderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  beforeColumn: {
+    flex: 1,
+    height: WHEEL_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  beforeText: {
+    fontSize: 15,
+    fontWeight: "600",
+    textTransform: "lowercase",
   },
   timeRow: {
     minHeight: 34,

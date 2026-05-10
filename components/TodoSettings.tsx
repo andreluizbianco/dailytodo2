@@ -107,7 +107,9 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
 
       <NoteScheduleSettings
         schedule={todo.schedule}
+        reminder={todo.reminder}
         onChange={(schedule) => updateTodo({ schedule })}
+        onReminderChange={(reminder) => updateTodo({ reminder })}
       />
 
       <View style={styles.actionButtons}>
