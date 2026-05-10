@@ -51,7 +51,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     },
     ref,
   ) => {
-    const { theme } = useTheme();
+    const { noteTitleFontSize, theme } = useTheme();
     const [isEditing, setIsEditing] = React.useState(todo.isEditing);
     const [editedText, setEditedText] = React.useState(todo.text);
     const inputRef = useRef<TextInput>(null);
@@ -166,7 +166,10 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
               {isEditing ? (
                 <TextInput
                   ref={inputRef}
-                  style={[styles.input, { color: theme.text }]}
+                  style={[
+                    styles.input,
+                    { color: theme.text, fontSize: noteTitleFontSize },
+                  ]}
                   placeholderTextColor={theme.subtleText}
                   value={editedText}
                   onChangeText={handleChangeText}
@@ -177,7 +180,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
                 <Text
                   style={[
                     styles.text,
-                    { color: theme.text },
+                    { color: theme.text, fontSize: noteTitleFontSize },
                     !todo.text && [
                       styles.emptyText,
                       { color: theme.subtleText },

@@ -24,7 +24,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   onStartEditing,
   onEndEditing,
 }) => {
-  const { theme } = useTheme();
+  const { noteBodyFontSize, theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [localNote, setLocalNote] = useState(todo.note);
   const inputRef = useRef<TextInput>(null);
@@ -103,7 +103,14 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
           value={localNote}
           onChangeText={handleChangeText}
           onBlur={handleEndEditing}
-          style={[styles.noteInput, { color: theme.text }]}
+          style={[
+            styles.noteInput,
+            {
+              color: theme.text,
+              fontSize: noteBodyFontSize,
+              lineHeight: Math.round(noteBodyFontSize * 1.5),
+            },
+          ]}
           placeholderTextColor={theme.subtleText}
         />
       );
@@ -136,7 +143,16 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                     />
                   )}
                 </TouchableOpacity>
-                <Text style={[styles.noteText, { color: theme.text }]}>
+                <Text
+                  style={[
+                    styles.noteText,
+                    {
+                      color: theme.text,
+                      fontSize: noteBodyFontSize,
+                      lineHeight: Math.round(noteBodyFontSize * 1.5),
+                    },
+                  ]}
+                >
                   {line.substring(4)}
                 </Text>
               </View>
@@ -144,7 +160,17 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
           }
 
           return (
-            <Text key={index} style={[styles.noteText, { color: theme.text }]}>
+            <Text
+              key={index}
+              style={[
+                styles.noteText,
+                {
+                  color: theme.text,
+                  fontSize: noteBodyFontSize,
+                  lineHeight: Math.round(noteBodyFontSize * 1.5),
+                },
+              ]}
+            >
               {line}
             </Text>
           );

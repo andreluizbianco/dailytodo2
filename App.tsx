@@ -44,6 +44,9 @@ const AppContent = () => {
   const { isDarkMode, theme } = useTheme();
   const themeAnimation = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
   const [activeView, setActiveView] = useState<ViewType>("notes");
+  const settingsLayoutAnimation = useRef(
+    new Animated.Value(activeView === "settings" ? 1 : 0),
+  ).current;
   const [showSettings, setShowSettings] = useState(false);
   const [calendarViewMode, setCalendarViewMode] =
     useState<CalendarViewMode>("day");
@@ -78,6 +81,14 @@ const AppContent = () => {
       useNativeDriver: false,
     }).start();
   }, [isDarkMode, themeAnimation]);
+
+  useEffect(() => {
+    Animated.timing(settingsLayoutAnimation, {
+      toValue: activeView === "settings" ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [activeView, settingsLayoutAnimation]);
 
   const handleSelectTodo = useCallback((todo: Todo | null) => {
     setSelectedTodo(todo);
@@ -350,7 +361,30 @@ const AppContent = () => {
 
     return (
       <View style={styles.content}>
-        <View style={styles.todoListContainer}>
+        <Animated.View
+          pointerEvents={activeView === "settings" ? "none" : "auto"}
+          style={[
+            styles.todoListContainer,
+            {
+              opacity: settingsLayoutAnimation.interpolate({
+                inputRange: [0, 0.7, 1],
+                outputRange: [1, 0.2, 0],
+              }),
+              transform: [
+                {
+                  translateX: settingsLayoutAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -80],
+                  }),
+                },
+              ],
+              width: settingsLayoutAnimation.interpolate({
+                inputRange: [0, 1],
+                outputRange: ["40%", "0%"],
+              }),
+            },
+          ]}
+        >
           <TodoList
             todos={todos}
             setTodos={setTodos}
@@ -358,8 +392,18 @@ const AppContent = () => {
             selectedTodo={selectedTodo}
             setSelectedTodo={handleSelectTodo}
           />
-        </View>
-        <View style={styles.todoNoteColumnContainer}>
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.todoNoteColumnContainer,
+            {
+              width: settingsLayoutAnimation.interpolate({
+                inputRange: [0, 1],
+                outputRange: ["60%", "100%"],
+              }),
+            },
+          ]}
+        >
           <TodoNoteColumn
             selectedTodo={currentSelectedTodo}
             activeView={activeView}
@@ -378,7 +422,7 @@ const AppContent = () => {
             setTodos={setTodos}
             setShowSettings={setShowSettings}
           />
-        </View>
+        </Animated.View>
       </View>
     );
   };
@@ -453,6 +497,7 @@ const styles = StyleSheet.create({
   },
   todoListContainer: {
     width: "40%",
+    overflow: "hidden",
   },
   todoNoteColumnContainer: {
     width: "60%",

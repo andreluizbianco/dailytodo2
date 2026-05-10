@@ -16,12 +16,20 @@ const DARK_INTENSITY_KEY = "app:darkIntensity";
 const NOTE_COLOR_STRENGTH_KEY = "app:noteColorStrength";
 const LIGHT_INTENSITY_KEY = "app:lightIntensity";
 const LIGHT_NOTE_COLOR_STRENGTH_KEY = "app:lightNoteColorStrength";
+const NOTE_TITLE_FONT_SIZE_KEY = "app:noteTitleFontSize";
+const NOTE_BODY_FONT_SIZE_KEY = "app:noteBodyFontSize";
 
 export const DEFAULT_DARK_INTENSITY = 0.65;
 export const DEFAULT_LIGHT_INTENSITY = 0.5;
 export const DEFAULT_DARK_NOTE_COLOR_STRENGTH = 0.58;
 export const DEFAULT_LIGHT_NOTE_COLOR_STRENGTH = 0.76;
 export const NOTE_COLOR_STRENGTH_MIN = 0.4;
+export const DEFAULT_NOTE_TITLE_FONT_SIZE = 14;
+export const DEFAULT_NOTE_BODY_FONT_SIZE = 16;
+export const NOTE_TITLE_FONT_SIZE_MIN = 12;
+export const NOTE_TITLE_FONT_SIZE_MAX = 22;
+export const NOTE_BODY_FONT_SIZE_MIN = 14;
+export const NOTE_BODY_FONT_SIZE_MAX = 24;
 
 export const lightTheme = {
   mode: "light" as ThemeMode,
@@ -80,14 +88,18 @@ interface ThemeContextValue {
   isDarkMode: boolean;
   lightIntensity: number;
   lightNoteColorStrength: number;
+  noteBodyFontSize: number;
   noteColorStrength: number;
+  noteTitleFontSize: number;
   resetThemeTuning: () => void;
+  setNoteBodyFontSize: (value: number) => void;
   setCurrentIntensity: (value: number) => void;
   setCurrentNoteColorStrength: (value: number) => void;
   setDarkIntensity: (value: number) => void;
   setLightIntensity: (value: number) => void;
   setLightNoteColorStrength: (value: number) => void;
   setNoteColorStrength: (value: number) => void;
+  setNoteTitleFontSize: (value: number) => void;
   setThemePreference: (preference: ThemePreference) => void;
   setDarkMode: (enabled: boolean) => void;
   themeMode: ThemeMode;
@@ -100,14 +112,18 @@ const ThemeContext = createContext<ThemeContextValue>({
   isDarkMode: false,
   lightIntensity: DEFAULT_LIGHT_INTENSITY,
   lightNoteColorStrength: DEFAULT_LIGHT_NOTE_COLOR_STRENGTH,
+  noteBodyFontSize: DEFAULT_NOTE_BODY_FONT_SIZE,
   noteColorStrength: DEFAULT_DARK_NOTE_COLOR_STRENGTH,
+  noteTitleFontSize: DEFAULT_NOTE_TITLE_FONT_SIZE,
   resetThemeTuning: () => undefined,
   setCurrentIntensity: () => undefined,
   setCurrentNoteColorStrength: () => undefined,
   setDarkIntensity: () => undefined,
   setLightIntensity: () => undefined,
   setLightNoteColorStrength: () => undefined,
+  setNoteBodyFontSize: () => undefined,
   setNoteColorStrength: () => undefined,
+  setNoteTitleFontSize: () => undefined,
   setThemePreference: () => undefined,
   setDarkMode: () => undefined,
   themeMode: "light",
@@ -131,6 +147,12 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
   const [lightNoteColorStrength, setLightNoteColorStrengthState] = useState(
     DEFAULT_LIGHT_NOTE_COLOR_STRENGTH,
   );
+  const [noteTitleFontSize, setNoteTitleFontSizeState] = useState(
+    DEFAULT_NOTE_TITLE_FONT_SIZE,
+  );
+  const [noteBodyFontSize, setNoteBodyFontSizeState] = useState(
+    DEFAULT_NOTE_BODY_FONT_SIZE,
+  );
   const [themePreference, setThemePreferenceState] =
     useState<ThemePreference>("system");
 
@@ -143,12 +165,16 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
           storedNoteColorStrength,
           storedLightIntensity,
           storedLightNoteColorStrength,
+          storedNoteTitleFontSize,
+          storedNoteBodyFontSize,
         ] = await Promise.all([
           AsyncStorage.getItem(THEME_MODE_KEY),
           AsyncStorage.getItem(DARK_INTENSITY_KEY),
           AsyncStorage.getItem(NOTE_COLOR_STRENGTH_KEY),
           AsyncStorage.getItem(LIGHT_INTENSITY_KEY),
           AsyncStorage.getItem(LIGHT_NOTE_COLOR_STRENGTH_KEY),
+          AsyncStorage.getItem(NOTE_TITLE_FONT_SIZE_KEY),
+          AsyncStorage.getItem(NOTE_BODY_FONT_SIZE_KEY),
         ]);
 
         if (
@@ -193,6 +219,24 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
         );
         if (nextLightNoteColorStrength !== null) {
           setLightNoteColorStrengthState(nextLightNoteColorStrength);
+        }
+
+        const nextNoteTitleFontSize = parseStoredSliderValue(
+          storedNoteTitleFontSize,
+          NOTE_TITLE_FONT_SIZE_MIN,
+          NOTE_TITLE_FONT_SIZE_MAX,
+        );
+        if (nextNoteTitleFontSize !== null) {
+          setNoteTitleFontSizeState(nextNoteTitleFontSize);
+        }
+
+        const nextNoteBodyFontSize = parseStoredSliderValue(
+          storedNoteBodyFontSize,
+          NOTE_BODY_FONT_SIZE_MIN,
+          NOTE_BODY_FONT_SIZE_MAX,
+        );
+        if (nextNoteBodyFontSize !== null) {
+          setNoteBodyFontSizeState(nextNoteBodyFontSize);
         }
       } catch (error) {
         console.error("Failed to load theme settings:", error);
@@ -254,6 +298,30 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
     });
   };
 
+  const setNoteTitleFontSize = (value: number) => {
+    const nextValue = Math.round(
+      clamp(value, NOTE_TITLE_FONT_SIZE_MIN, NOTE_TITLE_FONT_SIZE_MAX),
+    );
+    setNoteTitleFontSizeState(nextValue);
+    AsyncStorage.setItem(NOTE_TITLE_FONT_SIZE_KEY, String(nextValue)).catch(
+      (error) => {
+        console.error("Failed to save note title font size:", error);
+      },
+    );
+  };
+
+  const setNoteBodyFontSize = (value: number) => {
+    const nextValue = Math.round(
+      clamp(value, NOTE_BODY_FONT_SIZE_MIN, NOTE_BODY_FONT_SIZE_MAX),
+    );
+    setNoteBodyFontSizeState(nextValue);
+    AsyncStorage.setItem(NOTE_BODY_FONT_SIZE_KEY, String(nextValue)).catch(
+      (error) => {
+        console.error("Failed to save note body font size:", error);
+      },
+    );
+  };
+
   const resetThemeTuning = () => {
     if (resolvedThemeMode === "dark") {
       setDarkIntensity(DEFAULT_DARK_INTENSITY);
@@ -278,7 +346,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       darkIntensity,
       lightIntensity,
       lightNoteColorStrength,
+      noteBodyFontSize,
       noteColorStrength,
+      noteTitleFontSize,
       resetThemeTuning,
       setCurrentIntensity:
         resolvedThemeMode === "dark" ? setDarkIntensity : setLightIntensity,
@@ -289,7 +359,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       setDarkIntensity,
       setLightIntensity,
       setLightNoteColorStrength,
+      setNoteBodyFontSize,
       setNoteColorStrength,
+      setNoteTitleFontSize,
       setThemePreference,
       setDarkMode,
       themeMode: resolvedThemeMode,
@@ -303,7 +375,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       darkIntensity,
       lightIntensity,
       lightNoteColorStrength,
+      noteBodyFontSize,
       noteColorStrength,
+      noteTitleFontSize,
       resolvedThemeMode,
       themePreference,
     ],
