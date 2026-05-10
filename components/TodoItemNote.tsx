@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -27,10 +27,22 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [localNote, setLocalNote] = useState(todo.note);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     setLocalNote(todo.note);
   }, [todo.note]);
+
+  useEffect(() => {
+    setIsEditing(false);
+    onEndEditing();
+  }, [todo.id]);
+
+  useEffect(() => {
+    if (isEditing) {
+      setTimeout(() => inputRef.current?.focus(), 20);
+    }
+  }, [isEditing]);
 
   const handleChangeText = (text: string) => {
     let processedText = text;
@@ -86,7 +98,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     if (isEditing) {
       return (
         <TextInput
-          autoFocus
+          ref={inputRef}
           multiline
           value={localNote}
           onChangeText={handleChangeText}
@@ -163,7 +175,10 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     fontSize: 16,
-    minHeight: 100,
+    lineHeight: 24,
+    minHeight: 24,
+    padding: 0,
+    margin: 0,
     textAlignVertical: "top",
   },
   noteText: {

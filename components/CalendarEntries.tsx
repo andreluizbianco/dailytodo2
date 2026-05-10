@@ -42,6 +42,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   updateTodo,
 }) => {
   const { theme } = useTheme();
+  const dayScrollRef = useRef<ScrollView>(null);
+  const settingsLayoutByEntryId = useRef<Record<number, number>>({});
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
@@ -109,7 +111,22 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const handleTitlePress = (entryId: number) => {
-    setShowSettingsForId(showSettingsForId === entryId ? null : entryId);
+    const nextSettingsId = showSettingsForId === entryId ? null : entryId;
+    setShowSettingsForId(nextSettingsId);
+
+    if (nextSettingsId !== null) {
+      setTimeout(() => scrollToEntrySettings(nextSettingsId), 80);
+    }
+  };
+
+  const scrollToEntrySettings = (entryId: number) => {
+    const settingsY = settingsLayoutByEntryId.current[entryId];
+    if (typeof settingsY !== "number") return;
+
+    dayScrollRef.current?.scrollTo({
+      y: Math.max(0, settingsY - 4),
+      animated: true,
+    });
   };
 
   const getColorValue = (buttonColor: string): string => {
@@ -246,6 +263,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           styles.settingsContainer,
           { backgroundColor: theme.surface, borderColor: theme.border },
         ]}
+        onLayout={(event) => {
+          settingsLayoutByEntryId.current[entry.id] =
+            event.nativeEvent.layout.y;
+          scrollToEntrySettings(entry.id);
+        }}
       >
         <View style={styles.colorPalette}>
           <TouchableOpacity
@@ -441,7 +463,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     }
 
     return (
-      <ScrollView style={styles.dayContainer}>
+      <ScrollView
+        ref={dayScrollRef}
+        style={styles.dayContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         {dateEntries.map((entry) => (
           <View key={entry.id} style={styles.entryContainer}>
             <View style={styles.header}>
@@ -490,7 +516,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const renderWeekView = () => {
     return (
       <View style={styles.weekContainer}>
-        <ScrollView style={styles.weekContent}>
+        <ScrollView
+          style={styles.weekContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.weekRow}>
             {weekDates.map((date) => {
               const dateStr = date.toISOString().split("T")[0];

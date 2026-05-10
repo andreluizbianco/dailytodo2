@@ -317,7 +317,10 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     };
 
     return (
-      <ScrollView style={styles.searchResults}>
+      <ScrollView
+        style={styles.searchResults}
+        keyboardShouldPersistTaps="handled"
+      >
         {searchResults.map((result, index) => (
           <View
             key={index}

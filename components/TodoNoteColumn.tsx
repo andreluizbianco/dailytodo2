@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View, StyleSheet, ScrollView } from "react-native";
 import TodoItemNote from "./TodoItemNote";
 import TodoSettings from "./TodoSettings";
@@ -23,6 +23,7 @@ interface TodoNoteColumnProps {
   importData: () => void;
   todos: Todo[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this line
+  setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
@@ -41,7 +42,10 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   importData,
   todos,
   setTodos,
+  setShowSettings,
 }) => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const settingsTopRef = useRef(0);
   const [isEditing, setIsEditing] = useState(false);
   const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(
     selectedTodo,
@@ -50,6 +54,19 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   React.useEffect(() => {
     setLocalSelectedTodo(selectedTodo);
   }, [selectedTodo]);
+
+  React.useEffect(() => {
+    if (!showSettings || activeView !== "notes") return;
+
+    const scrollTimeout = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: settingsTopRef.current,
+        animated: true,
+      });
+    }, 80);
+
+    return () => clearTimeout(scrollTimeout);
+  }, [activeView, selectedTodo?.id, showSettings]);
 
   const handleTodoUpdate = (updates: Partial<Todo>) => {
     if (localSelectedTodo) {
@@ -93,11 +110,26 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
             updateNote={(noteText: string) =>
               handleTodoUpdate({ note: noteText })
             }
-            onStartEditing={() => setIsEditing(true)}
+            onStartEditing={() => {
+              setIsEditing(true);
+              setShowSettings(false);
+            }}
             onEndEditing={() => setIsEditing(false)}
           />
           {activeView === "notes" && showSettings && (
-            <View style={styles.settingsContainer}>
+            <View
+              style={styles.settingsContainer}
+              onLayout={(event) => {
+                settingsTopRef.current = Math.max(
+                  0,
+                  event.nativeEvent.layout.y - 4,
+                );
+                scrollViewRef.current?.scrollTo({
+                  y: settingsTopRef.current,
+                  animated: true,
+                });
+              }}
+            >
               <TodoSettings
                 todo={localSelectedTodo}
                 updateTodo={handleTodoUpdate}
@@ -119,7 +151,13 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>{renderContent()}</ScrollView>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        keyboardShouldPersistTaps="handled"
+      >
+        {renderContent()}
+      </ScrollView>
     </View>
   );
 };
@@ -128,6 +166,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: 8,
+    paddingRight: 2,
   },
   scrollView: {
     flex: 1,

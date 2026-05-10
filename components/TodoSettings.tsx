@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Todo } from "../types";
 import NoteTypeSelector from "./NoteTypeSelector";
+import NoteScheduleSettings from "./NoteScheduleSettings";
 import { softHaptic } from "../utils/haptics";
 import { useTheme } from "../utils/theme";
 
@@ -102,6 +103,11 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
       <NoteTypeSelector
         selectedType={localNoteType}
         onSelectType={handleNoteTypeSelect}
+      />
+
+      <NoteScheduleSettings
+        schedule={todo.schedule}
+        onChange={(schedule) => updateTodo({ schedule })}
       />
 
       <View style={styles.actionButtons}>

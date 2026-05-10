@@ -5,6 +5,26 @@ export interface RestoredFrom {
 }
 
 export type TimerMode = "pomodoro" | "stopwatch";
+export type ScheduleMode = "every" | "in" | "date";
+export type ScheduleUnit = "days" | "weeks" | "months" | "years";
+export type ReminderUnit = "minutes" | "hours" | "days";
+
+export interface TodoSchedule {
+  mode: ScheduleMode;
+  amount: number;
+  unit: ScheduleUnit;
+  weekdays?: number[];
+  time?: string;
+  startsAt?: string;
+  targetDate?: string;
+  nextAt?: string;
+}
+
+export interface TodoReminder {
+  amount: number;
+  unit: ReminderUnit;
+  notificationId?: string;
+}
 
 export interface Todo {
   id: number;
@@ -25,6 +45,8 @@ export interface Todo {
     minutes: string;
     isActive: boolean;
   };
+  schedule?: TodoSchedule;
+  reminder?: TodoReminder;
 }
 
 export interface CalendarEntry {

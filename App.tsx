@@ -356,6 +356,7 @@ const AppContent = () => {
             importData={importData}
             todos={todos}
             setTodos={setTodos}
+            setShowSettings={setShowSettings}
           />
         </View>
       </View>
@@ -426,7 +427,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     flexDirection: "row",
-    paddingHorizontal: 0,
+    paddingLeft: 0,
+    paddingRight: 4,
     paddingBottom: 20,
   },
   todoListContainer: {

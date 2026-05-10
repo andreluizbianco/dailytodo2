@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, ScrollView, Animated } from 'react-native';
-import { PanGestureHandler } from 'react-native-gesture-handler';
-import TodoItem, { TodoItemRef } from './TodoItem';
-import { Todo } from '../types';
-import { useTodoListDrag } from '../hooks/useTodoListDrag';
+import React, { useRef } from "react";
+import { View, StyleSheet, ScrollView, Animated } from "react-native";
+import { PanGestureHandler } from "react-native-gesture-handler";
+import TodoItem, { TodoItemRef } from "./TodoItem";
+import { Todo } from "../types";
+import { useTodoListDrag } from "../hooks/useTodoListDrag";
 
 interface TodoListProps {
   todos: Todo[];
@@ -52,42 +52,47 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   return (
-    <View 
+    <View
       style={styles.container}
-      onLayout={event => setListLayout(event.nativeEvent.layout)}
+      onLayout={(event) => setListLayout(event.nativeEvent.layout)}
     >
-      <ScrollView style={styles.scrollView}>
-        {todos.map(todo => (
+      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
+        {todos.map((todo) => (
           <PanGestureHandler
             key={todo.id}
             onGestureEvent={onPanGestureEvent}
             onHandlerStateChange={onHandlerStateChange}
-            enabled={draggedTodoId === todo.id}>
+            enabled={draggedTodoId === todo.id}
+          >
             <Animated.View
               style={[
                 styles.todoItemContainer,
                 {
                   transform: [
                     {
-                      translateY: draggedTodoId === todo.id
-                        ? pan.y
-                        : itemAnimations[todo.id]
-                        ? itemAnimations[todo.id]
-                        : 0,
+                      translateY:
+                        draggedTodoId === todo.id
+                          ? pan.y
+                          : itemAnimations[todo.id]
+                            ? itemAnimations[todo.id]
+                            : 0,
                     },
                   ],
                   zIndex: draggedTodoId === todo.id ? 999 : 1,
                 },
-              ]}>
+              ]}
+            >
               <TodoItem
                 todo={todo}
                 selectTodo={() => handleSelectTodo(todo)}
-                isSelected={selectedTodo !== null && selectedTodo.id === todo.id}
+                isSelected={
+                  selectedTodo !== null && selectedTodo.id === todo.id
+                }
                 updateTodo={updateTodo}
                 stopOtherEdits={() => stopOtherEdits(todo.id)}
                 onDragStart={() => onDragStart(todo.id)}
                 isDragging={draggedTodoId === todo.id}
-                onLayout={layout => handleLayout(todo.id, layout)}
+                onLayout={(layout) => handleLayout(todo.id, layout)}
                 isArchiveView={isArchiveView}
                 unarchiveTodo={unarchiveTodo}
                 ref={(ref: TodoItemRef | null) => {
@@ -107,7 +112,7 @@ const TodoList: React.FC<TodoListProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 4,
   },
   scrollView: {
     flex: 1,
