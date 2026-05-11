@@ -48,6 +48,7 @@ const AppContent = () => {
     new Animated.Value(activeView === "settings" ? 1 : 0),
   ).current;
   const [showSettings, setShowSettings] = useState(false);
+  const [isNoteFullscreen, setIsNoteFullscreen] = useState(false);
   const [calendarViewMode, setCalendarViewMode] =
     useState<CalendarViewMode>("day");
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
@@ -84,11 +85,11 @@ const AppContent = () => {
 
   useEffect(() => {
     Animated.timing(settingsLayoutAnimation, {
-      toValue: activeView === "settings" ? 1 : 0,
+      toValue: activeView === "settings" || isNoteFullscreen ? 1 : 0,
       duration: 220,
       useNativeDriver: false,
     }).start();
-  }, [activeView, settingsLayoutAnimation]);
+  }, [activeView, isNoteFullscreen, settingsLayoutAnimation]);
 
   const handleSelectTodo = useCallback((todo: Todo | null) => {
     setSelectedTodo(todo);
@@ -407,6 +408,7 @@ const AppContent = () => {
           <TodoNoteColumn
             selectedTodo={currentSelectedTodo}
             activeView={activeView}
+            isNoteFullscreen={isNoteFullscreen}
             updateTodo={updateTodo}
             removeTodo={handleRemoveTodo} // Use the new handler
             archiveTodo={archiveTodo}
@@ -429,20 +431,48 @@ const AppContent = () => {
 
   const handleCalendarPress = () => {
     if (activeView !== "calendar") {
+      setIsNoteFullscreen(false);
       setActiveView("calendar");
     } else {
       setCalendarViewMode((prev) => (prev === "day" ? "week" : "day"));
     }
   };
 
-  const handleAddLongPress = () => {
+  const handleSettingsLongPress = () => {
     setShowSettings(false);
+    setIsNoteFullscreen(false);
     setActiveView((prev) => (prev === "settings" ? "notes" : "settings"));
+  };
+
+  const handleTopBarViewChange = (view: ViewType) => {
+    if (view !== "notes") {
+      setIsNoteFullscreen(false);
+    }
+    setActiveView(view);
   };
 
   const currentSelectedTodo = selectedTodo
     ? (todos.find((todo) => todo.id === selectedTodo.id) ?? selectedTodo)
     : null;
+
+  const handleAddPress = () => {
+    if (activeView === "settings") {
+      setShowSettings(false);
+      setActiveView("notes");
+      setIsNoteFullscreen(Boolean(currentSelectedTodo));
+      return;
+    }
+
+    setShowSettings(false);
+    setActiveView("notes");
+
+    if (!currentSelectedTodo) {
+      setIsNoteFullscreen(false);
+      return;
+    }
+
+    setIsNoteFullscreen((prev) => (activeView === "notes" ? !prev : true));
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -463,9 +493,10 @@ const AppContent = () => {
           <StatusBar style={isDarkMode ? "light" : "dark"} />
           <TopBar
             onAddTodo={handleAddTodo}
-            onAddLongPress={handleAddLongPress}
+            onAddPress={handleAddPress}
+            onSettingsLongPress={handleSettingsLongPress}
             activeView={activeView}
-            setActiveView={setActiveView}
+            setActiveView={handleTopBarViewChange}
             showSettings={showSettings}
             setShowSettings={setShowSettings}
             onCalendarPress={handleCalendarPress}

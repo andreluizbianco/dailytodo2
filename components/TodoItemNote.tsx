@@ -13,6 +13,7 @@ import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 interface TodoItemNoteProps {
   todo: Todo;
+  showTitle?: boolean;
   updateNote: (note: string) => void;
   onStartEditing: () => void;
   onEndEditing: () => void;
@@ -20,6 +21,7 @@ interface TodoItemNoteProps {
 
 const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   todo,
+  showTitle = false,
   updateNote,
   onStartEditing,
   onEndEditing,
@@ -28,6 +30,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [localNote, setLocalNote] = useState(todo.note);
   const inputRef = useRef<TextInput>(null);
+  const titleText = todo.text.trim() || "Untitled";
 
   useEffect(() => {
     setLocalNote(todo.note);
@@ -187,6 +190,11 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
           { backgroundColor: getNoteBackgroundColor(todo.color, theme) },
         ]}
       >
+        {showTitle && (
+          <Text style={[styles.noteTitle, { color: theme.text }]}>
+            {titleText}
+          </Text>
+        )}
         {renderNoteContent()}
       </View>
     </TouchableWithoutFeedback>
@@ -198,6 +206,11 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 4,
     padding: 10,
+  },
+  noteTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 12,
   },
   noteInput: {
     fontSize: 16,

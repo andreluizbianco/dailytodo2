@@ -10,6 +10,7 @@ import { Todo } from "../types";
 interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
   activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
+  isNoteFullscreen: boolean;
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   removeTodo: (id: number) => Todo | null;
   archiveTodo: (id: number) => void;
@@ -29,6 +30,7 @@ interface TodoNoteColumnProps {
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   selectedTodo,
   activeView,
+  isNoteFullscreen,
   updateTodo,
   removeTodo,
   archiveTodo,
@@ -107,6 +109,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
         <>
           <TodoItemNote
             todo={localSelectedTodo}
+            showTitle={isNoteFullscreen}
             updateNote={(noteText: string) =>
               handleTodoUpdate({ note: noteText })
             }
@@ -150,10 +153,20 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        isNoteFullscreen && activeView === "notes" && styles.fullscreenContainer,
+      ]}
+    >
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
+        contentContainerStyle={
+          isNoteFullscreen && activeView === "notes"
+            ? styles.fullscreenScrollContent
+            : undefined
+        }
         keyboardShouldPersistTaps="handled"
       >
         {renderContent()}
@@ -168,8 +181,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingRight: 2,
   },
+  fullscreenContainer: {
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingBottom: 12,
+  },
   scrollView: {
     flex: 1,
+  },
+  fullscreenScrollContent: {
+    flexGrow: 1,
   },
   settingsContainer: {
     marginTop: 8,

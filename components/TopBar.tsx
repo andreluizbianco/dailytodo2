@@ -6,7 +6,8 @@ import { useTheme } from "../utils/theme";
 
 interface TopBarProps {
   onAddTodo: () => void;
-  onAddLongPress: () => void;
+  onAddPress: () => void;
+  onSettingsLongPress: () => void;
   activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
   setActiveView: (
     view: "notes" | "timer" | "settings" | "archive" | "calendar",
@@ -18,7 +19,8 @@ interface TopBarProps {
 
 const TopBar: React.FC<TopBarProps> = ({
   onAddTodo,
-  onAddLongPress,
+  onAddPress,
+  onSettingsLongPress,
   activeView,
   setActiveView,
   showSettings,
@@ -48,13 +50,12 @@ const TopBar: React.FC<TopBarProps> = ({
     <View style={styles.container}>
       <View style={styles.addButtonSection}>
         <TouchableOpacity
-          onPress={onAddTodo}
-          onLongPress={withLongPressHaptic(onAddLongPress)}
+          onPress={onAddPress}
+          onLongPress={withLongPressHaptic(onAddTodo)}
           delayLongPress={650}
           style={[
             styles.addButton,
             { backgroundColor: theme.primary },
-            activeView === "settings" && { backgroundColor: theme.text },
           ]}
         >
           <View style={styles.plusIcon}>
@@ -90,6 +91,8 @@ const TopBar: React.FC<TopBarProps> = ({
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleArchivePress}
+          onLongPress={withLongPressHaptic(onSettingsLongPress)}
+          delayLongPress={650}
           style={styles.iconButton}
         >
           <Ionicons
