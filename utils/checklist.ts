@@ -196,12 +196,26 @@ export const stripListSyntaxForText = (note: string): string =>
     })
     .join("\n");
 
+export const applyPlainTextToListState = (
+  previousNote: string,
+  plainText: string,
+): string => {
+  const previousItems = parseChecklistNote(previousNote);
+
+  return serializeChecklistItems(
+    plainText.split("\n").map((text, index) => ({
+      checked: previousItems[index]?.checked === true,
+      text,
+    })),
+  );
+};
+
 export const normalizeNoteForType = (
   note: string,
   noteType: NoteType,
 ): string => {
   if (noteType === "text") {
-    return stripListSyntaxForText(note);
+    return serializeChecklistItems(parseChecklistNote(note));
   }
 
   if (noteType === "bullet") {

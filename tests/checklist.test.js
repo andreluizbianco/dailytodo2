@@ -25,6 +25,7 @@ const checklist = require(path.join(
 
 const {
   addChecklistItem,
+  applyPlainTextToListState,
   normalizeNoteForType,
   parseBulletNote,
   parseChecklistNote,
@@ -138,7 +139,17 @@ assert.equal(
 
 assert.equal(
   normalizeNoteForType("- [ ] Hybrid\n[x] Done", "text"),
-  "Hybrid\nDone",
+  "[ ] Hybrid\n[x] Done",
+);
+
+assert.equal(
+  applyPlainTextToListState("[x] Done\n[ ] Open", "Done edited\nOpen"),
+  "[x] Done edited\n[ ] Open",
+);
+
+assert.equal(
+  applyPlainTextToListState("[x] Done", "Done\nNew"),
+  "[x] Done\n[ ] New",
 );
 
 console.log("checklist helper tests passed");

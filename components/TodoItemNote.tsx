@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Todo } from "../types";
 import {
   BulletItem,
+  applyPlainTextToListState,
   ChecklistItem,
   normalizeChecklistItems,
   parseBulletNote,
@@ -102,7 +103,9 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
 
   const handleChangeText = (text: string) => {
     let processedText =
-      todo.noteType === "text" ? stripListSyntaxForText(text) : text;
+      todo.noteType === "text"
+        ? applyPlainTextToListState(localNote, text)
+        : text;
 
     if (
       text.length > localNote.length &&
@@ -125,13 +128,6 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
 
   const handleStartEditing = () => {
     softHaptic();
-    if (todo.noteType === "text") {
-      const plainNote = stripListSyntaxForText(localNote);
-      setLocalNote(plainNote);
-      if (plainNote !== localNote) {
-        updateNote(plainNote);
-      }
-    }
     setIsEditing(true);
     onStartEditing();
   };
