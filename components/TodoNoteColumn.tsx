@@ -47,8 +47,13 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   setShowSettings,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollFrameViewRef = useRef<View>(null);
   const settingsTopRef = useRef(0);
+  const scrollYRef = useRef(0);
+  const scrollFrameRef = useRef({ pageY: 0, height: 0 });
+  const scrollContentHeightRef = useRef(0);
   const [isEditing, setIsEditing] = useState(false);
+  const [isListDragging, setIsListDragging] = useState(false);
   const [localSelectedTodo, setLocalSelectedTodo] = useState<Todo | null>(
     selectedTodo,
   );
@@ -76,6 +81,56 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
       setLocalSelectedTodo(updatedTodo);
       updateTodo(updatedTodo.id, updates);
     }
+  };
+
+  const measureScrollFrame = () => {
+    scrollFrameViewRef.current?.measureInWindow((_, pageY, __, height) => {
+      scrollFrameRef.current = { pageY, height };
+    });
+  };
+
+  const handleListDragChange = (isDragging: boolean) => {
+    setIsListDragging(isDragging);
+
+    if (isDragging) {
+      measureScrollFrame();
+    }
+  };
+
+  const handleListDragMove = (pageY: number) => {
+    const frame = scrollFrameRef.current;
+    if (frame.height <= 0) return 0;
+
+    const maxScrollY = Math.max(
+      0,
+      scrollContentHeightRef.current - frame.height,
+    );
+    const edgeSize = 64;
+    const distanceFromTop = pageY - frame.pageY;
+    const distanceFromBottom = frame.pageY + frame.height - pageY;
+    let delta = 0;
+
+    if (distanceFromTop < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromTop) / edgeSize;
+      delta = -Math.max(2, Math.round(pressure * 5));
+    } else if (distanceFromBottom < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromBottom) / edgeSize;
+      delta = Math.max(2, Math.round(pressure * 5));
+    }
+
+    if (delta === 0) return 0;
+
+    const nextY = Math.max(
+      0,
+      Math.min(maxScrollY, scrollYRef.current + delta),
+    );
+    const appliedDelta = nextY - scrollYRef.current;
+
+    if (appliedDelta === 0) return 0;
+
+    scrollYRef.current = nextY;
+    scrollViewRef.current?.scrollTo({ y: nextY, animated: false });
+    return appliedDelta;
   };
 
   const renderContent = () => {
@@ -118,6 +173,8 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
               setShowSettings(false);
             }}
             onEndEditing={() => setIsEditing(false)}
+            onListDragChange={handleListDragChange}
+            onListDragMove={handleListDragMove}
           />
           {activeView === "notes" && showSettings && (
             <View
@@ -154,6 +211,8 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
 
   return (
     <View
+      ref={scrollFrameViewRef}
+      onLayout={measureScrollFrame}
       style={[
         styles.container,
         isNoteFullscreen && activeView === "notes" && styles.fullscreenContainer,
@@ -162,6 +221,14 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
+        scrollEnabled={!isListDragging}
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        onContentSizeChange={(_, height) => {
+          scrollContentHeightRef.current = height;
+        }}
+        scrollEventThrottle={16}
         contentContainerStyle={
           isNoteFullscreen && activeView === "notes"
             ? styles.fullscreenScrollContent

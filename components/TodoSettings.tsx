@@ -6,6 +6,7 @@ import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
 import { softHaptic } from "../utils/haptics";
 import { useTheme } from "../utils/theme";
+import { normalizeNoteForType } from "../utils/checklist";
 
 const colors: string[] = ["red", "yellow", "green", "blue"];
 
@@ -56,8 +57,10 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   };
 
   const handleNoteTypeSelect = (type: "text" | "bullet" | "checkbox") => {
+    const normalizedNote = normalizeNoteForType(todo.note, type);
+
     setLocalNoteType(type);
-    updateTodo({ noteType: type });
+    updateTodo({ noteType: type, note: normalizedNote });
   };
 
   const handleColorSelect = (color: string) => {
