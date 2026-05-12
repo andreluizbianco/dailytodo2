@@ -7,13 +7,18 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  findNodeHandle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
+import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
 import { CalendarEntry, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createTodoCopyFromCalendarEntry } from "../utils/calendarEntryActions";
+import { normalizeNoteForType } from "../utils/checklist";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
+import { getScrollYToRevealRange } from "../utils/scrollVisibility";
 import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
@@ -44,7 +49,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 }) => {
   const { theme } = useTheme();
   const dayScrollRef = useRef<ScrollView>(null);
-  const settingsLayoutByEntryId = useRef<Record<number, number>>({});
+  const settingsRefByEntryId = useRef<Record<number, View | null>>({});
+  const dayScrollYRef = useRef(0);
+  const dayViewportHeightRef = useRef(0);
+  const dayContentHeightRef = useRef(0);
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
@@ -176,13 +184,33 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const scrollToEntrySettings = (entryId: number) => {
-    const settingsY = settingsLayoutByEntryId.current[entryId];
-    if (typeof settingsY !== "number") return;
+    const settingsRef = settingsRefByEntryId.current[entryId];
+    const scrollRef = dayScrollRef.current;
+    const scrollNode = scrollRef ? findNodeHandle(scrollRef) : null;
 
-    dayScrollRef.current?.scrollTo({
-      y: Math.max(0, settingsY - 4),
-      animated: true,
-    });
+    if (!settingsRef || !scrollRef || !scrollNode) return;
+
+    settingsRef.measureLayout(
+      scrollNode,
+      (_x, y, _width, height) => {
+        const viewportHeight = dayViewportHeightRef.current;
+        const contentHeight = dayContentHeightRef.current;
+        if (viewportHeight <= 0 || contentHeight <= 0) return;
+
+        scrollRef.scrollTo({
+          y: getScrollYToRevealRange({
+            contentHeight,
+            currentScrollY: dayScrollYRef.current,
+            margin: 8,
+            rangeHeight: height,
+            rangeY: y,
+            viewportHeight,
+          }),
+          animated: true,
+        });
+      },
+      () => undefined,
+    );
   };
 
   const getColorValue = (buttonColor: string): string => {
@@ -219,6 +247,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     );
   };
 
+  const handleNoteTypeSelect = async (
+    entry: CalendarEntry,
+    noteType: Todo["noteType"],
+  ) => {
+    await handleUpdateEntryTodo(entry, {
+      noteType,
+      note: normalizeNoteForType(entry.todo.note, noteType),
+    });
+  };
+
   interface CalendarEntriesProps {
     selectedDate: string | null;
     entries: CalendarEntry[];
@@ -232,42 +270,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   }
 
   const handleUnarchiveEntry = async (entry: CalendarEntry) => {
-    const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
-    const today = new Date().toISOString().split("T")[0];
-    const isFutureOrToday = entryDate >= today;
-
     try {
       const uniqueId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+      const timestamp = new Date().toISOString();
+      const newTodo = createTodoCopyFromCalendarEntry(
+        entry,
+        uniqueId,
+        timestamp,
+      );
 
-      const newTodo: Todo = {
-        ...entry.todo,
-        id: uniqueId,
-        isEditing: false,
-        createdAt: new Date().toISOString(),
-        restoredFrom: {
-          type: "calendar",
-          originalId: entry.id,
-          timestamp: new Date().toISOString(),
-        },
-      };
-
-      // Fix typing for setTodos callback
       setTodos((currentTodos: Todo[]) => {
-        const isDuplicate = currentTodos.some(
-          (todo: Todo) =>
-            todo.text === newTodo.text &&
-            todo.note === newTodo.note &&
-            Math.abs(
-              new Date(todo.createdAt || 0).getTime() -
-                new Date(entry.printedAt).getTime(),
-            ) < 1000,
-        );
-
-        if (isDuplicate) {
-          console.warn("Duplicate todo detected, skipping...");
-          return currentTodos;
-        }
-
         return [...currentTodos, newTodo];
       });
 
@@ -277,29 +289,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           ? JSON.parse(savedData)
           : { todos: [], archivedTodos: [], version: 1 };
 
-        const isDuplicateInStorage = currentData.todos.some(
-          (todo: Todo) =>
-            todo.text === newTodo.text &&
-            todo.note === newTodo.note &&
-            Math.abs(
-              new Date(todo.createdAt || 0).getTime() -
-                new Date(entry.printedAt).getTime(),
-            ) < 1000,
-        );
-
-        if (!isDuplicateInStorage) {
-          currentData.todos.push(newTodo);
-          await AsyncStorage.setItem("todosData", JSON.stringify(currentData));
-        }
-
-        if (isFutureOrToday) {
-          const updatedEntries = entries.filter((e) => e.id !== entry.id);
-          setEntries(updatedEntries);
-          await AsyncStorage.setItem(
-            "calendarEntries",
-            JSON.stringify(updatedEntries),
-          );
-        }
+        currentData.todos.push(newTodo);
+        await AsyncStorage.setItem("todosData", JSON.stringify(currentData));
 
         setShowSettingsForId(null);
       } catch (error) {
@@ -315,13 +306,14 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
     return (
       <View
+        ref={(ref) => {
+          settingsRefByEntryId.current[entry.id] = ref;
+        }}
         style={[
           styles.settingsContainer,
           { backgroundColor: theme.surface, borderColor: theme.border },
         ]}
-        onLayout={(event) => {
-          settingsLayoutByEntryId.current[entry.id] =
-            event.nativeEvent.layout.y;
+        onLayout={() => {
           scrollToEntrySettings(entry.id);
         }}
       >
@@ -371,6 +363,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             onPress={() => handleColorChange(entry.id, "#4d96ff")}
           />
         </View>
+        <NoteTypeSelector
+          selectedType={entry.todo.noteType}
+          onSelectType={(noteType) => handleNoteTypeSelect(entry, noteType)}
+        />
         <NoteScheduleSettings
           schedule={entry.todo.schedule}
           reminder={entry.todo.reminder}
@@ -536,6 +532,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         ref={dayScrollRef}
         style={styles.dayContainer}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={(_, height) => {
+          dayContentHeightRef.current = height;
+        }}
+        onLayout={(event) => {
+          dayViewportHeightRef.current = event.nativeEvent.layout.height;
+        }}
+        onScroll={(event) => {
+          dayScrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
         {dateEntries.map((entry) => (
           <View key={entry.id} style={styles.entryContainer}>

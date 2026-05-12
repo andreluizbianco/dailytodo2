@@ -5,7 +5,7 @@ import TodoSettings from "./TodoSettings";
 import TimerView from "./TimerView";
 import ArchivedTodos from "./ArchivedTodos";
 import AppSettings from "./AppSettings";
-import { Todo } from "../types";
+import { Todo, TrashedTodo, TrashRetention } from "../types";
 
 interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
@@ -13,12 +13,18 @@ interface TodoNoteColumnProps {
   isNoteFullscreen: boolean;
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   removeTodo: (id: number) => Todo | null;
-  archiveTodo: (id: number) => void;
+  archiveTodo: (id: number) => Todo | null;
   archivedTodos: Todo[];
   setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
   unarchiveTodo: (id: number) => void;
   updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
   showSettings: boolean;
+  trashedTodos: TrashedTodo[];
+  trashRetention: TrashRetention;
+  restoreTrashedTodo: (id: number) => void;
+  deleteTrashedTodo: (id: number) => void;
+  emptyTrash: () => void;
+  setTrashRetention: (retention: TrashRetention) => void;
   printOnCalendar: (todo: Todo) => void;
   exportData: () => void;
   importData: () => void;
@@ -39,6 +45,12 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   unarchiveTodo,
   updateArchivedTodo,
   showSettings,
+  trashedTodos,
+  trashRetention,
+  restoreTrashedTodo,
+  deleteTrashedTodo,
+  emptyTrash,
+  setTrashRetention,
   printOnCalendar,
   exportData,
   importData,
@@ -139,7 +151,18 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     }
 
     if (activeView === "settings") {
-      return <AppSettings />;
+      return (
+        <AppSettings
+          deleteTrashedTodo={deleteTrashedTodo}
+          emptyTrash={emptyTrash}
+          exportData={exportData}
+          importData={importData}
+          restoreTrashedTodo={restoreTrashedTodo}
+          setTrashRetention={setTrashRetention}
+          trashedTodos={trashedTodos}
+          trashRetention={trashRetention}
+        />
+      );
     }
 
     if (activeView === "archive") {
@@ -149,9 +172,6 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           setArchivedTodos={setArchivedTodos}
           unarchiveTodo={unarchiveTodo}
           updateArchivedTodo={updateArchivedTodo}
-          exportData={exportData}
-          importData={importData}
-          showSettings={showSettings}
           updateTodo={updateTodo}
           todos={todos}
           setTodos={setTodos}
@@ -199,7 +219,12 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
                     setLocalSelectedTodo(nextTodo);
                   }
                 }}
-                archiveTodo={() => archiveTodo(localSelectedTodo.id)}
+                archiveTodo={() => {
+                  if (localSelectedTodo) {
+                    const nextTodo = archiveTodo(localSelectedTodo.id);
+                    setLocalSelectedTodo(nextTodo);
+                  }
+                }}
                 printOnCalendar={printOnCalendar}
               />
             </View>

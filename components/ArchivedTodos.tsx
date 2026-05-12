@@ -26,9 +26,6 @@ interface ArchivedTodosProps {
   setArchivedTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
   unarchiveTodo: (id: number) => void;
   updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
-  exportData: () => void;
-  importData: () => void;
-  showSettings: boolean;
   todos: Todo[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void;
@@ -39,9 +36,6 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   setArchivedTodos,
   unarchiveTodo,
   updateArchivedTodo,
-  exportData,
-  importData,
-  showSettings,
   todos,
   setTodos,
   updateTodo,
@@ -398,32 +392,6 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     );
   };
 
-  if (showSettings) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.settingsContainer}>
-          <Text style={[styles.title, { color: theme.text }]}>
-            Data Management
-          </Text>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary }]}
-              onPress={exportData}
-            >
-              <Text style={styles.buttonText}>Export</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary }]}
-              onPress={importData}
-            >
-              <Text style={styles.buttonText}>Import</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: theme.text }]}>Archived Notes</Text>
@@ -473,9 +441,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 10,
   },
-  settingsContainer: {
-    flex: 1,
-  },
   title: {
     fontSize: 18,
     fontWeight: "bold",
@@ -492,23 +457,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
     fontSize: 15,
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: "#4b5563",
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-    borderRadius: 6,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
   },
   searchResults: {
     flex: 1,

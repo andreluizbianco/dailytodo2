@@ -63,12 +63,18 @@ const AppContent = () => {
     setTodos,
     archivedTodos,
     setArchivedTodos,
+    trashedTodos,
+    trashRetention,
     addTodo,
     updateTodo,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,
     unarchiveTodo,
+    restoreTrashedTodo,
+    deleteTrashedTodo,
+    emptyTrash,
+    setTrashRetention,
     exportData,
     importData,
   } = useTodos();
@@ -342,6 +348,12 @@ const AppContent = () => {
     return nextTodo;
   };
 
+  const handleArchiveTodo = (id: number): Todo | null => {
+    const nextTodo = archiveTodo(id);
+    handleSelectTodo(nextTodo);
+    return nextTodo;
+  };
+
   const renderMainContent = () => {
     if (activeView === "calendar") {
       return (
@@ -411,12 +423,18 @@ const AppContent = () => {
             isNoteFullscreen={isNoteFullscreen}
             updateTodo={updateTodo}
             removeTodo={handleRemoveTodo} // Use the new handler
-            archiveTodo={archiveTodo}
+            archiveTodo={handleArchiveTodo}
             archivedTodos={archivedTodos}
             setArchivedTodos={setArchivedTodos}
             unarchiveTodo={unarchiveTodo}
             updateArchivedTodo={updateArchivedTodo}
             showSettings={showSettings}
+            trashedTodos={trashedTodos}
+            trashRetention={trashRetention}
+            restoreTrashedTodo={restoreTrashedTodo}
+            deleteTrashedTodo={deleteTrashedTodo}
+            emptyTrash={emptyTrash}
+            setTrashRetention={setTrashRetention}
             printOnCalendar={handlePrintOnCalendar}
             exportData={exportData}
             importData={importData}
@@ -452,7 +470,7 @@ const AppContent = () => {
   };
 
   const currentSelectedTodo = selectedTodo
-    ? (todos.find((todo) => todo.id === selectedTodo.id) ?? selectedTodo)
+    ? (todos.find((todo) => todo.id === selectedTodo.id) ?? null)
     : null;
 
   const handleAddPress = () => {

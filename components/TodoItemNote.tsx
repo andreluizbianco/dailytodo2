@@ -510,8 +510,6 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                     handleChecklistBackspace(index);
                   }
                 }}
-                placeholder="List item"
-                placeholderTextColor={theme.subtleText}
                 style={[
                   styles.checklistInput,
                   {
@@ -683,7 +681,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     borderRadius: 6,
-    paddingHorizontal: 1,
+    paddingHorizontal: 0,
   },
   checklistRowLifted: {
     elevation: 5,
@@ -699,18 +697,18 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 2,
-    marginRight: 9,
+    marginLeft: 0,
+    marginRight: 5,
     marginTop: 9,
   },
   bulletIconWrap: {
-    width: 25,
+    width: 14,
     minHeight: CHECKLIST_ROW_HEIGHT,
     justifyContent: "flex-start",
     alignItems: "center",
     paddingTop: 13,
-    marginLeft: -3,
-    marginRight: 1,
+    marginLeft: 0,
+    marginRight: 5,
   },
   bulletIcon: {
     width: 5,

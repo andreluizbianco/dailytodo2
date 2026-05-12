@@ -8,6 +8,7 @@ export type TimerMode = "pomodoro" | "stopwatch";
 export type ScheduleMode = "every" | "in" | "date";
 export type ScheduleUnit = "days" | "weeks" | "months" | "years";
 export type ReminderUnit = "minutes" | "hours" | "days";
+export type TrashRetention = "3d" | "7d" | "30d" | "never";
 
 export interface TodoSchedule {
   mode: ScheduleMode;
@@ -47,6 +48,10 @@ export interface Todo {
   };
   schedule?: TodoSchedule;
   reminder?: TodoReminder;
+}
+
+export interface TrashedTodo extends Todo {
+  deletedAt: string;
 }
 
 export interface CalendarEntry {

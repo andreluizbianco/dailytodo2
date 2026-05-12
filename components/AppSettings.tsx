@@ -33,9 +33,10 @@ import {
   useTheme,
 } from "../utils/theme";
 import type { ThemePreference } from "../utils/theme";
+import { TrashedTodo, TrashRetention } from "../types";
 
 type PermissionState = "granted" | "denied" | "undetermined";
-type SettingsSectionId = "appearance" | "notifications" | "alert";
+type SettingsSectionId = "appearance" | "notifications" | "alert" | "data";
 
 const SETTINGS_SECTIONS_KEY = "app:settingsExpandedSections";
 
@@ -43,6 +44,7 @@ const defaultExpandedSections: Record<SettingsSectionId, boolean> = {
   appearance: true,
   notifications: false,
   alert: false,
+  data: false,
 };
 
 const soundOptions: Array<{ label: string; value: TimerAlertSound }> = [
@@ -66,7 +68,37 @@ const themeOptions: Array<{ label: string; value: ThemePreference }> = [
   { label: "Dark", value: "dark" },
 ];
 
-const AppSettings: React.FC = () => {
+const trashRetentionOptions: Array<{
+  label: string;
+  value: TrashRetention;
+}> = [
+  { label: "3 days", value: "3d" },
+  { label: "7 days", value: "7d" },
+  { label: "1 month", value: "30d" },
+  { label: "Never", value: "never" },
+];
+
+interface AppSettingsProps {
+  deleteTrashedTodo: (id: number) => void;
+  emptyTrash: () => void;
+  exportData: () => void;
+  importData: () => void;
+  restoreTrashedTodo: (id: number) => void;
+  setTrashRetention: (retention: TrashRetention) => void;
+  trashedTodos: TrashedTodo[];
+  trashRetention: TrashRetention;
+}
+
+const AppSettings: React.FC<AppSettingsProps> = ({
+  deleteTrashedTodo,
+  emptyTrash,
+  exportData,
+  importData,
+  restoreTrashedTodo,
+  setTrashRetention,
+  trashedTodos,
+  trashRetention,
+}) => {
   const {
     darkIntensity,
     isDarkMode,
@@ -135,6 +167,10 @@ const AppSettings: React.FC = () => {
               typeof parsedValue.alert === "boolean"
                 ? parsedValue.alert
                 : defaultExpandedSections.alert,
+            data:
+              typeof parsedValue.data === "boolean"
+                ? parsedValue.data
+                : defaultExpandedSections.data,
           });
         }
       } catch (error) {
@@ -199,6 +235,7 @@ const AppSettings: React.FC = () => {
       appearance: nextValue,
       notifications: nextValue,
       alert: nextValue,
+      data: nextValue,
     });
   };
 
@@ -450,6 +487,130 @@ const AppSettings: React.FC = () => {
               Android app settings
             </Text>
           </TouchableOpacity>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        iconName="swap-vertical-outline"
+        isExpanded={expandedSections.data}
+        onToggle={() => toggleSection("data")}
+        title="Data"
+      >
+        <View style={styles.dataActions}>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { borderColor: theme.border }]}
+            onPress={exportData}
+          >
+            <Ionicons name="download-outline" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+              Export
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { borderColor: theme.border }]}
+            onPress={importData}
+          >
+            <Ionicons name="cloud-upload-outline" size={20} color={theme.text} />
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+              Import
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.trashHeader}>
+          <View style={styles.trashTitleRow}>
+            <Ionicons name="trash-outline" size={20} color={theme.mutedText} />
+            <Text style={[styles.optionLabel, styles.trashTitle, { color: theme.text }]}>
+              Trash
+            </Text>
+          </View>
+          {trashedTodos.length > 0 ? (
+            <TouchableOpacity
+              onLongPress={emptyTrash}
+              delayLongPress={700}
+              style={styles.trashIconButton}
+            >
+              <Ionicons name="trash-bin-outline" size={20} color={theme.danger} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <View
+          style={[styles.segmentedControl, { backgroundColor: theme.control }]}
+        >
+          {trashRetentionOptions.map((option) => {
+            const isSelected = trashRetention === option.value;
+
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.segment,
+                  isSelected && [
+                    styles.segmentSelected,
+                    {
+                      backgroundColor: theme.selected,
+                      borderColor: theme.border,
+                    },
+                  ],
+                ]}
+                onPress={() => setTrashRetention(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: theme.mutedText },
+                    isSelected && { color: theme.text },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {trashedTodos.length === 0 ? (
+          <Text style={[styles.emptyTrashText, { color: theme.mutedText }]}>
+            Trash is empty
+          </Text>
+        ) : (
+          <View style={styles.trashList}>
+            {trashedTodos.map((todo) => (
+              <View
+                key={`${todo.id}-${todo.deletedAt}`}
+                style={[styles.trashItem, { borderColor: theme.border }]}
+              >
+                <View style={styles.trashItemText}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.trashItemTitle, { color: theme.text }]}
+                  >
+                    {todo.text.trim() || "Untitled Note"}
+                  </Text>
+                  <Text style={[styles.trashItemDate, { color: theme.subtleText }]}>
+                    {new Date(todo.deletedAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => restoreTrashedTodo(todo.id)}
+                  style={styles.trashIconButton}
+                >
+                  <Ionicons name="return-up-back-outline" size={21} color={theme.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onLongPress={() => deleteTrashedTodo(todo.id)}
+                  delayLongPress={700}
+                  style={styles.trashIconButton}
+                >
+                  <Ionicons name="close" size={21} color={theme.danger} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
         )}
       </SettingsSection>
     </View>
@@ -878,6 +1039,56 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 4,
     padding: 3,
+  },
+  dataActions: {
+    gap: 10,
+  },
+  trashHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  trashTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  trashTitle: {
+    marginBottom: 0,
+    marginTop: 0,
+  },
+  trashIconButton: {
+    alignItems: "center",
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  emptyTrashText: {
+    fontSize: 13,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  trashList: {
+    gap: 8,
+  },
+  trashItem: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 44,
+  },
+  trashItemText: {
+    flex: 1,
+  },
+  trashItemTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  trashItemDate: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 2,
   },
   segment: {
     alignItems: "center",

@@ -4,7 +4,13 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
 import { Alert } from "react-native";
-import { Todo, CalendarEntry } from "../types";
+import { Todo, CalendarEntry, TrashedTodo, TrashRetention } from "../types";
+import { getNextSelectedTodoAfterRemoval } from "../utils/todoSelection";
+import {
+  createTrashedTodo,
+  getRetainedTrashedTodos,
+  restoreTodoFromTrash,
+} from "../utils/trash";
 
 const CURRENT_VERSION = 1;
 
@@ -13,20 +19,35 @@ interface StoredData {
   todos: Todo[];
   archivedTodos: Todo[];
   calendarEntries?: CalendarEntry[];
+  trashedTodos?: TrashedTodo[];
+  trashRetention?: TrashRetention;
 }
+
+const DEFAULT_TRASH_RETENTION: TrashRetention = "7d";
 
 export const useTodos = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
+  const [trashedTodos, setTrashedTodos] = useState<TrashedTodo[]>([]);
+  const [trashRetention, setTrashRetentionState] = useState<TrashRetention>(
+    DEFAULT_TRASH_RETENTION,
+  );
   const [isLoaded, setIsLoaded] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   const saveStoredTodos = useCallback(
-    (nextTodos: Todo[], nextArchivedTodos: Todo[]) => {
+    (
+      nextTodos: Todo[],
+      nextArchivedTodos: Todo[],
+      nextTrashedTodos: TrashedTodo[],
+      nextTrashRetention: TrashRetention,
+    ) => {
       const dataToSave: StoredData = {
         version: CURRENT_VERSION,
         todos: nextTodos,
         archivedTodos: nextArchivedTodos,
+        trashedTodos: nextTrashedTodos,
+        trashRetention: nextTrashRetention,
       };
 
       saveQueueRef.current = saveQueueRef.current
@@ -48,11 +69,22 @@ export const useTodos = () => {
         if (savedData) {
           const parsedData = JSON.parse(savedData);
           if (parsedData && parsedData.version === CURRENT_VERSION) {
+            const parsedRetention =
+              parsedData.trashRetention ?? DEFAULT_TRASH_RETENTION;
+            const retainedTrashedTodos = getRetainedTrashedTodos(
+              parsedData.trashedTodos ?? [],
+              parsedRetention,
+              new Date().toISOString(),
+            );
+
             setTodos(parsedData.todos);
             setArchivedTodos(parsedData.archivedTodos);
+            setTrashedTodos(retainedTrashedTodos);
+            setTrashRetentionState(parsedRetention);
           } else if (Array.isArray(parsedData)) {
             setTodos(parsedData);
             setArchivedTodos([]);
+            setTrashedTodos([]);
           }
         }
       } catch (e) {
@@ -67,8 +99,15 @@ export const useTodos = () => {
   useEffect(() => {
     if (!isLoaded) return;
 
-    saveStoredTodos(todos, archivedTodos);
-  }, [todos, archivedTodos, isLoaded, saveStoredTodos]);
+    saveStoredTodos(todos, archivedTodos, trashedTodos, trashRetention);
+  }, [
+    todos,
+    archivedTodos,
+    trashedTodos,
+    trashRetention,
+    isLoaded,
+    saveStoredTodos,
+  ]);
 
   const addTodo = (): Todo => {
     const newTodo: Todo = {
@@ -99,7 +138,7 @@ export const useTodos = () => {
         todo.id === id ? { ...todo, ...updates } : todo,
       );
 
-      saveStoredTodos(nextTodos, archivedTodos);
+      saveStoredTodos(nextTodos, archivedTodos, trashedTodos, trashRetention);
 
       return nextTodos;
     });
@@ -114,34 +153,33 @@ export const useTodos = () => {
   };
 
   const removeTodo = (id: number): Todo | null => {
-    let nextSelectedTodo: Todo | null = null;
+    const todoToTrash = todos.find((todo) => todo.id === id);
+    const nextSelectedTodo = getNextSelectedTodoAfterRemoval(todos, id);
+
+    if (todoToTrash) {
+      setTrashedTodos((prevTodos) =>
+        getRetainedTrashedTodos(
+          [
+            ...prevTodos,
+            createTrashedTodo(todoToTrash, new Date().toISOString()),
+          ],
+          trashRetention,
+          new Date().toISOString(),
+        ),
+      );
+    }
 
     setTodos((prevTodos) => {
-      const todoIndex = prevTodos.findIndex((todo) => todo.id === id);
-      if (todoIndex === -1) return prevTodos;
-
-      const newTodos = [...prevTodos];
-      newTodos.splice(todoIndex, 1);
-
-      // Find the closest todo to select next
-      if (newTodos.length > 0) {
-        if (todoIndex < newTodos.length) {
-          // Select the next todo if available
-          nextSelectedTodo = newTodos[todoIndex];
-        } else {
-          // If we removed the last todo, select the new last todo
-          nextSelectedTodo = newTodos[newTodos.length - 1];
-        }
-      }
-
-      return newTodos;
+      return prevTodos.filter((todo) => todo.id !== id);
     });
 
     return nextSelectedTodo;
   };
 
-  const archiveTodo = (id: number): void => {
+  const archiveTodo = (id: number): Todo | null => {
     const todoToArchive = todos.find((todo) => todo.id === id);
+    const nextSelectedTodo = getNextSelectedTodoAfterRemoval(todos, id);
+
     if (todoToArchive) {
       setArchivedTodos((prevArchivedTodos) => [
         ...prevArchivedTodos,
@@ -149,6 +187,8 @@ export const useTodos = () => {
       ]);
       setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
     }
+
+    return nextSelectedTodo;
   };
 
   const unarchiveTodo = (id: number): void => {
@@ -164,6 +204,29 @@ export const useTodos = () => {
     }
   };
 
+  const restoreTrashedTodo = (id: number): void => {
+    const todoToRestore = trashedTodos.find((todo) => todo.id === id);
+    if (!todoToRestore) return;
+
+    setTodos((prevTodos) => [...prevTodos, restoreTodoFromTrash(todoToRestore)]);
+    setTrashedTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
+  };
+
+  const deleteTrashedTodo = (id: number): void => {
+    setTrashedTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
+  };
+
+  const emptyTrash = (): void => {
+    setTrashedTodos([]);
+  };
+
+  const setTrashRetention = (retention: TrashRetention): void => {
+    setTrashRetentionState(retention);
+    setTrashedTodos((prevTodos) =>
+      getRetainedTrashedTodos(prevTodos, retention, new Date().toISOString()),
+    );
+  };
+
   const exportData = async () => {
     try {
       const calendarEntriesStr = await AsyncStorage.getItem("calendarEntries");
@@ -176,6 +239,8 @@ export const useTodos = () => {
         todos,
         archivedTodos,
         calendarEntries,
+        trashedTodos,
+        trashRetention,
       };
 
       const jsonString = JSON.stringify(dataToExport, null, 2);
@@ -229,6 +294,16 @@ export const useTodos = () => {
         if (importedData.version === CURRENT_VERSION) {
           setTodos(importedData.todos);
           setArchivedTodos(importedData.archivedTodos);
+          setTrashedTodos(
+            getRetainedTrashedTodos(
+              importedData.trashedTodos ?? [],
+              importedData.trashRetention ?? DEFAULT_TRASH_RETENTION,
+              new Date().toISOString(),
+            ),
+          );
+          setTrashRetentionState(
+            importedData.trashRetention ?? DEFAULT_TRASH_RETENTION,
+          );
 
           if (importedData.calendarEntries) {
             await AsyncStorage.setItem(
@@ -254,12 +329,18 @@ export const useTodos = () => {
     setTodos,
     archivedTodos,
     setArchivedTodos,
+    trashedTodos,
+    trashRetention,
     addTodo,
     updateTodo,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,
     unarchiveTodo,
+    restoreTrashedTodo,
+    deleteTrashedTodo,
+    emptyTrash,
+    setTrashRetention,
     exportData,
     importData,
   };
