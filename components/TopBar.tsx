@@ -8,9 +8,16 @@ interface TopBarProps {
   onAddTodo: () => void;
   onAddPress: () => void;
   onSettingsLongPress: () => void;
-  activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
+  onProjectsLongPress: () => void;
+  activeView:
+    | "notes"
+    | "projects"
+    | "timer"
+    | "settings"
+    | "archive"
+    | "calendar";
   setActiveView: (
-    view: "notes" | "timer" | "settings" | "archive" | "calendar",
+    view: "notes" | "projects" | "timer" | "settings" | "archive" | "calendar",
   ) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
@@ -21,6 +28,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onAddTodo,
   onAddPress,
   onSettingsLongPress,
+  onProjectsLongPress,
   activeView,
   setActiveView,
   showSettings,
@@ -53,10 +61,7 @@ const TopBar: React.FC<TopBarProps> = ({
           onPress={onAddPress}
           onLongPress={withLongPressHaptic(onAddTodo)}
           delayLongPress={650}
-          style={[
-            styles.addButton,
-            { backgroundColor: theme.primary },
-          ]}
+          style={[styles.addButton, { backgroundColor: theme.primary }]}
         >
           <View style={styles.plusIcon}>
             <View style={styles.plusIconHorizontal} />
@@ -65,11 +70,20 @@ const TopBar: React.FC<TopBarProps> = ({
         </TouchableOpacity>
       </View>
       <View style={styles.iconsSection}>
-        <TouchableOpacity onPress={handleNotesPress} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={handleNotesPress}
+          onLongPress={withLongPressHaptic(onProjectsLongPress)}
+          delayLongPress={650}
+          style={styles.iconButton}
+        >
           <Ionicons
             name="document-text"
             size={28}
-            color={activeView === "notes" ? theme.primary : theme.mutedText}
+            color={
+              activeView === "notes" || activeView === "projects"
+                ? theme.primary
+                : theme.mutedText
+            }
           />
         </TouchableOpacity>
         <TouchableOpacity

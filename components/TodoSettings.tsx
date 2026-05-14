@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Todo } from "../types";
+import { Project, Todo } from "../types";
 import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
 import { softHaptic } from "../utils/haptics";
@@ -12,6 +12,7 @@ const colors: string[] = ["red", "yellow", "green", "blue"];
 
 interface TodoSettingsProps {
   todo: Todo;
+  projects: Project[];
   updateTodo: (updates: Partial<Todo>) => void;
   removeTodo: () => void;
   archiveTodo: () => void;
@@ -20,6 +21,7 @@ interface TodoSettingsProps {
 
 const TodoSettings: React.FC<TodoSettingsProps> = ({
   todo,
+  projects,
   updateTodo,
   removeTodo,
   archiveTodo,
@@ -34,6 +36,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   const [isPrintPressed, setIsPrintPressed] = useState(false);
   const [isArchivePressed, setIsArchivePressed] = useState(false);
   const [isDeletePressed, setIsDeletePressed] = useState(false);
+  const [isProjectExpanded, setIsProjectExpanded] = useState(false);
 
   const handleColorChange = (color: string) => {
     updateTodo({ color });
@@ -84,6 +87,12 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
     }
   };
 
+  const handleProjectSelect = (projectId: number) => {
+    updateTodo({
+      projectId: todo.projectId === projectId ? undefined : projectId,
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.surface }]}>
       <View style={styles.colorPalette}>
@@ -114,6 +123,61 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
         onChange={(schedule) => updateTodo({ schedule })}
         onReminderChange={(reminder) => updateTodo({ reminder })}
       />
+
+      {projects.length > 0 && (
+        <View style={styles.projectSection}>
+          <TouchableOpacity
+            style={styles.projectHeader}
+            onPress={() => setIsProjectExpanded((prev) => !prev)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.projectHeaderTitle}>
+              <Ionicons
+                name={isProjectExpanded ? "chevron-down" : "chevron-forward"}
+                size={18}
+                color={theme.mutedText}
+              />
+              <Text style={[styles.projectTitle, { color: theme.text }]}>
+                Project
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {isProjectExpanded && (
+            <View style={styles.projectChips}>
+              {projects.map((project) => {
+                const isSelected = todo.projectId === project.id;
+
+                return (
+                  <TouchableOpacity
+                    key={project.id}
+                    onPress={() => handleProjectSelect(project.id)}
+                    activeOpacity={0.75}
+                    style={[
+                      styles.projectChip,
+                      {
+                        backgroundColor: isSelected
+                          ? theme.primary
+                          : theme.elevated,
+                        borderColor: isSelected ? theme.primary : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.projectChipText,
+                        { color: isSelected ? "#FFFFFF" : theme.text },
+                      ]}
+                    >
+                      {project.title || "Untitled"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.actionButtons}>
         <TouchableOpacity
@@ -228,6 +292,37 @@ const styles = StyleSheet.create({
   },
   iconButtonPressed: {
     transform: [{ scale: 0.95 }], // optional: adds a slight scale effect
+  },
+  projectSection: {
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  projectHeader: {
+    paddingVertical: 8,
+  },
+  projectHeaderTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  projectTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  projectChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 4,
+  },
+  projectChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  projectChipText: {
+    fontSize: 14,
   },
 });
 

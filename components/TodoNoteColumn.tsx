@@ -5,13 +5,29 @@ import TodoSettings from "./TodoSettings";
 import TimerView from "./TimerView";
 import ArchivedTodos from "./ArchivedTodos";
 import AppSettings from "./AppSettings";
-import { Todo, TrashedTodo, TrashRetention } from "../types";
+import { Project, Todo, TrashedTodo, TrashRetention } from "../types";
 
 interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
-  activeView: "notes" | "timer" | "settings" | "archive" | "calendar";
+  selectedTodoSource:
+    | { type: "todo" }
+    | { type: "archive" }
+    | { type: "calendar"; entryId: number };
+  selectedProject: Project | null;
+  activeView:
+    | "notes"
+    | "projects"
+    | "timer"
+    | "settings"
+    | "archive"
+    | "calendar";
   isNoteFullscreen: boolean;
   updateTodo: (id: number, updates: Partial<Todo>) => void;
+  updateCalendarEntryTodo: (
+    entryId: number,
+    updates: Partial<Todo>,
+  ) => Promise<void>;
+  updateProject: (id: number, updates: Partial<Project>) => void;
   removeTodo: (id: number) => Todo | null;
   archiveTodo: (id: number) => Todo | null;
   archivedTodos: Todo[];
@@ -29,15 +45,20 @@ interface TodoNoteColumnProps {
   exportData: () => void;
   importData: () => void;
   todos: Todo[];
+  projects: Project[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this line
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   selectedTodo,
+  selectedTodoSource,
+  selectedProject,
   activeView,
   isNoteFullscreen,
   updateTodo,
+  updateCalendarEntryTodo,
+  updateProject,
   removeTodo,
   archiveTodo,
   archivedTodos,
@@ -55,6 +76,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   exportData,
   importData,
   todos,
+  projects,
   setTodos,
   setShowSettings,
 }) => {
@@ -91,7 +113,14 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     if (localSelectedTodo) {
       const updatedTodo = { ...localSelectedTodo, ...updates };
       setLocalSelectedTodo(updatedTodo);
-      updateTodo(updatedTodo.id, updates);
+
+      if (selectedTodoSource.type === "archive") {
+        updateArchivedTodo(updatedTodo.id, updates);
+      } else if (selectedTodoSource.type === "calendar") {
+        updateCalendarEntryTodo(selectedTodoSource.entryId, updates);
+      } else {
+        updateTodo(updatedTodo.id, updates);
+      }
     }
   };
 
@@ -145,6 +174,51 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   const renderContent = () => {
     if (activeView === "timer") {
       return <TimerView selectedTodo={selectedTodo} updateTodo={updateTodo} />;
+    }
+
+    if (activeView === "projects") {
+      if (localSelectedTodo) {
+        return (
+          <TodoItemNote
+            todo={localSelectedTodo}
+            showTitle={isNoteFullscreen}
+            updateNote={(noteText: string) =>
+              handleTodoUpdate({ note: noteText })
+            }
+            onStartEditing={() => {
+              setIsEditing(true);
+              setShowSettings(false);
+            }}
+            onEndEditing={() => setIsEditing(false)}
+            onListDragChange={handleListDragChange}
+            onListDragMove={handleListDragMove}
+          />
+        );
+      }
+
+      if (!selectedProject) return null;
+
+      return (
+        <TodoItemNote
+          todo={{
+            id: selectedProject.id,
+            text: selectedProject.title,
+            note: selectedProject.note,
+            color: selectedProject.color,
+            isEditing: false,
+            noteType: "text",
+            createdAt: selectedProject.createdAt,
+          }}
+          showTitle
+          updateNote={(noteText: string) =>
+            updateProject(selectedProject.id, { note: noteText })
+          }
+          onStartEditing={() => setIsEditing(true)}
+          onEndEditing={() => setIsEditing(false)}
+          onListDragChange={handleListDragChange}
+          onListDragMove={handleListDragMove}
+        />
+      );
     }
 
     if (activeView === "settings") {
@@ -212,6 +286,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
             >
               <TodoSettings
                 todo={localSelectedTodo}
+                projects={projects}
                 updateTodo={handleTodoUpdate}
                 removeTodo={() => {
                   if (localSelectedTodo) {

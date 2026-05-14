@@ -27,6 +27,15 @@ export interface TodoReminder {
   notificationId?: string;
 }
 
+export interface Project {
+  id: number;
+  title: string;
+  note: string;
+  color: string;
+  isEditing: boolean;
+  createdAt?: string;
+}
+
 export interface Todo {
   id: number;
   text: string;
@@ -48,6 +57,7 @@ export interface Todo {
   };
   schedule?: TodoSchedule;
   reminder?: TodoReminder;
+  projectId?: number;
 }
 
 export interface TrashedTodo extends Todo {

@@ -4,7 +4,13 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
 import { Alert } from "react-native";
-import { Todo, CalendarEntry, TrashedTodo, TrashRetention } from "../types";
+import {
+  Todo,
+  CalendarEntry,
+  TrashedTodo,
+  TrashRetention,
+  Project,
+} from "../types";
 import { getNextSelectedTodoAfterRemoval } from "../utils/todoSelection";
 import {
   createTrashedTodo,
@@ -18,6 +24,7 @@ interface StoredData {
   version: number;
   todos: Todo[];
   archivedTodos: Todo[];
+  projects?: Project[];
   calendarEntries?: CalendarEntry[];
   trashedTodos?: TrashedTodo[];
   trashRetention?: TrashRetention;
@@ -28,6 +35,7 @@ const DEFAULT_TRASH_RETENTION: TrashRetention = "7d";
 export const useTodos = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [trashedTodos, setTrashedTodos] = useState<TrashedTodo[]>([]);
   const [trashRetention, setTrashRetentionState] = useState<TrashRetention>(
     DEFAULT_TRASH_RETENTION,
@@ -39,6 +47,7 @@ export const useTodos = () => {
     (
       nextTodos: Todo[],
       nextArchivedTodos: Todo[],
+      nextProjects: Project[],
       nextTrashedTodos: TrashedTodo[],
       nextTrashRetention: TrashRetention,
     ) => {
@@ -46,6 +55,7 @@ export const useTodos = () => {
         version: CURRENT_VERSION,
         todos: nextTodos,
         archivedTodos: nextArchivedTodos,
+        projects: nextProjects,
         trashedTodos: nextTrashedTodos,
         trashRetention: nextTrashRetention,
       };
@@ -79,11 +89,13 @@ export const useTodos = () => {
 
             setTodos(parsedData.todos);
             setArchivedTodos(parsedData.archivedTodos);
+            setProjects(parsedData.projects ?? []);
             setTrashedTodos(retainedTrashedTodos);
             setTrashRetentionState(parsedRetention);
           } else if (Array.isArray(parsedData)) {
             setTodos(parsedData);
             setArchivedTodos([]);
+            setProjects([]);
             setTrashedTodos([]);
           }
         }
@@ -99,17 +111,24 @@ export const useTodos = () => {
   useEffect(() => {
     if (!isLoaded) return;
 
-    saveStoredTodos(todos, archivedTodos, trashedTodos, trashRetention);
+    saveStoredTodos(
+      todos,
+      archivedTodos,
+      projects,
+      trashedTodos,
+      trashRetention,
+    );
   }, [
     todos,
     archivedTodos,
+    projects,
     trashedTodos,
     trashRetention,
     isLoaded,
     saveStoredTodos,
   ]);
 
-  const addTodo = (): Todo => {
+  const addTodo = (initialUpdates: Partial<Todo> = {}): Todo => {
     const newTodo: Todo = {
       id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
       text: "",
@@ -124,9 +143,32 @@ export const useTodos = () => {
         minutes: "25",
         isActive: false,
       },
+      ...initialUpdates,
     };
     setTodos((prevTodos) => [...prevTodos, newTodo]);
     return newTodo;
+  };
+
+  const addProject = (): Project => {
+    const newProject: Project = {
+      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+      title: "",
+      note: "",
+      color: "blue",
+      isEditing: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    setProjects((prevProjects) => [...prevProjects, newProject]);
+    return newProject;
+  };
+
+  const updateProject = (id: number, updates: Partial<Project>): void => {
+    setProjects((prevProjects) =>
+      prevProjects.map((project) =>
+        project.id === id ? { ...project, ...updates } : project,
+      ),
+    );
   };
 
   const updateTodo = async (
@@ -138,7 +180,13 @@ export const useTodos = () => {
         todo.id === id ? { ...todo, ...updates } : todo,
       );
 
-      saveStoredTodos(nextTodos, archivedTodos, trashedTodos, trashRetention);
+      saveStoredTodos(
+        nextTodos,
+        archivedTodos,
+        projects,
+        trashedTodos,
+        trashRetention,
+      );
 
       return nextTodos;
     });
@@ -208,7 +256,10 @@ export const useTodos = () => {
     const todoToRestore = trashedTodos.find((todo) => todo.id === id);
     if (!todoToRestore) return;
 
-    setTodos((prevTodos) => [...prevTodos, restoreTodoFromTrash(todoToRestore)]);
+    setTodos((prevTodos) => [
+      ...prevTodos,
+      restoreTodoFromTrash(todoToRestore),
+    ]);
     setTrashedTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
   };
 
@@ -238,6 +289,7 @@ export const useTodos = () => {
         version: CURRENT_VERSION,
         todos,
         archivedTodos,
+        projects,
         calendarEntries,
         trashedTodos,
         trashRetention,
@@ -294,6 +346,7 @@ export const useTodos = () => {
         if (importedData.version === CURRENT_VERSION) {
           setTodos(importedData.todos);
           setArchivedTodos(importedData.archivedTodos);
+          setProjects(importedData.projects ?? []);
           setTrashedTodos(
             getRetainedTrashedTodos(
               importedData.trashedTodos ?? [],
@@ -329,10 +382,14 @@ export const useTodos = () => {
     setTodos,
     archivedTodos,
     setArchivedTodos,
+    projects,
+    setProjects,
     trashedTodos,
     trashRetention,
     addTodo,
+    addProject,
     updateTodo,
+    updateProject,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,

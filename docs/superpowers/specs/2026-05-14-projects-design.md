@@ -20,11 +20,13 @@ If the selected project sticky is tapped again, it collapses and deselects. The 
 
 Projects view shows only projects. Notes without a project stay in the normal Notes view and do not appear in a "No project" group.
 
+When a note belongs to a project, it remains visible inside that project regardless of whether the note currently lives in the active Notes view, Archive, or Calendar. Projects organize by theme, not by storage location.
+
 ## Right Column Behavior
 
 When a project sticky is selected, the right column shows a project note/comment area. This behaves like an editable note for project-level context, planning, or comments.
 
-When a child note inside a project is selected, the right column shows that note normally, using the existing note editor behavior.
+When a child note inside a project is selected, the right column shows that note normally, using the existing note editor behavior and saving edits back to the note's current source.
 
 When no project or note is selected in Projects view, the right column can remain empty or show the existing blank state.
 
@@ -70,8 +72,8 @@ Implement the functional foundation:
 - Projects view access from long press on docs icon;
 - project list rendering in the left column;
 - project selection, expansion, collapse, and project note editing;
-- child note rendering under selected project;
+- child note rendering under selected project across Notes, Archive, and Calendar;
 - create project or note-in-project from long press on `+`;
 - project assignment in `TodoSettings`.
 
-Leave richer project controls, archive behavior for projects, project search, and project cards in normal Notes view for later.
+Leave richer project controls, project search, and project cards in normal Notes view for later.

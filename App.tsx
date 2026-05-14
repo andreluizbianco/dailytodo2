@@ -15,7 +15,8 @@ import TopBar from "./components/TopBar";
 import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
 import TodoNoteColumn from "./components/TodoNoteColumn";
-import { Todo, CalendarEntry } from "./types";
+import ProjectList from "./components/ProjectList";
+import { Project, Todo, CalendarEntry } from "./types";
 import { useTodos } from "./hooks/useTodos";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useTheme } from "./utils/theme";
@@ -38,8 +39,18 @@ const { TimerModule } = NativeModules;
 // Ignore the specific warning about defaultProps
 LogBox.ignoreLogs(["Warning: ExpandableCalendar: Support for defaultProps"]);
 
-type ViewType = "notes" | "timer" | "settings" | "archive" | "calendar";
+type ViewType =
+  | "notes"
+  | "projects"
+  | "timer"
+  | "settings"
+  | "archive"
+  | "calendar";
 type CalendarViewMode = "day" | "week";
+type SelectedTodoSource =
+  | { type: "todo" }
+  | { type: "archive" }
+  | { type: "calendar"; entryId: number };
 
 const AppContent = () => {
   const { isDarkMode, theme } = useTheme();
@@ -53,6 +64,9 @@ const AppContent = () => {
   const [calendarViewMode, setCalendarViewMode] =
     useState<CalendarViewMode>("day");
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [selectedTodoSource, setSelectedTodoSource] =
+    useState<SelectedTodoSource>({ type: "todo" });
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [didRestoreSelectedTodo, setDidRestoreSelectedTodo] = useState(false);
   const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -64,10 +78,13 @@ const AppContent = () => {
     setTodos,
     archivedTodos,
     setArchivedTodos,
+    projects,
     trashedTodos,
     trashRetention,
     addTodo,
+    addProject,
     updateTodo,
+    updateProject,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,
@@ -102,9 +119,19 @@ const AppContent = () => {
     }).start();
   }, [activeView, isNoteFullscreen, settingsLayoutAnimation]);
 
-  const handleSelectTodo = useCallback((todo: Todo | null) => {
-    setSelectedTodo(todo);
-    saveLastSelectedTodoId(todo?.id ?? null);
+  const handleSelectTodo = useCallback(
+    (todo: Todo | null, source: SelectedTodoSource = { type: "todo" }) => {
+      setSelectedTodo(todo);
+      setSelectedTodoSource(source);
+      saveLastSelectedTodoId(
+        source.type === "todo" ? (todo?.id ?? null) : null,
+      );
+    },
+    [],
+  );
+
+  const handleSelectProject = useCallback((project: Project | null) => {
+    setSelectedProject(project);
   }, []);
 
   useEffect(() => {
@@ -335,6 +362,19 @@ const AppContent = () => {
       return undefined;
     }
 
+    if (activeView === "projects") {
+      if (selectedProject) {
+        const newTodo = addTodo({ projectId: selectedProject.id });
+        handleSelectTodo(newTodo, { type: "todo" });
+        return newTodo;
+      }
+
+      const newProject = addProject();
+      handleSelectProject(newProject);
+      handleSelectTodo(null);
+      return newProject;
+    }
+
     if (activeView === "calendar") {
       const newTodo: Todo = {
         id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
@@ -371,7 +411,8 @@ const AppContent = () => {
       return calendarEntry;
     } else {
       const newTodo = addTodo();
-      handleSelectTodo(newTodo);
+      handleSelectProject(null);
+      handleSelectTodo(newTodo, { type: "todo" });
       return newTodo;
     }
   };
@@ -396,15 +437,37 @@ const AppContent = () => {
     }
   };
 
+  const handleCalendarAddEntry = async () => {
+    const entry = await handleAddTodo();
+    return entry as Todo | CalendarEntry | undefined;
+  };
+
+  const updateCalendarEntryTodo = useCallback(
+    async (entryId: number, updates: Partial<Todo>) => {
+      const updatedEntries = calendarEntries.map((entry) =>
+        entry.id === entryId
+          ? { ...entry, todo: { ...entry.todo, ...updates } }
+          : entry,
+      );
+
+      setCalendarEntries(updatedEntries);
+      await AsyncStorage.setItem(
+        "calendarEntries",
+        JSON.stringify(updatedEntries),
+      );
+    },
+    [calendarEntries],
+  );
+
   const handleRemoveTodo = (id: number): Todo | null => {
     const nextTodo = removeTodo(id);
-    handleSelectTodo(nextTodo);
+    handleSelectTodo(nextTodo, { type: "todo" });
     return nextTodo;
   };
 
   const handleArchiveTodo = (id: number): Todo | null => {
     const nextTodo = archiveTodo(id);
-    handleSelectTodo(nextTodo);
+    handleSelectTodo(nextTodo, { type: "todo" });
     return nextTodo;
   };
 
@@ -415,7 +478,7 @@ const AppContent = () => {
           <Calendar
             viewMode={calendarViewMode}
             onDateSelect={setSelectedDate}
-            onAddEntry={handleAddTodo}
+            onAddEntry={handleCalendarAddEntry}
             entries={calendarEntries}
             setEntries={setCalendarEntries}
             todos={todos}
@@ -452,13 +515,34 @@ const AppContent = () => {
             },
           ]}
         >
-          <TodoList
-            todos={todos}
-            setTodos={setTodos}
-            updateTodo={updateTodo}
-            selectedTodo={selectedTodo}
-            setSelectedTodo={handleSelectTodo}
-          />
+          {activeView === "projects" ? (
+            <ProjectList
+              projects={projects}
+              todos={todos}
+              archivedTodos={archivedTodos}
+              calendarEntries={calendarEntries}
+              selectedProject={currentSelectedProject}
+              selectedTodo={currentSelectedTodo}
+              selectedTodoSource={selectedTodoSource}
+              updateProject={updateProject}
+              updateTodo={updateTodo}
+              updateArchivedTodo={updateArchivedTodo}
+              updateCalendarEntryTodo={updateCalendarEntryTodo}
+              setSelectedProject={handleSelectProject}
+              setSelectedTodo={handleSelectTodo}
+            />
+          ) : (
+            <TodoList
+              todos={todos}
+              setTodos={setTodos}
+              updateTodo={updateTodo}
+              selectedTodo={selectedTodo}
+              setSelectedTodo={(todo) => {
+                handleSelectProject(null);
+                handleSelectTodo(todo, { type: "todo" });
+              }}
+            />
+          )}
         </Animated.View>
         <Animated.View
           style={[
@@ -473,9 +557,13 @@ const AppContent = () => {
         >
           <TodoNoteColumn
             selectedTodo={currentSelectedTodo}
+            selectedTodoSource={selectedTodoSource}
+            selectedProject={currentSelectedProject}
             activeView={activeView}
             isNoteFullscreen={isNoteFullscreen}
             updateTodo={updateTodo}
+            updateCalendarEntryTodo={updateCalendarEntryTodo}
+            updateProject={updateProject}
             removeTodo={handleRemoveTodo} // Use the new handler
             archiveTodo={handleArchiveTodo}
             archivedTodos={archivedTodos}
@@ -494,6 +582,7 @@ const AppContent = () => {
             importData={importData}
             todos={todos}
             setTodos={setTodos}
+            projects={projects}
             setShowSettings={setShowSettings}
           />
         </Animated.View>
@@ -516,15 +605,43 @@ const AppContent = () => {
     setActiveView((prev) => (prev === "settings" ? "notes" : "settings"));
   };
 
+  const handleProjectsLongPress = () => {
+    setShowSettings(false);
+    setIsNoteFullscreen(false);
+    setActiveView((prev) => (prev === "projects" ? "notes" : "projects"));
+  };
+
   const handleTopBarViewChange = (view: ViewType) => {
     if (view !== activeView || view !== "notes") {
       setIsNoteFullscreen(false);
     }
+    if (view !== "projects") {
+      handleSelectProject(null);
+    }
     setActiveView(view);
   };
 
-  const currentSelectedTodo = selectedTodo
-    ? (todos.find((todo) => todo.id === selectedTodo.id) ?? null)
+  const currentSelectedTodo = (() => {
+    if (!selectedTodo) return null;
+
+    if (selectedTodoSource.type === "archive") {
+      return (
+        archivedTodos.find((todo) => todo.id === selectedTodo.id) ??
+        selectedTodo
+      );
+    }
+
+    if (selectedTodoSource.type === "calendar") {
+      return (
+        calendarEntries.find((entry) => entry.id === selectedTodoSource.entryId)
+          ?.todo ?? selectedTodo
+      );
+    }
+
+    return todos.find((todo) => todo.id === selectedTodo.id) ?? selectedTodo;
+  })();
+  const currentSelectedProject = selectedProject
+    ? (projects.find((project) => project.id === selectedProject.id) ?? null)
     : null;
 
   const handleAddPress = () => {
@@ -538,6 +655,11 @@ const AppContent = () => {
     if (activeView === "archive") {
       setShowSettings(false);
       setIsNoteFullscreen((prev) => !prev);
+      return;
+    }
+
+    if (activeView === "projects") {
+      setShowSettings(false);
       return;
     }
 
@@ -573,6 +695,7 @@ const AppContent = () => {
             onAddTodo={handleAddTodo}
             onAddPress={handleAddPress}
             onSettingsLongPress={handleSettingsLongPress}
+            onProjectsLongPress={handleProjectsLongPress}
             activeView={activeView}
             setActiveView={handleTopBarViewChange}
             showSettings={showSettings}
