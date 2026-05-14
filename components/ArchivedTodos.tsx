@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,8 @@ interface ArchivedTodosProps {
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   isExpanded?: boolean;
+  onNoteBodyDragChange?: (isDragging: boolean) => void;
+  onNoteBodyDragMove?: (pageY: number) => number;
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -43,8 +45,15 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   setTodos,
   updateTodo,
   isExpanded = false,
+  onNoteBodyDragChange,
+  onNoteBodyDragMove,
 }) => {
   const { theme } = useTheme();
+  const searchScrollRef = useRef<ScrollView>(null);
+  const searchScrollYRef = useRef(0);
+  const searchScrollPageYRef = useRef(0);
+  const searchViewportHeightRef = useRef(0);
+  const searchContentHeightRef = useRef(0);
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(
     null,
   );
@@ -57,6 +66,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   >([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isExpandedSearching, setIsExpandedSearching] = useState(false);
+  const [isSearchNoteDragging, setIsSearchNoteDragging] = useState(false);
   const hasExpandedSearch =
     archiveTitleQuery.trim().length > 0 || archiveBodyQuery.trim().length > 0;
   const visibleArchivedTodos = isExpanded
@@ -86,9 +96,9 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           !lowerTitleQuery || todo.text.toLowerCase().includes(lowerTitleQuery);
         const matchesBody =
           !lowerBodyQuery ||
-          getArchivePreviewText(todo.note).toLowerCase().includes(
-            lowerBodyQuery,
-          );
+          getArchivePreviewText(todo.note)
+            .toLowerCase()
+            .includes(lowerBodyQuery);
 
         return matchesTitle && matchesBody;
       };
@@ -260,6 +270,69 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
     }
   };
 
+  const handleSearchNoteDragChange = (isDragging: boolean) => {
+    setIsSearchNoteDragging(isDragging);
+    onNoteBodyDragChange?.(isDragging);
+
+    if (isDragging) {
+      searchScrollRef.current &&
+        (
+          searchScrollRef.current as unknown as {
+            measureInWindow: (
+              callback: (
+                x: number,
+                y: number,
+                width: number,
+                height: number,
+              ) => void,
+            ) => void;
+          }
+        ).measureInWindow((_, pageY, __, height) => {
+          searchScrollPageYRef.current = pageY;
+          searchViewportHeightRef.current = height;
+        });
+    }
+  };
+
+  const handleSearchNoteDragMove = (pageY: number) => {
+    const viewportHeight = searchViewportHeightRef.current;
+    if (viewportHeight <= 0) return 0;
+
+    const maxScrollY = Math.max(
+      0,
+      searchContentHeightRef.current - viewportHeight,
+    );
+    const edgeSize = 72;
+    const distanceFromTop = pageY - searchScrollPageYRef.current;
+    const distanceFromBottom =
+      searchScrollPageYRef.current + viewportHeight - pageY;
+    let delta = 0;
+
+    if (distanceFromTop < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromTop) / edgeSize;
+      delta = -Math.max(2, Math.round(pressure * 6));
+    } else if (distanceFromBottom < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromBottom) / edgeSize;
+      delta = Math.max(2, Math.round(pressure * 6));
+    }
+
+    const outerDelta = onNoteBodyDragMove?.(pageY) ?? 0;
+
+    if (delta === 0) return outerDelta;
+
+    const nextY = Math.max(
+      0,
+      Math.min(maxScrollY, searchScrollYRef.current + delta),
+    );
+    const appliedDelta = nextY - searchScrollYRef.current;
+
+    if (appliedDelta === 0) return outerDelta;
+
+    searchScrollYRef.current = nextY;
+    searchScrollRef.current?.scrollTo({ y: nextY, animated: false });
+    return appliedDelta + outerDelta;
+  };
+
   const renderSearchResults = () => {
     if (!searchQuery.trim() && !hasExpandedSearch) {
       return null;
@@ -427,16 +500,25 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
 
     return (
       <ScrollView
+        ref={searchScrollRef}
         style={styles.searchResults}
+        scrollEnabled={!isSearchNoteDragging}
         keyboardShouldPersistTaps="handled"
+        onLayout={(event) => {
+          searchViewportHeightRef.current = event.nativeEvent.layout.height;
+        }}
+        onContentSizeChange={(_, height) => {
+          searchContentHeightRef.current = height;
+        }}
+        onScroll={(event) => {
+          searchScrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
         {resultsToRender.map((result, index) => (
           <View
             key={index}
-            style={[
-              styles.searchResult,
-              { backgroundColor: theme.elevated },
-            ]}
+            style={[styles.searchResult, { backgroundColor: theme.elevated }]}
           >
             <View style={styles.resultHeader}>
               <View style={styles.resultTitleContainer}>
@@ -499,7 +581,9 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
               todo={getTodoForNote(result)}
               updateNote={(note) => handleUpdateNote(result, note)}
               onStartEditing={() => {}}
-              onEndEditing={() => {}}
+              onEndEditing={() => handleSearchNoteDragChange(false)}
+              onListDragChange={handleSearchNoteDragChange}
+              onListDragMove={handleSearchNoteDragMove}
             />
           </View>
         ))}
@@ -592,6 +676,8 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
           isArchiveView={true}
           unarchiveTodo={unarchiveTodo}
           columns={isExpanded ? 2 : 1}
+          onNoteBodyDragChange={onNoteBodyDragChange}
+          onNoteBodyDragMove={onNoteBodyDragMove}
         />
       ) : (
         <Text style={[styles.emptyText, { color: theme.mutedText }]}>

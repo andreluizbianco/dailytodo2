@@ -7,6 +7,7 @@ import {
   NativeModules,
   NativeEventEmitter,
   Animated,
+  AppState,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -80,6 +81,10 @@ const AppContent = () => {
   } = useTodos();
 
   const todosRef = useRef<Todo[]>([]);
+  const activeViewRef = useRef<ViewType>(activeView);
+  const previousActiveViewRef = useRef<ViewType>(activeView);
+  const appStateRef = useRef(AppState.currentState);
+  const didSyncRunningSelectionOnLoadRef = useRef(false);
 
   useEffect(() => {
     Animated.timing(themeAnimation, {
@@ -105,6 +110,10 @@ const AppContent = () => {
   useEffect(() => {
     todosRef.current = todos;
   }, [todos]);
+
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
 
   useEffect(() => {
     if (!todosLoaded) return;
@@ -254,27 +263,72 @@ const AppContent = () => {
     syncPendingTimerCompletion();
   }, [todos]);
 
-  useEffect(() => {
-    const syncRunningTodoSelection = async () => {
-      if (activeView !== "notes") return;
-      if (!TimerModule?.getTimerState) return;
-      if (todos.length === 0) return;
+  const syncRunningTodoSelection = useCallback(async () => {
+    if (!TimerModule?.getTimerState) return false;
+    if (todosRef.current.length === 0) return false;
 
+    try {
       const state = await TimerModule.getTimerState();
 
-      if (!state?.isRunning) return;
+      if (!state?.isRunning) return false;
 
-      const runningTodo = todos.find(
+      const runningTodo = todosRef.current.find(
         (todo) => String(todo.id) === String(state.todoId),
       );
 
       if (runningTodo) {
         handleSelectTodo(runningTodo);
+        return true;
       }
-    };
+    } catch (error) {
+      console.warn("Failed to sync running timer selection", error);
+    }
 
+    return false;
+  }, [handleSelectTodo]);
+
+  useEffect(() => {
+    if (!todosLoaded || !didRestoreSelectedTodo) return;
+    if (didSyncRunningSelectionOnLoadRef.current) return;
+
+    didSyncRunningSelectionOnLoadRef.current = true;
     syncRunningTodoSelection();
-  }, [activeView, handleSelectTodo, todos]);
+    const retryTimeout = setTimeout(() => {
+      syncRunningTodoSelection();
+    }, 450);
+
+    return () => clearTimeout(retryTimeout);
+  }, [didRestoreSelectedTodo, syncRunningTodoSelection, todosLoaded]);
+
+  useEffect(() => {
+    const previousActiveView = previousActiveViewRef.current;
+    previousActiveViewRef.current = activeView;
+
+    const shouldSyncRunningSelection =
+      (activeView === "notes" || activeView === "timer") &&
+      previousActiveView !== activeView;
+
+    if (shouldSyncRunningSelection) {
+      syncRunningTodoSelection();
+    }
+  }, [activeView, syncRunningTodoSelection]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      const wasAway = /inactive|background/.test(appStateRef.current);
+      appStateRef.current = nextAppState;
+
+      if (
+        wasAway &&
+        nextAppState === "active" &&
+        (activeViewRef.current === "notes" || activeViewRef.current === "timer")
+      ) {
+        syncRunningTodoSelection();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [syncRunningTodoSelection]);
 
   const handleAddTodo = async () => {
     if (activeView === "settings") {

@@ -132,10 +132,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
 
     if (delta === 0) return 0;
 
-    const nextY = Math.max(
-      0,
-      Math.min(maxScrollY, scrollYRef.current + delta),
-    );
+    const nextY = Math.max(0, Math.min(maxScrollY, scrollYRef.current + delta));
     const appliedDelta = nextY - scrollYRef.current;
 
     if (appliedDelta === 0) return 0;
@@ -176,6 +173,8 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           todos={todos}
           setTodos={setTodos}
           isExpanded={isNoteFullscreen}
+          onNoteBodyDragChange={handleListDragChange}
+          onNoteBodyDragMove={handleListDragMove}
         />
       );
     }

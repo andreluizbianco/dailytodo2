@@ -219,6 +219,47 @@ fun startTimer(
 
   @ReactMethod
   fun getTimerState(promise: Promise) {
+    val prefs = reactContext.getSharedPreferences("timer_prefs", Context.MODE_PRIVATE)
+    val hasPersistedRunningTimer = prefs.getBoolean("currentIsRunning", false)
+
+    if (!TimerService.currentIsRunning && hasPersistedRunningTimer) {
+      val persistedTodoId = prefs.getString("currentTodoId", "-1.0")?.toDoubleOrNull() ?: -1.0
+      val persistedStartedAt = prefs.getLong("currentStartedAt", 0L)
+      val persistedLastStartedAt = prefs.getLong("currentLastStartedAt", 0L)
+      val persistedDurationSeconds = prefs.getInt("currentDurationSeconds", 0)
+      val persistedStoredElapsedSeconds = prefs.getInt("currentActiveElapsedSeconds", 0)
+      val persistedIsPaused = prefs.getBoolean("currentIsPaused", false)
+      val persistedTimerMode = prefs.getString("currentTimerMode", "pomodoro") ?: "pomodoro"
+      val persistedElapsedSeconds =
+        if (persistedIsPaused) {
+          persistedStoredElapsedSeconds
+        } else {
+          persistedStoredElapsedSeconds +
+            ((System.currentTimeMillis() - persistedLastStartedAt) / 1000L).toInt()
+        }
+      val persistedRemainingSeconds =
+        if (persistedTimerMode == "stopwatch") {
+          0
+        } else {
+          maxOf(0, persistedDurationSeconds - persistedElapsedSeconds)
+        }
+
+      val persistedMap = Arguments.createMap().apply {
+        putDouble("todoId", persistedTodoId)
+        putDouble("startedAt", persistedStartedAt.toDouble())
+        putDouble("lastStartedAt", persistedLastStartedAt.toDouble())
+        putInt("durationSeconds", persistedDurationSeconds)
+        putInt("remainingSeconds", persistedRemainingSeconds)
+        putInt("activeElapsedSeconds", persistedElapsedSeconds)
+        putBoolean("isRunning", true)
+        putBoolean("isPaused", persistedIsPaused)
+        putString("timerMode", persistedTimerMode)
+      }
+
+      promise.resolve(persistedMap)
+      return
+    }
+
     val map = Arguments.createMap().apply {
       putDouble("todoId", TimerService.currentTodoId)
       putDouble("startedAt", TimerService.currentStartedAt.toDouble())

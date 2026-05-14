@@ -51,8 +51,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const dayScrollRef = useRef<ScrollView>(null);
   const settingsRefByEntryId = useRef<Record<number, View | null>>({});
   const dayScrollYRef = useRef(0);
+  const dayScrollPageYRef = useRef(0);
   const dayViewportHeightRef = useRef(0);
   const dayContentHeightRef = useRef(0);
+  const [isNoteBodyDragging, setIsNoteBodyDragging] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
@@ -211,6 +213,66 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       },
       () => undefined,
     );
+  };
+
+  const handleNoteBodyDragChange = (isDragging: boolean) => {
+    setIsNoteBodyDragging(isDragging);
+
+    if (isDragging) {
+      dayScrollRef.current &&
+        (
+          dayScrollRef.current as unknown as {
+            measureInWindow: (
+              callback: (
+                x: number,
+                y: number,
+                width: number,
+                height: number,
+              ) => void,
+            ) => void;
+          }
+        ).measureInWindow((_, pageY, __, height) => {
+          dayScrollPageYRef.current = pageY;
+          dayViewportHeightRef.current = height;
+        });
+    }
+  };
+
+  const handleNoteBodyDragMove = (pageY: number) => {
+    const viewportHeight = dayViewportHeightRef.current;
+    if (viewportHeight <= 0) return 0;
+
+    const maxScrollY = Math.max(
+      0,
+      dayContentHeightRef.current - viewportHeight,
+    );
+    const edgeSize = 72;
+    const distanceFromTop = pageY - dayScrollPageYRef.current;
+    const distanceFromBottom =
+      dayScrollPageYRef.current + viewportHeight - pageY;
+    let delta = 0;
+
+    if (distanceFromTop < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromTop) / edgeSize;
+      delta = -Math.max(2, Math.round(pressure * 6));
+    } else if (distanceFromBottom < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromBottom) / edgeSize;
+      delta = Math.max(2, Math.round(pressure * 6));
+    }
+
+    if (delta === 0) return 0;
+
+    const nextY = Math.max(
+      0,
+      Math.min(maxScrollY, dayScrollYRef.current + delta),
+    );
+    const appliedDelta = nextY - dayScrollYRef.current;
+
+    if (appliedDelta === 0) return 0;
+
+    dayScrollYRef.current = nextY;
+    dayScrollRef.current?.scrollTo({ y: nextY, animated: false });
+    return appliedDelta;
   };
 
   const getColorValue = (buttonColor: string): string => {
@@ -531,6 +593,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       <ScrollView
         ref={dayScrollRef}
         style={styles.dayContainer}
+        scrollEnabled={!isNoteBodyDragging}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={(_, height) => {
           dayContentHeightRef.current = height;
@@ -589,7 +652,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
               todo={entry.todo}
               updateNote={(note) => handleUpdateNote(entry.id, note)}
               onStartEditing={() => {}}
-              onEndEditing={() => {}}
+              onEndEditing={() => setIsNoteBodyDragging(false)}
+              onListDragChange={handleNoteBodyDragChange}
+              onListDragMove={handleNoteBodyDragMove}
             />
             {renderSettings(entry)}
           </View>

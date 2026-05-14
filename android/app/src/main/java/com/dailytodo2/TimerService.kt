@@ -241,10 +241,27 @@ class TimerService : Service() {
     currentIsRunning = isRunning
     currentIsPaused = isPaused
     currentTimerMode = timerMode
+    persistCurrentState(isRunning, isPaused)
 
     if (emitEvent) {
       sendTimerStateChangedEvent()
     }
+  }
+
+  private fun persistCurrentState(isRunning: Boolean, isPaused: Boolean) {
+    val prefs = getSharedPreferences("timer_prefs", MODE_PRIVATE)
+
+    prefs.edit()
+      .putString("currentTodoId", todoId.toString())
+      .putLong("currentStartedAt", startedAt)
+      .putLong("currentLastStartedAt", lastStartedAt)
+      .putInt("currentDurationSeconds", durationSeconds)
+      .putInt("currentRemainingSeconds", remainingSeconds)
+      .putInt("currentActiveElapsedSeconds", getDisplayElapsedSeconds())
+      .putBoolean("currentIsRunning", isRunning)
+      .putBoolean("currentIsPaused", isPaused)
+      .putString("currentTimerMode", timerMode)
+      .apply()
   }
 
   private fun updateNotification() {

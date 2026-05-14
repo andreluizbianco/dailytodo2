@@ -1,21 +1,11 @@
-import React, { useRef } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Animated,
-  Text,
-  StyleProp,
-  TextStyle,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useRef, useState } from "react";
+import { View, StyleSheet, ScrollView, Animated } from "react-native";
 import { PanGestureHandler } from "react-native-gesture-handler";
 import TodoItem, { TodoItemRef } from "./TodoItem";
+import TodoItemNote from "./TodoItemNote";
 import { Todo } from "../types";
 import { useTodoListDrag } from "../hooks/useTodoListDrag";
-import { getArchivePreviewItems } from "../utils/archivePreview";
 import { getToggledArchiveSelection } from "../utils/todoSelection";
-import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 import { getArchiveGridRows } from "../utils/archiveLayout";
 
 interface TodoListProps {
@@ -27,6 +17,8 @@ interface TodoListProps {
   isArchiveView?: boolean;
   unarchiveTodo?: (id: number) => void;
   columns?: 1 | 2;
+  onNoteBodyDragChange?: (isDragging: boolean) => void;
+  onNoteBodyDragMove?: (pageY: number) => number;
 }
 
 const ITEM_GAP = 3;
@@ -40,9 +32,16 @@ const TodoList: React.FC<TodoListProps> = ({
   isArchiveView = false,
   unarchiveTodo,
   columns = 1,
+  onNoteBodyDragChange,
+  onNoteBodyDragMove,
 }) => {
-  const { noteBodyFontSize, theme } = useTheme();
   const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const scrollPageYRef = useRef(0);
+  const scrollViewportHeightRef = useRef(0);
+  const scrollContentHeightRef = useRef(0);
+  const [isNoteBodyDragging, setIsNoteBodyDragging] = useState(false);
   const {
     draggedTodoId,
     pan,
@@ -69,95 +68,87 @@ const TodoList: React.FC<TodoListProps> = ({
     );
   };
 
-  const renderArchivePreview = (
+  const handleArchiveNoteDragChange = (isDragging: boolean) => {
+    setIsNoteBodyDragging(isDragging);
+    onNoteBodyDragChange?.(isDragging);
+
+    if (isDragging) {
+      scrollViewRef.current &&
+        (
+          scrollViewRef.current as unknown as {
+            measureInWindow: (
+              callback: (
+                x: number,
+                y: number,
+                width: number,
+                height: number,
+              ) => void,
+            ) => void;
+          }
+        ).measureInWindow((_, pageY, __, height) => {
+          scrollPageYRef.current = pageY;
+          scrollViewportHeightRef.current = height;
+        });
+    }
+  };
+
+  const handleArchiveNoteDragMove = (pageY: number) => {
+    const viewportHeight = scrollViewportHeightRef.current;
+    if (viewportHeight <= 0) return 0;
+
+    const maxScrollY = Math.max(
+      0,
+      scrollContentHeightRef.current - viewportHeight,
+    );
+    const edgeSize = 72;
+    const distanceFromTop = pageY - scrollPageYRef.current;
+    const distanceFromBottom = scrollPageYRef.current + viewportHeight - pageY;
+    let delta = 0;
+
+    if (distanceFromTop < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromTop) / edgeSize;
+      delta = -Math.max(2, Math.round(pressure * 6));
+    } else if (distanceFromBottom < edgeSize) {
+      const pressure = Math.max(0, edgeSize - distanceFromBottom) / edgeSize;
+      delta = Math.max(2, Math.round(pressure * 6));
+    }
+
+    const outerDelta = onNoteBodyDragMove?.(pageY) ?? 0;
+
+    if (delta === 0) return outerDelta;
+
+    const nextY = Math.max(0, Math.min(maxScrollY, scrollYRef.current + delta));
+    const appliedDelta = nextY - scrollYRef.current;
+
+    if (appliedDelta === 0) return outerDelta;
+
+    scrollYRef.current = nextY;
+    scrollViewRef.current?.scrollTo({ y: nextY, animated: false });
+    return appliedDelta + outerDelta;
+  };
+
+  const renderArchiveNoteBody = (
     todo: Todo,
     isSelected: boolean,
     isGrid = false,
   ) => {
-    const archivePreviewItems =
-      isArchiveView && isSelected
-        ? getArchivePreviewItems(todo.note, todo.noteType)
-        : [];
-
-    if (archivePreviewItems.length === 0) return null;
+    if (!isArchiveView || !isSelected) return null;
 
     return (
       <View
         style={[
-          styles.archivePreviewContainer,
-          isGrid && styles.gridArchivePreviewContainer,
-          {
-            backgroundColor: getNoteBackgroundColor(todo.color, theme),
-          },
+          styles.archiveNoteBodyContainer,
+          isGrid && styles.gridArchiveNoteBodyContainer,
         ]}
       >
-        {archivePreviewItems.map((item, index) => {
-          const textDecorationLine: TextStyle["textDecorationLine"] =
-            item.type === "checkbox" && item.checked
-              ? "line-through"
-              : "none";
-          const textStyle: StyleProp<TextStyle> = [
-            styles.archivePreviewText,
-            {
-              color:
-                item.type === "checkbox" && item.checked
-                  ? theme.mutedText
-                  : theme.text,
-              fontSize: noteBodyFontSize,
-              lineHeight: Math.round(noteBodyFontSize * 1.45),
-              textDecorationLine,
-            },
-          ];
-
-          if (item.type === "bullet") {
-            return (
-              <View key={index} style={styles.archivePreviewRow}>
-                <View style={styles.archivePreviewBulletWrap}>
-                  <View
-                    style={[
-                      styles.archivePreviewBullet,
-                      { backgroundColor: theme.mutedText },
-                    ]}
-                  />
-                </View>
-                <Text style={textStyle}>{item.text}</Text>
-              </View>
-            );
-          }
-
-          if (item.type === "checkbox") {
-            return (
-              <View key={index} style={styles.archivePreviewRow}>
-                <View
-                  style={[
-                    styles.archivePreviewCheckbox,
-                    {
-                      borderColor: item.checked ? theme.mutedText : theme.text,
-                      backgroundColor: item.checked
-                        ? theme.mutedText
-                        : "transparent",
-                    },
-                  ]}
-                >
-                  {item.checked ? (
-                    <Ionicons
-                      name="checkmark"
-                      size={10}
-                      color={theme.elevated}
-                    />
-                  ) : null}
-                </View>
-                <Text style={textStyle}>{item.text}</Text>
-              </View>
-            );
-          }
-
-          return (
-            <Text key={index} style={textStyle}>
-              {item.text}
-            </Text>
-          );
-        })}
+        <TodoItemNote
+          todo={todo}
+          updateNote={(note) => updateTodo(todo.id, { note })}
+          onStartEditing={() => stopOtherEdits(todo.id)}
+          onEndEditing={() => setIsNoteBodyDragging(false)}
+          onListDragChange={handleArchiveNoteDragChange}
+          onListDragMove={handleArchiveNoteDragMove}
+        />
       </View>
     );
   };
@@ -189,7 +180,7 @@ const TodoList: React.FC<TodoListProps> = ({
             }
           }}
         />
-        {renderArchivePreview(todo, isSelected, isGrid)}
+        {renderArchiveNoteBody(todo, isSelected, isGrid)}
       </Animated.View>
     );
 
@@ -228,9 +219,21 @@ const TodoList: React.FC<TodoListProps> = ({
     return (
       <View style={styles.container}>
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
           contentContainerStyle={styles.gridScrollContent}
+          scrollEnabled={!isNoteBodyDragging}
           keyboardShouldPersistTaps="handled"
+          onLayout={(event) => {
+            scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_, height) => {
+            scrollContentHeightRef.current = height;
+          }}
+          onScroll={(event) => {
+            scrollYRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
         >
           {getArchiveGridRows(todos).map(([leftTodo, rightTodo]) => (
             <View key={leftTodo.id} style={styles.gridRow}>
@@ -252,7 +255,22 @@ const TodoList: React.FC<TodoListProps> = ({
       style={styles.container}
       onLayout={(event) => setListLayout(event.nativeEvent.layout)}
     >
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        scrollEnabled={!isNoteBodyDragging}
+        keyboardShouldPersistTaps="handled"
+        onLayout={(event) => {
+          scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+        }}
+        onContentSizeChange={(_, height) => {
+          scrollContentHeightRef.current = height;
+        }}
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+      >
         {todos.map((todo) => {
           return renderTodoItem(todo, true);
         })}
@@ -286,47 +304,15 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  archivePreviewContainer: {
-    borderRadius: 4,
+  archiveNoteBodyContainer: {
     marginLeft: 20,
     marginRight: 12,
     marginTop: 2,
     marginBottom: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
   },
-  archivePreviewText: {
-    fontSize: 14,
-    flex: 1,
-  },
-  gridArchivePreviewContainer: {
+  gridArchiveNoteBodyContainer: {
     marginLeft: 8,
     marginRight: 0,
-  },
-  archivePreviewRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  archivePreviewBulletWrap: {
-    width: 14,
-    alignItems: "center",
-    paddingTop: 9,
-    marginRight: 4,
-  },
-  archivePreviewBullet: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  archivePreviewCheckbox: {
-    width: 14,
-    height: 14,
-    borderWidth: 1,
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 5,
-    marginTop: 5,
   },
 });
 
