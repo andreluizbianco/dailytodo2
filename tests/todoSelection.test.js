@@ -15,7 +15,10 @@ require.extensions[".ts"] = function loadTs(module, filename) {
   module._compile(output, filename);
 };
 
-const { getNextSelectedTodoAfterRemoval } = require(path.join(
+const {
+  getNextSelectedTodoAfterRemoval,
+  getToggledArchiveSelection,
+} = require(path.join(
   __dirname,
   "..",
   "utils",
@@ -40,5 +43,17 @@ assert.deepEqual(getNextSelectedTodoAfterRemoval(todos, 3), {
 
 assert.equal(getNextSelectedTodoAfterRemoval([{ id: 1 }], 1), null);
 assert.equal(getNextSelectedTodoAfterRemoval(todos, 99), null);
+
+assert.deepEqual(getToggledArchiveSelection(null, todos[0]), {
+  id: 1,
+  text: "One",
+});
+
+assert.equal(getToggledArchiveSelection(todos[0], todos[0]), null);
+
+assert.deepEqual(getToggledArchiveSelection(todos[0], todos[1]), {
+  id: 2,
+  text: "Two",
+});
 
 console.log("todo selection tests passed");

@@ -175,6 +175,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           updateTodo={updateTodo}
           todos={todos}
           setTodos={setTodos}
+          isExpanded={isNoteFullscreen}
         />
       );
     }
@@ -240,7 +241,11 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
       onLayout={measureScrollFrame}
       style={[
         styles.container,
-        isNoteFullscreen && activeView === "notes" && styles.fullscreenContainer,
+        isNoteFullscreen &&
+          (activeView === "notes" || activeView === "archive") &&
+          (activeView === "archive"
+            ? styles.archiveFullscreenContainer
+            : styles.fullscreenContainer),
       ]}
     >
       <ScrollView
@@ -276,6 +281,11 @@ const styles = StyleSheet.create({
   fullscreenContainer: {
     paddingLeft: 12,
     paddingRight: 12,
+    paddingBottom: 12,
+  },
+  archiveFullscreenContainer: {
+    paddingLeft: 4,
+    paddingRight: 4,
     paddingBottom: 12,
   },
   scrollView: {

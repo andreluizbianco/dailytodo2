@@ -10,3 +10,8 @@ export const getNextSelectedTodoAfterRemoval = <T extends { id: number }>(
 
   return nextTodos[Math.min(removedIndex, nextTodos.length - 1)];
 };
+
+export const getToggledArchiveSelection = <T extends { id: number }>(
+  selectedTodo: T | null,
+  tappedTodo: T,
+): T | null => (selectedTodo?.id === tappedTodo.id ? null : tappedTodo);

@@ -14,6 +14,8 @@ import { Todo, CalendarEntry } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { softHaptic } from "../utils/haptics";
 import { useTheme } from "../utils/theme";
+import { filterArchivedTodos } from "../utils/archiveSearch";
+import { getArchivePreviewText } from "../utils/archivePreview";
 
 interface SearchResult {
   type: "todo" | "archived" | "calendar";
@@ -29,6 +31,7 @@ interface ArchivedTodosProps {
   todos: Todo[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void;
+  isExpanded?: boolean;
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -39,22 +42,113 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   todos,
   setTodos,
   updateTodo,
+  isExpanded = false,
 }) => {
   const { theme } = useTheme();
   const [selectedArchivedTodo, setSelectedArchivedTodo] = useState<Todo | null>(
     null,
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [archiveTitleQuery, setArchiveTitleQuery] = useState("");
+  const [archiveBodyQuery, setArchiveBodyQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [expandedSearchResults, setExpandedSearchResults] = useState<
+    SearchResult[]
+  >([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isExpandedSearching, setIsExpandedSearching] = useState(false);
+  const hasExpandedSearch =
+    archiveTitleQuery.trim().length > 0 || archiveBodyQuery.trim().length > 0;
+  const visibleArchivedTodos = isExpanded
+    ? filterArchivedTodos(archivedTodos, {
+        titleQuery: archiveTitleQuery,
+        bodyQuery: archiveBodyQuery,
+      })
+    : archivedTodos;
+
+  const handleExpandedSearch = useCallback(
+    async (titleQuery: string, bodyQuery: string) => {
+      setArchiveTitleQuery(titleQuery);
+      setArchiveBodyQuery(bodyQuery);
+
+      const lowerTitleQuery = titleQuery.trim().toLowerCase();
+      const lowerBodyQuery = bodyQuery.trim().toLowerCase();
+
+      if (!lowerTitleQuery && !lowerBodyQuery) {
+        setExpandedSearchResults([]);
+        setIsExpandedSearching(false);
+        return;
+      }
+
+      setIsExpandedSearching(true);
+      const matchesTodo = (todo: Todo) => {
+        const matchesTitle =
+          !lowerTitleQuery || todo.text.toLowerCase().includes(lowerTitleQuery);
+        const matchesBody =
+          !lowerBodyQuery ||
+          getArchivePreviewText(todo.note).toLowerCase().includes(
+            lowerBodyQuery,
+          );
+
+        return matchesTitle && matchesBody;
+      };
+
+      const results: SearchResult[] = [];
+
+      todos.forEach((todo) => {
+        if (matchesTodo(todo)) {
+          results.push({
+            type: "todo",
+            item: todo,
+            matchField: lowerTitleQuery ? "text" : "note",
+          });
+        }
+      });
+
+      archivedTodos.forEach((todo) => {
+        if (matchesTodo(todo)) {
+          results.push({
+            type: "archived",
+            item: todo,
+            matchField: lowerTitleQuery ? "text" : "note",
+          });
+        }
+      });
+
+      try {
+        const savedEntries = await AsyncStorage.getItem("calendarEntries");
+        if (savedEntries) {
+          const calendarEntries: CalendarEntry[] = JSON.parse(savedEntries);
+          calendarEntries.forEach((entry) => {
+            if (matchesTodo(entry.todo)) {
+              results.push({
+                type: "calendar",
+                item: entry,
+                matchField: lowerTitleQuery ? "text" : "note",
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error searching calendar entries:", error);
+      }
+
+      setExpandedSearchResults(results);
+      setIsExpandedSearching(false);
+    },
+    [archivedTodos, todos],
+  );
 
   const handleSearch = useCallback(
     async (query: string) => {
       setSearchQuery(query);
       if (!query.trim()) {
         setSearchResults([]);
+        setIsSearching(false);
         return;
       }
 
+      setIsSearching(true);
       const results: SearchResult[] = [];
       const lowerQuery = query.toLowerCase();
 
@@ -105,6 +199,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       }
 
       setSearchResults(results);
+      setIsSearching(false);
     },
     [todos, archivedTodos],
   );
@@ -166,11 +261,22 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   };
 
   const renderSearchResults = () => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() && !hasExpandedSearch) {
       return null;
     }
 
-    if (searchResults.length === 0) {
+    const resultsToRender = isExpanded ? expandedSearchResults : searchResults;
+    const searchInProgress = isExpanded ? isExpandedSearching : isSearching;
+
+    if (searchInProgress) {
+      return (
+        <Text style={[styles.emptyText, { color: theme.mutedText }]}>
+          Searching...
+        </Text>
+      );
+    }
+
+    if (resultsToRender.length === 0) {
       return (
         <Text style={[styles.emptyText, { color: theme.mutedText }]}>
           No results found
@@ -196,6 +302,15 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       if (result.type === "archived") {
         unarchiveTodo((result.item as Todo).id);
         setSearchResults((prev) =>
+          prev.filter(
+            (r) =>
+              !(
+                r.type === "archived" &&
+                (r.item as Todo).id === (result.item as Todo).id
+              ),
+          ),
+        );
+        setExpandedSearchResults((prev) =>
           prev.filter(
             (r) =>
               !(
@@ -315,12 +430,12 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
         style={styles.searchResults}
         keyboardShouldPersistTaps="handled"
       >
-        {searchResults.map((result, index) => (
+        {resultsToRender.map((result, index) => (
           <View
             key={index}
             style={[
               styles.searchResult,
-              { backgroundColor: theme.elevated, borderColor: theme.border },
+              { backgroundColor: theme.elevated },
             ]}
           >
             <View style={styles.resultHeader}>
@@ -393,42 +508,96 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={[styles.title, { color: theme.text }]}>Archived Notes</Text>
+    <View style={[styles.container, isExpanded && styles.expandedContainer]}>
+      <Text
+        style={[
+          styles.title,
+          isExpanded && styles.expandedTitle,
+          { color: theme.text },
+        ]}
+      >
+        {isExpanded ? "Archive and Search" : "Archived Notes"}
+      </Text>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[
-            styles.searchInput,
-            {
-              backgroundColor: theme.elevated,
-              borderColor: theme.border,
-              color: theme.text,
-            },
-          ]}
-          placeholder="Search in all notes..."
-          placeholderTextColor={theme.subtleText}
-          value={searchQuery}
-          onChangeText={handleSearch}
-          autoCapitalize="none"
-        />
-      </View>
+      {isExpanded ? (
+        <View style={styles.expandedSearchRow}>
+          <TextInput
+            style={[
+              styles.searchInput,
+              styles.expandedSearchInput,
+              {
+                backgroundColor: theme.elevated,
+                borderColor: theme.border,
+                color: theme.text,
+              },
+            ]}
+            placeholder="Title"
+            placeholderTextColor={theme.subtleText}
+            value={archiveTitleQuery}
+            onChangeText={(query) =>
+              handleExpandedSearch(query, archiveBodyQuery)
+            }
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={[
+              styles.searchInput,
+              styles.expandedSearchInput,
+              {
+                backgroundColor: theme.elevated,
+                borderColor: theme.border,
+                color: theme.text,
+              },
+            ]}
+            placeholder="Body"
+            placeholderTextColor={theme.subtleText}
+            value={archiveBodyQuery}
+            onChangeText={(query) =>
+              handleExpandedSearch(archiveTitleQuery, query)
+            }
+            autoCapitalize="none"
+          />
+        </View>
+      ) : (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={[
+              styles.searchInput,
+              {
+                backgroundColor: theme.elevated,
+                borderColor: theme.border,
+                color: theme.text,
+              },
+            ]}
+            placeholder="Search in all notes..."
+            placeholderTextColor={theme.subtleText}
+            value={searchQuery}
+            onChangeText={handleSearch}
+            autoCapitalize="none"
+          />
+        </View>
+      )}
 
-      {searchQuery ? (
+      {isExpanded && hasExpandedSearch ? (
         renderSearchResults()
-      ) : archivedTodos.length > 0 ? (
+      ) : !isExpanded && searchQuery ? (
+        renderSearchResults()
+      ) : visibleArchivedTodos.length > 0 ? (
         <TodoList
-          todos={archivedTodos}
+          todos={visibleArchivedTodos}
           setTodos={setArchivedTodos}
           updateTodo={updateArchivedTodo}
           selectedTodo={selectedArchivedTodo}
           setSelectedTodo={setSelectedArchivedTodo}
           isArchiveView={true}
           unarchiveTodo={unarchiveTodo}
+          columns={isExpanded ? 2 : 1}
         />
       ) : (
         <Text style={[styles.emptyText, { color: theme.mutedText }]}>
-          No archived notes
+          {archivedTodos.length > 0
+            ? "No matching archived notes"
+            : "No archived notes"}
         </Text>
       )}
     </View>
@@ -441,14 +610,34 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 10,
   },
+  expandedContainer: {
+    paddingHorizontal: 0,
+    paddingTop: 6,
+  },
   title: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 20,
     color: "#1f2937",
   },
+  expandedTitle: {
+    marginBottom: 12,
+    textAlign: "center",
+  },
   searchContainer: {
     marginBottom: 20,
+  },
+  expandedSearchRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 10,
+    paddingLeft: 4,
+    paddingRight: 8,
+  },
+  expandedSearchInput: {
+    flex: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
   },
   searchInput: {
     backgroundColor: "white",
@@ -466,8 +655,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
   resultHeader: {
     flexDirection: "row",

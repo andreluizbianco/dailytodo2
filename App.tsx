@@ -463,7 +463,7 @@ const AppContent = () => {
   };
 
   const handleTopBarViewChange = (view: ViewType) => {
-    if (view !== "notes") {
+    if (view !== activeView || view !== "notes") {
       setIsNoteFullscreen(false);
     }
     setActiveView(view);
@@ -478,6 +478,12 @@ const AppContent = () => {
       setShowSettings(false);
       setActiveView("notes");
       setIsNoteFullscreen(Boolean(currentSelectedTodo));
+      return;
+    }
+
+    if (activeView === "archive") {
+      setShowSettings(false);
+      setIsNoteFullscreen((prev) => !prev);
       return;
     }
 

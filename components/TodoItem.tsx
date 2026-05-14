@@ -29,6 +29,7 @@ interface TodoItemProps {
   }) => void;
   isArchiveView?: boolean;
   unarchiveTodo?: (id: number) => void;
+  horizontalMargin?: number;
 }
 
 export interface TodoItemRef {
@@ -48,6 +49,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
       onLayout,
       isArchiveView = false,
       unarchiveTodo,
+      horizontalMargin = 12,
     },
     ref,
   ) => {
@@ -155,6 +157,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
               getColorStyle(),
               getSelectionStyle(),
               isDragging && styles.dragging,
+              { marginHorizontal: horizontalMargin },
             ]}
             onLayout={(event) => onLayout(event.nativeEvent.layout)}
           >
