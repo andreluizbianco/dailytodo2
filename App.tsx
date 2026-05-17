@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -16,23 +22,45 @@ import Calendar from "./components/Calendar";
 import TodoList from "./components/TodoList";
 import TodoNoteColumn from "./components/TodoNoteColumn";
 import ProjectList from "./components/ProjectList";
-import { Project, Todo, CalendarEntry } from "./types";
+import {
+  Project,
+  Todo,
+  CalendarEntry,
+  TodayTodoItem,
+  TodayTodoSource,
+} from "./types";
 import { useTodos } from "./hooks/useTodos";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useTheme } from "./utils/theme";
-import { addTimerEntryToCalendar } from "./utils/calendarStorage";
+import {
+  addTimerEntryToCalendar,
+  replaceCalendarEntry,
+} from "./utils/calendarStorage";
 import {
   applyTimerAlertPreferences,
   loadTimerAlertPreferences,
 } from "./utils/timerAlertPreferences";
 import {
+  loadLastSideContext,
   loadLastSelectedTodoId,
+  saveLastSideContext,
   saveLastSelectedTodoId,
 } from "./utils/appUiPersistence";
 import {
   createCalendarReminderTodo,
   reconcileTodoReminders,
 } from "./utils/reminders";
+import {
+  buildTodayItems,
+  getDayKey,
+  getTodayOccurrenceKey,
+  isScheduleDueOnDay,
+} from "./utils/todayView";
+import {
+  dismissTodayOccurrence,
+  loadDismissedTodayOccurrences,
+} from "./utils/todayDismissals";
+import { shouldArchiveCompletedActiveTodo } from "./utils/todayCompletion";
 
 const { TimerModule } = NativeModules;
 
@@ -47,15 +75,23 @@ type ViewType =
   | "archive"
   | "calendar";
 type CalendarViewMode = "day" | "week";
+type SideContext = "notes" | "projects";
 type SelectedTodoSource =
   | { type: "todo" }
   | { type: "archive" }
   | { type: "calendar"; entryId: number };
+type NotificationTarget = {
+  todoId?: string;
+  targetType?: string;
+  reminderId?: string;
+};
 
 const AppContent = () => {
   const { isDarkMode, theme } = useTheme();
   const themeAnimation = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
   const [activeView, setActiveView] = useState<ViewType>("notes");
+  const [sideContext, setSideContext] = useState<SideContext>("notes");
+  const [didRestoreSideContext, setDidRestoreSideContext] = useState(false);
   const settingsLayoutAnimation = useRef(
     new Animated.Value(activeView === "settings" ? 1 : 0),
   ).current;
@@ -66,6 +102,10 @@ const AppContent = () => {
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [selectedTodoSource, setSelectedTodoSource] =
     useState<SelectedTodoSource>({ type: "todo" });
+  const [todayDate, setTodayDate] = useState(() => new Date());
+  const [dismissedTodayKeys, setDismissedTodayKeys] = useState<string[]>([]);
+  const [selectedTodaySource, setSelectedTodaySource] =
+    useState<TodayTodoSource | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [didRestoreSelectedTodo, setDidRestoreSelectedTodo] = useState(false);
   const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
@@ -85,6 +125,7 @@ const AppContent = () => {
     addProject,
     updateTodo,
     updateProject,
+    removeProject,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,
@@ -98,10 +139,14 @@ const AppContent = () => {
   } = useTodos();
 
   const todosRef = useRef<Todo[]>([]);
+  const archivedTodosRef = useRef<Todo[]>([]);
+  const calendarEntriesRef = useRef<CalendarEntry[]>([]);
+  const projectsRef = useRef<Project[]>([]);
   const activeViewRef = useRef<ViewType>(activeView);
   const previousActiveViewRef = useRef<ViewType>(activeView);
   const appStateRef = useRef(AppState.currentState);
   const didSyncRunningSelectionOnLoadRef = useRef(false);
+  const processedTimerCompletionKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     Animated.timing(themeAnimation, {
@@ -123,6 +168,7 @@ const AppContent = () => {
     (todo: Todo | null, source: SelectedTodoSource = { type: "todo" }) => {
       setSelectedTodo(todo);
       setSelectedTodoSource(source);
+      setSelectedTodaySource(null);
       saveLastSelectedTodoId(
         source.type === "todo" ? (todo?.id ?? null) : null,
       );
@@ -130,8 +176,42 @@ const AppContent = () => {
     [],
   );
 
+  const handleSelectTodayItem = useCallback((item: TodayTodoItem | null) => {
+    if (!item) {
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+      saveLastSelectedTodoId(null);
+      return;
+    }
+
+    setSelectedTodo(item.todo);
+    setSelectedTodaySource(item.source);
+
+    if (item.source.type === "calendar-instance") {
+      setSelectedTodoSource({
+        type: "calendar",
+        entryId: item.source.entryId,
+      });
+      saveLastSelectedTodoId(null);
+      return;
+    }
+
+    if (item.source.type === "archived-repeat") {
+      setSelectedTodoSource({ type: "archive" });
+      saveLastSelectedTodoId(null);
+      return;
+    }
+
+    setSelectedTodoSource({ type: "todo" });
+    saveLastSelectedTodoId(item.todo.id);
+  }, []);
+
   const handleSelectProject = useCallback((project: Project | null) => {
     setSelectedProject(project);
+    if (project) {
+      setSelectedTodaySource(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -139,8 +219,153 @@ const AppContent = () => {
   }, [todos]);
 
   useEffect(() => {
+    archivedTodosRef.current = archivedTodos;
+  }, [archivedTodos]);
+
+  useEffect(() => {
+    calendarEntriesRef.current = calendarEntries;
+  }, [calendarEntries]);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const updateCalendarEntryTodo = useCallback(
+    async (entryId: number, updates: Partial<Todo>) => {
+      const updatedEntries = calendarEntriesRef.current.map((entry) =>
+        entry.id === entryId
+          ? { ...entry, todo: { ...entry.todo, ...updates } }
+          : entry,
+      );
+
+      setCalendarEntries(updatedEntries);
+      await AsyncStorage.setItem(
+        "calendarEntries",
+        JSON.stringify(updatedEntries),
+      );
+    },
+    [],
+  );
+
+  const clearCalendarProject = useCallback(async (projectId: number) => {
+    const updatedEntries = calendarEntriesRef.current.map((entry) =>
+      entry.todo.projectId === projectId
+        ? { ...entry, todo: { ...entry.todo, projectId: undefined } }
+        : entry,
+    );
+
+    setCalendarEntries(updatedEntries);
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
+  }, []);
+
+  useEffect(() => {
     activeViewRef.current = activeView;
   }, [activeView]);
+
+  useEffect(() => {
+    const restoreSideContext = async () => {
+      const restoredContext = await loadLastSideContext();
+      setSideContext(restoredContext);
+      setDidRestoreSideContext(true);
+
+      if (restoredContext !== "projects") return;
+
+      try {
+        const timerState = await TimerModule?.getTimerState?.();
+
+        if (timerState?.isRunning) {
+          setActiveView("timer");
+          return;
+        }
+      } catch (error) {
+        console.warn("Failed to check timer before restoring projects", error);
+      }
+
+      setActiveView("projects");
+    };
+
+    restoreSideContext();
+  }, []);
+
+  useEffect(() => {
+    if (!didRestoreSideContext) return;
+
+    saveLastSideContext(sideContext);
+  }, [didRestoreSideContext, sideContext]);
+
+  useEffect(() => {
+    const loadDismissals = async () => {
+      setDismissedTodayKeys(
+        await loadDismissedTodayOccurrences(getDayKey(todayDate)),
+      );
+    };
+
+    loadDismissals();
+  }, [todayDate]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTodayDate((currentDate) => {
+        const now = new Date();
+        return getDayKey(now) === getDayKey(currentDate) ? currentDate : now;
+      });
+    }, 60_000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const todayItems = useMemo(
+    () =>
+      buildTodayItems({
+        activeTodos: todos,
+        archivedTodos,
+        calendarEntries,
+        date: todayDate,
+        dismissedOccurrenceKeys: dismissedTodayKeys,
+      }),
+    [archivedTodos, calendarEntries, dismissedTodayKeys, todayDate, todos],
+  );
+  const hasProjectedTodayItems = todayItems.some(
+    (item) => item.source.type !== "active",
+  );
+
+  const updateTodayTodo = useCallback(
+    (id: number, updates: Partial<Todo>) => {
+      const item = todayItems.find((todayItem) => todayItem.todo.id === id);
+
+      if (!item || item.source.type === "active") {
+        updateTodo(id, updates);
+        return;
+      }
+
+      if (item.source.type === "archived-repeat") {
+        updateArchivedTodo(item.source.todoId, updates);
+        return;
+      }
+
+      updateCalendarEntryTodo(item.source.entryId, updates);
+    },
+    [todayItems, updateArchivedTodo, updateCalendarEntryTodo, updateTodo],
+  );
+
+  const dismissSelectedTodayOccurrence = useCallback(async () => {
+    if (!selectedTodaySource) return false;
+
+    const occurrenceKey = getTodayOccurrenceKey({
+      source: selectedTodaySource,
+      date: todayDate,
+    });
+    const nextKeys = await dismissTodayOccurrence(occurrenceKey);
+
+    setDismissedTodayKeys(nextKeys);
+    setSelectedTodo(null);
+    setSelectedTodoSource({ type: "todo" });
+    setSelectedTodaySource(null);
+    return true;
+  }, [selectedTodaySource, todayDate]);
 
   useEffect(() => {
     if (!todosLoaded) return;
@@ -157,6 +382,24 @@ const AppContent = () => {
       console.error("Failed to reconcile reminders", error);
     });
   }, [archivedTodos, calendarEntries, todos, todosLoaded]);
+
+  useEffect(() => {
+    const loadCalendarEntries = async () => {
+      try {
+        const savedEntries = await AsyncStorage.getItem("calendarEntries");
+        if (!savedEntries) return;
+
+        const parsedEntries = JSON.parse(savedEntries);
+        if (Array.isArray(parsedEntries)) {
+          setCalendarEntries(parsedEntries);
+        }
+      } catch (error) {
+        console.error("Error loading calendar entries:", error);
+      }
+    };
+
+    loadCalendarEntries();
+  }, []);
 
   useEffect(() => {
     if (!todosLoaded || didRestoreSelectedTodo) return;
@@ -199,7 +442,7 @@ const AppContent = () => {
         TimerModule.clearPendingCompletion?.();
 
         const todoId = Number(event.todoId);
-        const todo = todosRef.current.find((t) => Number(t.id) === todoId);
+        const todo = findTimerSubject(todoId);
 
         if (!todo) {
           console.log(
@@ -209,7 +452,7 @@ const AppContent = () => {
           return;
         }
 
-        updateTodo(todo.id, {
+        updateTimerSubject(todo.id, {
           timer: {
             hours: todo.timer?.hours ?? "00",
             minutes: todo.timer?.minutes ?? "25",
@@ -217,33 +460,17 @@ const AppContent = () => {
           },
         });
 
-        const entry = await addTimerEntryToCalendar({
-          todo,
-          completed: event.completed,
-          startedAt: event.startedAt,
-          elapsedSeconds: event.activeElapsedSeconds,
-        });
-
-        if (entry) {
-          setCalendarEntries((prev) => {
-            const alreadyExists = prev.some(
-              (existing) => existing.id === entry.id,
-            );
-            if (alreadyExists) return prev;
-            return [...prev, entry];
-          });
-        }
+        await recordTimerCompletion(todo, event);
       },
     );
 
     return () => {
       subscription.remove();
     };
-  }, [updateTodo]);
+  }, [findTimerSubject, updateTimerSubject]);
 
   useEffect(() => {
     const syncPendingTimerCompletion = async () => {
-      if (todos.length === 0) return;
       if (!TimerModule?.getPendingCompletion) return;
 
       try {
@@ -252,7 +479,7 @@ const AppContent = () => {
         if (!event) return;
 
         const todoId = String(event.todoId);
-        const todo = todosRef.current.find((t) => String(t.id) === todoId);
+        const todo = findTimerSubject(todoId);
 
         if (!todo) {
           console.log(
@@ -262,24 +489,7 @@ const AppContent = () => {
           return;
         }
 
-        const entry = await addTimerEntryToCalendar({
-          todo,
-          completed: event.completed,
-          startedAt: event.startedAt,
-          elapsedSeconds: event.activeElapsedSeconds,
-        });
-
-        if (entry) {
-          setCalendarEntries((prev) => {
-            const alreadyExists = prev.some(
-              (existing) => existing.id === entry.id,
-            );
-
-            if (alreadyExists) return prev;
-
-            return [...prev, entry];
-          });
-        }
+        await recordTimerCompletion(todo, event);
 
         TimerModule.clearPendingCompletion();
       } catch (error) {
@@ -288,52 +498,449 @@ const AppContent = () => {
     };
 
     syncPendingTimerCompletion();
-  }, [todos]);
+  }, [findTimerSubject]);
+
+  function getProjectAsTimerTodo(project: Project): Todo {
+    return {
+      id: project.id,
+      text: project.title,
+      note: project.note,
+      color: project.color,
+      isEditing: project.isEditing,
+      noteType: "text",
+      createdAt: project.createdAt,
+      timerMode: project.timerMode,
+      timer: project.timer,
+    };
+  }
+
+  function findTimerSubject(rawId: number | string): Todo | null {
+    const id = String(rawId);
+    const currentTodo = todosRef.current.find((todo) => String(todo.id) === id);
+    if (currentTodo) return currentTodo;
+
+    const archivedTodo = archivedTodosRef.current.find(
+      (todo) => String(todo.id) === id,
+    );
+    if (archivedTodo) return archivedTodo;
+
+    const calendarTodo = calendarEntriesRef.current.find(
+      (entry) => String(entry.todo.id) === id,
+    )?.todo;
+    if (calendarTodo) return calendarTodo;
+
+    const project = projectsRef.current.find(
+      (projectItem) => String(projectItem.id) === id,
+    );
+    if (project) return getProjectAsTimerTodo(project);
+
+    return null;
+  }
+
+  function findTodaySourceForTimerSubject(
+    rawId: number | string,
+  ): TodayTodoSource | null {
+    const id = String(rawId);
+    const currentTodo = todosRef.current.find((todo) => String(todo.id) === id);
+    if (currentTodo) {
+      return { type: "active", todoId: currentTodo.id };
+    }
+
+    const now = new Date();
+    const archivedTodo = archivedTodosRef.current.find(
+      (todo) =>
+        String(todo.id) === id &&
+        Boolean(todo.schedule) &&
+        isScheduleDueOnDay(todo.schedule!, now),
+    );
+    if (archivedTodo) {
+      return { type: "archived-repeat", todoId: archivedTodo.id };
+    }
+
+    const calendarEntry = calendarEntriesRef.current.find(
+      (entry) =>
+        String(entry.todo.id) === id &&
+        getDayKey(new Date(entry.printedAt)) === getDayKey(now),
+    );
+    if (calendarEntry) {
+      return {
+        type: "calendar-instance",
+        entryId: calendarEntry.id,
+        todoId: calendarEntry.todo.id,
+      };
+    }
+
+    return null;
+  }
+
+  async function replaceCalendarEntryInStorage(
+    entryId: number,
+    replacement: CalendarEntry,
+  ) {
+    const updatedEntries = replaceCalendarEntry(
+      calendarEntriesRef.current,
+      entryId,
+      replacement,
+    );
+
+    setCalendarEntries(updatedEntries);
+    await AsyncStorage.setItem(
+      "calendarEntries",
+      JSON.stringify(updatedEntries),
+    );
+  }
+
+  async function dismissTodaySource(source: TodayTodoSource, date = new Date()) {
+    const nextKeys = await dismissTodayOccurrence(
+      getTodayOccurrenceKey({ source, date }),
+    );
+
+    if (getDayKey(date) === getDayKey(todayDate)) {
+      setDismissedTodayKeys(nextKeys);
+    }
+  }
+
+  async function recordTimerCompletion(
+    todo: Todo,
+    event: {
+      completed: boolean;
+      startedAt: number;
+      finishedAt?: number;
+      activeElapsedSeconds?: number;
+    },
+  ) {
+    const completionKey = createTimerCompletionKey(todo.id, event);
+    if (processedTimerCompletionKeysRef.current.has(completionKey)) {
+      return null;
+    }
+    processedTimerCompletionKeysRef.current.add(completionKey);
+
+    const source =
+      selectedTodo?.id === todo.id && selectedTodaySource
+        ? selectedTodaySource
+        : findTodaySourceForTimerSubject(todo.id);
+
+    const elapsedMinutes =
+      typeof event.activeElapsedSeconds === "number"
+        ? Math.max(1, Math.round(event.activeElapsedSeconds / 60))
+        : Math.max(1, Math.round((Date.now() - event.startedAt) / 60000));
+
+    if (source?.type === "calendar-instance") {
+      const replacement: CalendarEntry = {
+        id: source.entryId,
+        todo: { ...todo, projectId: undefined },
+        printedAt: new Date().toISOString(),
+        timerCompleted: event.completed,
+        isTrackingEntry: true,
+        timeSpent: {
+          elapsed: elapsedMinutes,
+        },
+      };
+
+      await replaceCalendarEntryInStorage(source.entryId, replacement);
+      await dismissTodaySource(source);
+      if (selectedTodo?.id === todo.id) {
+        setSelectedTodo(null);
+        setSelectedTodoSource({ type: "todo" });
+        setSelectedTodaySource(null);
+      }
+      return replacement;
+    }
+
+    const entry = await addTimerEntryToCalendar({
+      todo,
+      completed: event.completed,
+      startedAt: event.startedAt,
+      elapsedSeconds: event.activeElapsedSeconds,
+    });
+
+    if (entry) {
+      setCalendarEntries((prev) => {
+        const alreadyExists = prev.some((existing) => existing.id === entry.id);
+        if (alreadyExists) return prev;
+        return [...prev, entry];
+      });
+    }
+
+    if (source?.type === "archived-repeat") {
+      await dismissTodaySource(source);
+    }
+
+    if (source?.type === "active") {
+      if (shouldArchiveCompletedActiveTodo(todo)) {
+        archiveTodo(source.todoId);
+      } else {
+        removeTodo(source.todoId);
+      }
+    }
+
+    if (source && selectedTodo?.id === todo.id) {
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+    }
+
+    return entry;
+  }
+
+  function createTimerCompletionKey(
+    todoId: number,
+    event: {
+      completed: boolean;
+      startedAt: number;
+      activeElapsedSeconds?: number;
+    },
+  ) {
+    return [
+      String(todoId),
+      Math.trunc(Number(event.startedAt) || 0),
+      Math.trunc(Number(event.activeElapsedSeconds) || 0),
+      event.completed ? "completed" : "stopped",
+    ].join(":");
+  }
+
+  const selectTodoByTargetId = useCallback(
+    (rawTargetId: number | string, options: { preferTimerView?: boolean } = {}) => {
+      const targetId = String(rawTargetId);
+      const numericTargetId = Number(targetId);
+      const absoluteTargetId = Number.isFinite(numericTargetId)
+        ? Math.abs(Math.trunc(numericTargetId))
+        : null;
+
+      const todayItem = todayItems.find((item) => {
+        if (String(item.todo.id) === targetId) return true;
+        return (
+          item.source.type === "calendar-instance" &&
+          absoluteTargetId !== null &&
+          item.source.entryId === absoluteTargetId
+        );
+      });
+
+      if (todayItem) {
+        setSideContext("notes");
+        setActiveView(options.preferTimerView ? "timer" : "notes");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(null);
+        handleSelectTodayItem(todayItem);
+        return true;
+      }
+
+      const projectTodo = todos.find(
+        (todo) => String(todo.id) === targetId && todo.projectId,
+      );
+      if (projectTodo?.projectId) {
+        const project = projects.find(
+          (projectItem) => projectItem.id === projectTodo.projectId,
+        );
+        if (project) {
+          setSideContext("projects");
+          setActiveView(options.preferTimerView ? "timer" : "projects");
+          setShowSettings(false);
+          setIsNoteFullscreen(false);
+          handleSelectProject(project);
+          handleSelectTodo(projectTodo, { type: "todo" });
+          return true;
+        }
+      }
+
+      const projectArchivedTodo = archivedTodos.find(
+        (todo) => String(todo.id) === targetId && todo.projectId,
+      );
+      if (projectArchivedTodo?.projectId) {
+        const project = projects.find(
+          (projectItem) => projectItem.id === projectArchivedTodo.projectId,
+        );
+        if (project) {
+          setSideContext("projects");
+          setActiveView(options.preferTimerView ? "timer" : "projects");
+          setShowSettings(false);
+          setIsNoteFullscreen(false);
+          handleSelectProject(project);
+          handleSelectTodo(projectArchivedTodo, { type: "archive" });
+          return true;
+        }
+      }
+
+      const projectCalendarEntry = calendarEntries.find((entry) => {
+        if (!entry.todo.projectId) return false;
+        if (String(entry.todo.id) === targetId) return true;
+        return absoluteTargetId !== null && entry.id === absoluteTargetId;
+      });
+      if (projectCalendarEntry?.todo.projectId) {
+        const project = projects.find(
+          (projectItem) => projectItem.id === projectCalendarEntry.todo.projectId,
+        );
+        if (project) {
+          setSideContext("projects");
+          setActiveView(options.preferTimerView ? "timer" : "projects");
+          setShowSettings(false);
+          setIsNoteFullscreen(false);
+          handleSelectProject(project);
+          handleSelectTodo(projectCalendarEntry.todo, {
+            type: "calendar",
+            entryId: projectCalendarEntry.id,
+          });
+          return true;
+        }
+      }
+
+      const archivedTodo = archivedTodos.find(
+        (todo) => String(todo.id) === targetId,
+      );
+      if (archivedTodo) {
+        setActiveView(options.preferTimerView ? "timer" : "archive");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(null);
+        handleSelectTodo(archivedTodo, { type: "archive" });
+        return true;
+      }
+
+      const calendarEntry = calendarEntries.find((entry) => {
+        if (String(entry.todo.id) === targetId) return true;
+        return absoluteTargetId !== null && entry.id === absoluteTargetId;
+      });
+      if (calendarEntry) {
+        setActiveView(options.preferTimerView ? "timer" : "calendar");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(null);
+        handleSelectTodo(calendarEntry.todo, {
+          type: "calendar",
+          entryId: calendarEntry.id,
+        });
+        setSelectedDate(
+          new Date(calendarEntry.printedAt).toISOString().split("T")[0],
+        );
+        return true;
+      }
+
+      const looseTodo = todos.find((todo) => String(todo.id) === targetId);
+      if (looseTodo) {
+        setSideContext("notes");
+        setActiveView(options.preferTimerView ? "timer" : "notes");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(null);
+        handleSelectTodo(looseTodo, { type: "todo" });
+        return true;
+      }
+
+      return false;
+    },
+    [
+      archivedTodos,
+      calendarEntries,
+      handleSelectProject,
+      handleSelectTodayItem,
+      handleSelectTodo,
+      projects,
+      todayItems,
+      todos,
+    ],
+  );
 
   const syncRunningTodoSelection = useCallback(async () => {
     if (!TimerModule?.getTimerState) return false;
-    if (todosRef.current.length === 0) return false;
 
     try {
       const state = await TimerModule.getTimerState();
 
       if (!state?.isRunning) return false;
 
-      const runningTodo = todosRef.current.find(
-        (todo) => String(todo.id) === String(state.todoId),
-      );
-
-      if (runningTodo) {
-        handleSelectTodo(runningTodo);
-        return true;
-      }
+      return selectTodoByTargetId(state.todoId, { preferTimerView: true });
     } catch (error) {
       console.warn("Failed to sync running timer selection", error);
     }
 
     return false;
-  }, [handleSelectTodo]);
+  }, [selectTodoByTargetId]);
+
+  const syncNotificationTarget = useCallback(async () => {
+    if (!TimerModule?.getNotificationTarget) return false;
+
+    try {
+      const target: NotificationTarget | null =
+        await TimerModule.getNotificationTarget();
+
+      if (!target?.todoId) return false;
+
+      if (selectTodoByTargetId(target.todoId)) {
+        TimerModule.clearNotificationTarget?.();
+        return true;
+      }
+
+      TimerModule.clearNotificationTarget?.();
+      return false;
+    } catch (error) {
+      console.warn("Failed to sync notification target", error);
+      return false;
+    }
+  }, [selectTodoByTargetId]);
+
+  function updateTimerSubject(rawId: number | string, updates: Partial<Todo>) {
+    const id = String(rawId);
+    const currentTodo = todosRef.current.find((todo) => String(todo.id) === id);
+
+    if (currentTodo) {
+      updateTodo(currentTodo.id, updates);
+      return;
+    }
+
+    const archivedTodo = archivedTodosRef.current.find(
+      (todo) => String(todo.id) === id,
+    );
+
+    if (archivedTodo) {
+      updateArchivedTodo(archivedTodo.id, updates);
+      return;
+    }
+
+    const calendarEntry = calendarEntriesRef.current.find(
+      (entry) => String(entry.todo.id) === id,
+    );
+
+    if (calendarEntry) {
+      updateCalendarEntryTodo(calendarEntry.id, updates);
+      return;
+    }
+
+    const project = projectsRef.current.find(
+      (projectItem) => String(projectItem.id) === id,
+    );
+
+    if (project) {
+      updateProject(project.id, {
+        timerMode: updates.timerMode,
+        timer: updates.timer,
+      });
+    }
+  }
 
   useEffect(() => {
     if (!todosLoaded || !didRestoreSelectedTodo) return;
     if (didSyncRunningSelectionOnLoadRef.current) return;
 
     didSyncRunningSelectionOnLoadRef.current = true;
-    syncRunningTodoSelection();
+    syncNotificationTarget();
     const retryTimeout = setTimeout(() => {
-      syncRunningTodoSelection();
+      syncNotificationTarget();
     }, 450);
 
     return () => clearTimeout(retryTimeout);
-  }, [didRestoreSelectedTodo, syncRunningTodoSelection, todosLoaded]);
+  }, [
+    didRestoreSelectedTodo,
+    syncNotificationTarget,
+    todosLoaded,
+  ]);
 
   useEffect(() => {
     const previousActiveView = previousActiveViewRef.current;
     previousActiveViewRef.current = activeView;
 
     const shouldSyncRunningSelection =
-      (activeView === "notes" || activeView === "timer") &&
-      previousActiveView !== activeView;
+      activeView === "timer" && previousActiveView !== "timer";
 
     if (shouldSyncRunningSelection) {
       syncRunningTodoSelection();
@@ -347,15 +954,21 @@ const AppContent = () => {
 
       if (
         wasAway &&
-        nextAppState === "active" &&
-        (activeViewRef.current === "notes" || activeViewRef.current === "timer")
+        nextAppState === "active"
       ) {
-        syncRunningTodoSelection();
+        syncNotificationTarget().then((handledTarget) => {
+          if (
+            !handledTarget &&
+            activeViewRef.current === "timer"
+          ) {
+            syncRunningTodoSelection();
+          }
+        });
       }
     });
 
     return () => subscription.remove();
-  }, [syncRunningTodoSelection]);
+  }, [syncNotificationTarget, syncRunningTodoSelection]);
 
   const handleAddTodo = async () => {
     if (activeView === "settings") {
@@ -418,10 +1031,30 @@ const AppContent = () => {
   };
 
   const handlePrintOnCalendar = async (todo: Todo) => {
+    if (
+      selectedTodaySource?.type === "calendar-instance" &&
+      selectedTodo?.id === todo.id
+    ) {
+      const replacement: CalendarEntry = {
+        id: selectedTodaySource.entryId,
+        todo: { ...todo, projectId: undefined },
+        printedAt: new Date().toISOString(),
+        isTrackingEntry: true,
+      };
+
+      await replaceCalendarEntryInStorage(
+        selectedTodaySource.entryId,
+        replacement,
+      );
+      await dismissSelectedTodayOccurrence();
+      return;
+    }
+
     const calendarEntry: CalendarEntry = {
       id: Date.now(),
-      todo: { ...todo },
+      todo: { ...todo, projectId: undefined },
       printedAt: new Date().toISOString(),
+      isTrackingEntry: true,
     };
 
     try {
@@ -435,6 +1068,30 @@ const AppContent = () => {
     } catch (error) {
       console.error("Error saving calendar entry:", error);
     }
+
+    setCalendarEntries((prev) => [...prev, calendarEntry]);
+
+    if (
+      selectedTodaySource?.type === "archived-repeat" &&
+      selectedTodo?.id === todo.id
+    ) {
+      await dismissSelectedTodayOccurrence();
+      return;
+    }
+
+    if (
+      selectedTodaySource?.type === "active" &&
+      selectedTodo?.id === todo.id
+    ) {
+      if (shouldArchiveCompletedActiveTodo(todo)) {
+        archiveTodo(selectedTodaySource.todoId);
+      } else {
+        removeTodo(selectedTodaySource.todoId);
+      }
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+    }
   };
 
   const handleCalendarAddEntry = async () => {
@@ -442,30 +1099,51 @@ const AppContent = () => {
     return entry as Todo | CalendarEntry | undefined;
   };
 
-  const updateCalendarEntryTodo = useCallback(
-    async (entryId: number, updates: Partial<Todo>) => {
-      const updatedEntries = calendarEntries.map((entry) =>
-        entry.id === entryId
-          ? { ...entry, todo: { ...entry.todo, ...updates } }
-          : entry,
+  const handleRemoveTodo = (id: number): Todo | null => {
+    if (selectedTodo?.id === id && selectedTodoSource.type === "calendar") {
+      const updatedEntries = calendarEntriesRef.current.filter(
+        (entry) => entry.id !== selectedTodoSource.entryId,
       );
 
       setCalendarEntries(updatedEntries);
-      await AsyncStorage.setItem(
+      AsyncStorage.setItem(
         "calendarEntries",
         JSON.stringify(updatedEntries),
-      );
-    },
-    [calendarEntries],
-  );
+      ).catch((error) => {
+        console.error("Error deleting calendar entry:", error);
+      });
 
-  const handleRemoveTodo = (id: number): Todo | null => {
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+      return null;
+    }
+
+    if (selectedTodo?.id === id && selectedTodoSource.type === "archive") {
+      setArchivedTodos((prevTodos) =>
+        prevTodos.filter((todo) => todo.id !== id),
+      );
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+      return null;
+    }
+
     const nextTodo = removeTodo(id);
     handleSelectTodo(nextTodo, { type: "todo" });
     return nextTodo;
   };
 
   const handleArchiveTodo = (id: number): Todo | null => {
+    if (
+      selectedTodo?.id === id &&
+      (selectedTodaySource?.type === "archived-repeat" ||
+        selectedTodaySource?.type === "calendar-instance")
+    ) {
+      dismissSelectedTodayOccurrence();
+      return null;
+    }
+
     const nextTodo = archiveTodo(id);
     handleSelectTodo(nextTodo, { type: "todo" });
     return nextTodo;
@@ -484,10 +1162,18 @@ const AppContent = () => {
             todos={todos}
             setTodos={setTodos}
             updateTodo={updateTodo}
+            projects={projects}
           />
         </View>
       );
     }
+
+    const leftColumnMode: SideContext =
+      activeView === "projects"
+        ? "projects"
+        : activeView === "notes"
+          ? "notes"
+          : sideContext;
 
     return (
       <View style={styles.content}>
@@ -515,7 +1201,7 @@ const AppContent = () => {
             },
           ]}
         >
-          {activeView === "projects" ? (
+          {leftColumnMode === "projects" ? (
             <ProjectList
               projects={projects}
               todos={todos}
@@ -528,19 +1214,51 @@ const AppContent = () => {
               updateTodo={updateTodo}
               updateArchivedTodo={updateArchivedTodo}
               updateCalendarEntryTodo={updateCalendarEntryTodo}
-              setSelectedProject={handleSelectProject}
-              setSelectedTodo={handleSelectTodo}
+              setSelectedProject={(project) => {
+                setShowSettings(false);
+                handleSelectProject(project);
+              }}
+              setSelectedTodo={(todo, source) => {
+                setShowSettings(false);
+                handleSelectTodo(todo, source);
+              }}
             />
           ) : (
             <TodoList
-              todos={todos}
+              todos={
+                leftColumnMode === "notes"
+                  ? todayItems.map((item) => item.todo)
+                  : todos
+              }
               setTodos={setTodos}
-              updateTodo={updateTodo}
+              updateTodo={
+                leftColumnMode === "notes" ? updateTodayTodo : updateTodo
+              }
               selectedTodo={selectedTodo}
               setSelectedTodo={(todo) => {
                 handleSelectProject(null);
+                if (leftColumnMode === "notes" && todo) {
+                  const todayItem = todayItems.find(
+                    (item) => item.todo.id === todo.id,
+                  );
+
+                  if (todayItem) {
+                    handleSelectTodayItem(todayItem);
+                    return;
+                  }
+                }
+
                 handleSelectTodo(todo, { type: "todo" });
               }}
+              getTodoKey={(todo) => {
+                if (leftColumnMode !== "notes") return String(todo.id);
+
+                return (
+                  todayItems.find((item) => item.todo.id === todo.id)
+                    ?.occurrenceKey ?? String(todo.id)
+                );
+              }}
+              disableDrag={leftColumnMode === "notes" && hasProjectedTodayItems}
             />
           )}
         </Animated.View>
@@ -556,14 +1274,24 @@ const AppContent = () => {
           ]}
         >
           <TodoNoteColumn
-            selectedTodo={currentSelectedTodo}
+            selectedTodo={
+              activeView === "timer" ? currentTimerTodo : currentSelectedTodo
+            }
             selectedTodoSource={selectedTodoSource}
             selectedProject={currentSelectedProject}
             activeView={activeView}
             isNoteFullscreen={isNoteFullscreen}
-            updateTodo={updateTodo}
+            updateTodo={
+              activeView === "timer" ? handleTimerItemUpdate : updateTodo
+            }
             updateCalendarEntryTodo={updateCalendarEntryTodo}
             updateProject={updateProject}
+            removeProject={(id) => {
+              removeProject(id);
+              clearCalendarProject(id);
+              handleSelectProject(null);
+              handleSelectTodo(null);
+            }}
             removeTodo={handleRemoveTodo} // Use the new handler
             archiveTodo={handleArchiveTodo}
             archivedTodos={archivedTodos}
@@ -581,6 +1309,7 @@ const AppContent = () => {
             exportData={exportData}
             importData={importData}
             todos={todos}
+            todayItems={todayItems}
             setTodos={setTodos}
             projects={projects}
             setShowSettings={setShowSettings}
@@ -608,16 +1337,44 @@ const AppContent = () => {
   const handleProjectsLongPress = () => {
     setShowSettings(false);
     setIsNoteFullscreen(false);
-    setActiveView((prev) => (prev === "projects" ? "notes" : "projects"));
+    handleSelectProject(null);
+    handleSelectTodo(null);
+    const nextContext = activeView === "projects" ? "notes" : "projects";
+    setSideContext(nextContext);
+    setActiveView(nextContext);
   };
 
   const handleTopBarViewChange = (view: ViewType) => {
     if (view !== activeView || view !== "notes") {
       setIsNoteFullscreen(false);
     }
-    if (view !== "projects") {
+
+    if (view === "notes") {
+      const lastDocsView = sideContext;
+
+      if (activeView === lastDocsView) {
+        setShowSettings((current) => !current);
+        return;
+      }
+
+      setShowSettings(false);
+      setActiveView(lastDocsView);
+
+      if (lastDocsView === "notes") {
+        handleSelectProject(null);
+      }
+
+      return;
+    }
+
+    if (view === "projects") {
+      setSideContext("projects");
+    }
+
+    if (view === "calendar" || view === "settings") {
       handleSelectProject(null);
     }
+
     setActiveView(view);
   };
 
@@ -643,6 +1400,15 @@ const AppContent = () => {
   const currentSelectedProject = selectedProject
     ? (projects.find((project) => project.id === selectedProject.id) ?? null)
     : null;
+  const currentTimerTodo =
+    currentSelectedTodo ??
+    (currentSelectedProject
+      ? getProjectAsTimerTodo(currentSelectedProject)
+      : null);
+
+  const handleTimerItemUpdate = (id: number, updates: Partial<Todo>) => {
+    updateTimerSubject(id, updates);
+  };
 
   const handleAddPress = () => {
     if (activeView === "settings") {

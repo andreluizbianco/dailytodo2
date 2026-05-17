@@ -4,7 +4,7 @@ import { DateData, CalendarProvider } from "react-native-calendars";
 import ExpandableCalendar from "react-native-calendars/src/expandableCalendar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CalendarEntries from "./CalendarEntries";
-import { CalendarEntry, Todo } from "../types";
+import { CalendarEntry, Project, Todo } from "../types";
 import { useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
@@ -71,6 +71,7 @@ interface CalendarProps {
   todos: Todo[]; // Add this
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void; // Add this
+  projects: Project[];
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -82,6 +83,7 @@ const Calendar: React.FC<CalendarProps> = ({
   todos,
   setTodos,
   updateTodo,
+  projects,
 }) => {
   const { theme: appTheme } = useTheme();
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -246,6 +248,7 @@ const Calendar: React.FC<CalendarProps> = ({
           todos={todos}
           setTodos={setTodos}
           updateTodo={updateTodo}
+          projects={projects}
         />
       </CalendarProvider>
     </View>

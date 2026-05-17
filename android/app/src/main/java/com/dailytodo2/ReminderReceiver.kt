@@ -35,9 +35,22 @@ class ReminderReceiver : BroadcastReceiver() {
     val reminderId = intent.getIntExtra("reminderId", 0)
     val title = intent.getStringExtra("title") ?: "Note reminder"
     val body = intent.getStringExtra("body") ?: "Reminder for this note"
+    val targetTodoId = intent.getStringExtra("targetTodoId") ?: reminderId.toString()
+    val timerMode = intent.getStringExtra("timerMode") ?: "pomodoro"
+    val durationSeconds = intent.getIntExtra("durationSeconds", 25 * 60)
+    val timerText = intent.getStringExtra("timerText") ?: formatTimerText(timerMode, durationSeconds)
 
     createReminderChannel(context)
-    showReminderNotification(context, reminderId, title, body)
+    showReminderNotification(
+      context,
+      reminderId,
+      title,
+      body,
+      targetTodoId,
+      timerMode,
+      durationSeconds,
+      timerText
+    )
     playConfiguredVibration(context)
     playConfiguredSound(context.applicationContext, finishAlert)
 
@@ -65,9 +78,19 @@ class ReminderReceiver : BroadcastReceiver() {
     context: Context,
     reminderId: Int,
     title: String,
-    body: String
+    body: String,
+    targetTodoId: String,
+    timerMode: String,
+    durationSeconds: Int,
+    timerText: String
   ) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+    val launchIntent = (context.packageManager.getLaunchIntentForPackage(context.packageName)
+      ?: Intent(context, MainActivity::class.java)).apply {
+      putExtra("notificationTargetTodoId", targetTodoId)
+      putExtra("notificationTargetType", "reminder")
+      putExtra("notificationTargetReminderId", reminderId.toString())
+      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
     val pendingIntent = PendingIntent.getActivity(
       context,
       reminderId,
@@ -75,18 +98,44 @@ class ReminderReceiver : BroadcastReceiver() {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
+    val playIntent = Intent(context, TimerService::class.java).apply {
+      action = "START"
+      putExtra("todoId", targetTodoId.toDoubleOrNull() ?: reminderId.toDouble())
+      putExtra("durationSeconds", durationSeconds)
+      putExtra("startedAt", System.currentTimeMillis())
+      putExtra("timerMode", timerMode)
+      putExtra("todoTitle", title)
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      playIntent.putExtra("fromReminder", true)
+    }
+    val playPendingIntent = PendingIntent.getService(
+      context,
+      PLAY_REQUEST_BASE + reminderId,
+      playIntent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(title)
-      .setContentText(body)
+      .setContentText("$timerText • $body")
       .setContentIntent(pendingIntent)
       .setAutoCancel(true)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setDefaults(0)
+      .addAction(android.R.drawable.ic_media_play, "Play $timerText", playPendingIntent)
       .build()
 
     context.getSystemService(NotificationManager::class.java)
       .notify(NOTIFICATION_ID_BASE + reminderId, notification)
+  }
+
+  private fun formatTimerText(timerMode: String, durationSeconds: Int): String {
+    if (timerMode == "stopwatch") return "Stopwatch"
+
+    val minutes = maxOf(1, durationSeconds / 60)
+    return "$minutes min pomodoro"
   }
 
   private fun playConfiguredVibration(context: Context) {
@@ -229,5 +278,6 @@ class ReminderReceiver : BroadcastReceiver() {
     const val ACTION_REMINDER = "com.dailytodo2.REMINDER_ALERT"
     private const val CHANNEL_ID = "native_reminders_v1"
     private const val NOTIFICATION_ID_BASE = 40_000
+    private const val PLAY_REQUEST_BASE = 70_000
   }
 }

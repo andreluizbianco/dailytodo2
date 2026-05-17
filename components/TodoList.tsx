@@ -19,6 +19,8 @@ interface TodoListProps {
   columns?: 1 | 2;
   onNoteBodyDragChange?: (isDragging: boolean) => void;
   onNoteBodyDragMove?: (pageY: number) => number;
+  disableDrag?: boolean;
+  getTodoKey?: (todo: Todo) => string;
 }
 
 const ITEM_GAP = 3;
@@ -34,6 +36,8 @@ const TodoList: React.FC<TodoListProps> = ({
   columns = 1,
   onNoteBodyDragChange,
   onNoteBodyDragMove,
+  disableDrag = false,
+  getTodoKey = (todo) => String(todo.id),
 }) => {
   const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
   const scrollViewRef = useRef<ScrollView>(null);
@@ -154,10 +158,11 @@ const TodoList: React.FC<TodoListProps> = ({
   };
 
   const renderTodoItem = (todo: Todo, useDrag: boolean) => {
+    const itemKey = getTodoKey(todo);
     const isSelected = selectedTodo !== null && selectedTodo.id === todo.id;
     const isGrid = columns === 2 && isArchiveView;
     const content = (
-      <Animated.View style={styles.todoItemContainer}>
+      <Animated.View key={itemKey} style={styles.todoItemContainer}>
         <TodoItem
           todo={todo}
           selectTodo={() => handleSelectTodo(todo)}
@@ -188,7 +193,7 @@ const TodoList: React.FC<TodoListProps> = ({
 
     return (
       <PanGestureHandler
-        key={todo.id}
+        key={itemKey}
         onGestureEvent={onPanGestureEvent}
         onHandlerStateChange={onHandlerStateChange}
         enabled={draggedTodoId === todo.id}
@@ -272,7 +277,7 @@ const TodoList: React.FC<TodoListProps> = ({
         scrollEventThrottle={16}
       >
         {todos.map((todo) => {
-          return renderTodoItem(todo, true);
+          return renderTodoItem(todo, !disableDrag);
         })}
       </ScrollView>
     </View>

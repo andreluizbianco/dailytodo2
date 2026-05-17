@@ -288,16 +288,17 @@ class TimerService : Service() {
   }
 
   private fun sendFinishedEvent(completed: Boolean) {
+    val finishedAt = System.currentTimeMillis()
     val finishedIntent = Intent("com.dailytodo2.TIMER_FINISHED").apply {
       setPackage(packageName)
       putExtra("todoId", todoId)
       putExtra("startedAt", startedAt)
-      putExtra("finishedAt", System.currentTimeMillis())
+      putExtra("finishedAt", finishedAt)
       putExtra("durationSeconds", durationSeconds)
       putExtra("activeElapsedSeconds", activeElapsedSeconds)
       putExtra("completed", completed)
     }
-    savePendingCompletion(completed)
+    savePendingCompletion(completed, finishedAt)
     sendBroadcast(finishedIntent)
   }
 
@@ -332,10 +333,15 @@ class TimerService : Service() {
         String.format("%02d:%02d", minutes, seconds)
       }
 
-    val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+    val launchIntent = (packageManager.getLaunchIntentForPackage(packageName)
+      ?: Intent(this, MainActivity::class.java)).apply {
+      putExtra("notificationTargetTodoId", String.format("%.0f", todoId))
+      putExtra("notificationTargetType", "timer")
+      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
     val pendingIntent = PendingIntent.getActivity(
       this,
-      0,
+      3001,
       launchIntent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
@@ -562,14 +568,14 @@ class TimerService : Service() {
     sendBroadcast(intent)
   }
 
-  private fun savePendingCompletion(completed: Boolean) {
+  private fun savePendingCompletion(completed: Boolean, finishedAt: Long) {
     val prefs = getSharedPreferences("timer_prefs", MODE_PRIVATE)
 
     prefs.edit()
       .putBoolean("hasPendingCompletion", true)
       .putString("pendingTodoId", String.format("%.0f", todoId))
       .putLong("pendingStartedAt", startedAt)
-      .putLong("pendingFinishedAt", System.currentTimeMillis())
+      .putLong("pendingFinishedAt", finishedAt)
       .putInt("pendingDurationSeconds", durationSeconds)
       .putInt("pendingActiveElapsedSeconds", activeElapsedSeconds)
       .putBoolean("pendingCompleted", completed)

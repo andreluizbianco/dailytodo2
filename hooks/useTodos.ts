@@ -171,6 +171,22 @@ export const useTodos = () => {
     );
   };
 
+  const removeProject = (id: number): void => {
+    setProjects((prevProjects) =>
+      prevProjects.filter((project) => project.id !== id),
+    );
+    setTodos((prevTodos) =>
+      prevTodos.map((todo) =>
+        todo.projectId === id ? { ...todo, projectId: undefined } : todo,
+      ),
+    );
+    setArchivedTodos((prevTodos) =>
+      prevTodos.map((todo) =>
+        todo.projectId === id ? { ...todo, projectId: undefined } : todo,
+      ),
+    );
+  };
+
   const updateTodo = async (
     id: number,
     updates: Partial<Todo>,
@@ -229,10 +245,13 @@ export const useTodos = () => {
     const nextSelectedTodo = getNextSelectedTodoAfterRemoval(todos, id);
 
     if (todoToArchive) {
-      setArchivedTodos((prevArchivedTodos) => [
-        ...prevArchivedTodos,
-        { ...todoToArchive, isEditing: false },
-      ]);
+      setArchivedTodos((prevArchivedTodos) => {
+        if (prevArchivedTodos.some((todo) => todo.id === id)) {
+          return prevArchivedTodos;
+        }
+
+        return [...prevArchivedTodos, { ...todoToArchive, isEditing: false }];
+      });
       setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
     }
 
@@ -390,6 +409,7 @@ export const useTodos = () => {
     addProject,
     updateTodo,
     updateProject,
+    removeProject,
     updateArchivedTodo,
     removeTodo,
     archiveTodo,

@@ -69,6 +69,7 @@ export const splitChecklistItem = (
   items: ChecklistItem[],
   index: number,
   leadingText: string,
+  shouldNormalize = true,
 ): ChecklistItem[] => {
   if (index < 0 || index >= items.length) return items;
 
@@ -83,7 +84,7 @@ export const splitChecklistItem = (
     { checked: false, text: trailingText },
   );
 
-  return normalizeChecklistItems(nextItems);
+  return shouldNormalize ? normalizeChecklistItems(nextItems) : nextItems;
 };
 
 export const removeChecklistItem = (
@@ -98,17 +99,20 @@ export const removeChecklistItem = (
 export const toggleChecklistItem = (
   items: ChecklistItem[],
   index: number,
-): ChecklistItem[] =>
-  normalizeChecklistItems(
-    items.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, checked: !item.checked } : item,
-    ),
+  shouldNormalize = true,
+): ChecklistItem[] => {
+  const nextItems = items.map((item, itemIndex) =>
+    itemIndex === index ? { ...item, checked: !item.checked } : item,
   );
+
+  return shouldNormalize ? normalizeChecklistItems(nextItems) : nextItems;
+};
 
 export const reorderChecklistItem = (
   items: ChecklistItem[],
   fromIndex: number,
   toIndex: number,
+  shouldNormalize = true,
 ): ChecklistItem[] => {
   if (fromIndex === toIndex) return items;
   if (fromIndex < 0 || fromIndex >= items.length) return items;
@@ -118,7 +122,7 @@ export const reorderChecklistItem = (
   const nextIndex = Math.max(0, Math.min(toIndex, nextItems.length));
 
   nextItems.splice(nextIndex, 0, movedItem);
-  return normalizeChecklistItems(nextItems);
+  return shouldNormalize ? normalizeChecklistItems(nextItems) : nextItems;
 };
 
 export const parseBulletNote = (note: string): BulletItem[] => {

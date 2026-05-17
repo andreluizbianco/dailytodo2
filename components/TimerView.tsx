@@ -5,12 +5,22 @@ import {
   StyleSheet,
   NativeModules,
   NativeEventEmitter,
+  Switch,
+  TouchableOpacity,
 } from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
 import { TimerMode, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../utils/theme";
+import {
+  loadAmbientSoundEnabled,
+  loadAmbientSoundId,
+  saveAmbientSoundEnabled,
+  saveAmbientSoundId,
+  ambientSoundOptions,
+  AmbientSoundId,
+} from "../utils/timerAmbientPreferences";
 
 const { TimerModule } = NativeModules;
 console.log("TimerModule object:", TimerModule);
@@ -43,6 +53,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [displayTime, setDisplayTime] = useState<string>("");
   const [loadedTodoId, setLoadedTodoId] = useState<number | null>(null);
+  const [ambientSoundEnabled, setAmbientSoundEnabled] = useState(false);
+  const [ambientSoundId, setAmbientSoundId] = useState<AmbientSoundId>("rain");
 
   const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -209,6 +221,17 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   useEffect(() => {
     setDisplayTime(formatTimeDisplay(remainingSeconds));
   }, [remainingSeconds]);
+
+  useEffect(() => {
+    Promise.all([loadAmbientSoundEnabled(), loadAmbientSoundId()])
+      .then(([enabled, soundId]) => {
+        setAmbientSoundEnabled(enabled);
+        setAmbientSoundId(soundId);
+      })
+      .catch((error) => {
+        console.warn("Failed to load ambient sound preferences:", error);
+      });
+  }, []);
 
   useEffect(() => {
     const loadTimerForSelectedTodo = async () => {
@@ -470,6 +493,29 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     TimerModule.stopTimer();
   };
 
+  const setAmbientSoundEnabledValue = (nextValue: boolean) => {
+    setAmbientSoundEnabled(nextValue);
+    saveAmbientSoundEnabled(nextValue).catch((error) => {
+      console.warn("Failed to save ambient sound preference:", error);
+    });
+  };
+
+  const handleAmbientSoundSelect = (soundId: AmbientSoundId) => {
+    setAmbientSoundId(soundId);
+    saveAmbientSoundId(soundId).catch((error) => {
+      console.warn("Failed to save ambient sound preference:", error);
+    });
+  };
+
+  useEffect(() => {
+    if (ambientSoundEnabled && isPlaying) {
+      TimerModule?.startAmbientSound?.(ambientSoundId, 0.34);
+      return;
+    }
+
+    TimerModule?.stopAmbientSound?.();
+  }, [ambientSoundEnabled, ambientSoundId, isPlaying]);
+
   return (
     <View style={styles.container}>
       {selectedTodo && loadedTodoId !== selectedTodo.id ? (
@@ -553,6 +599,51 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           Stopwatch
         </Text>
       </View>
+
+      <View style={styles.ambientSection}>
+        <View style={styles.ambientEnableRow}>
+          <Text style={[styles.ambientSwitchText, { color: theme.text }]}>
+            Ambient sound
+          </Text>
+          <Switch
+            value={ambientSoundEnabled}
+            onValueChange={setAmbientSoundEnabledValue}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+          />
+        </View>
+
+        {!ambientSoundEnabled ? null : (
+          <View style={[styles.ambientOptions, { backgroundColor: theme.control }]}>
+            {ambientSoundOptions.map((option) => {
+              const isSelected = ambientSoundId === option.id;
+
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.ambientOption,
+                    isSelected && {
+                      backgroundColor: theme.selected,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                  onPress={() => handleAmbientSoundSelect(option.id)}
+                >
+                  <Text
+                    style={[
+                      styles.ambientOptionText,
+                      { color: isSelected ? theme.text : theme.mutedText },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
     </View>
   );
 };
@@ -603,7 +694,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   modeSwitch: {
-    marginTop: 18,
+    marginTop: 32,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -622,6 +713,40 @@ const styles = StyleSheet.create({
   modeOptionActive: {
     backgroundColor: "#FFFFFF",
     color: "#111827",
+  },
+  ambientSection: {
+    gap: 10,
+    marginTop: 16,
+    width: "100%",
+    maxWidth: 260,
+  },
+  ambientEnableRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 34,
+  },
+  ambientSwitchText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  ambientOptions: {
+    borderRadius: 6,
+    flexDirection: "row",
+    padding: 3,
+  },
+  ambientOption: {
+    alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: 4,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 32,
+  },
+  ambientOptionText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
 

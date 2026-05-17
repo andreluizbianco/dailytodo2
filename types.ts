@@ -34,6 +34,12 @@ export interface Project {
   color: string;
   isEditing: boolean;
   createdAt?: string;
+  timerMode?: TimerMode;
+  timer?: {
+    hours: string;
+    minutes: string;
+    isActive: boolean;
+  };
 }
 
 export interface Todo {
@@ -43,6 +49,7 @@ export interface Todo {
   color: string;
   isEditing: boolean;
   noteType: "text" | "bullet" | "checkbox";
+  checkboxBehavior?: "simple" | "completion";
   createdAt?: string; // ISO timestamp of creation
   restoredFrom?: {
     type: "calendar" | "archive";
@@ -72,4 +79,16 @@ export interface CalendarEntry {
     elapsed: number; // Total time in minutes
   };
   timerCompleted?: boolean;
+  isTrackingEntry?: boolean;
+}
+
+export type TodayTodoSource =
+  | { type: "active"; todoId: number }
+  | { type: "archived-repeat"; todoId: number }
+  | { type: "calendar-instance"; entryId: number; todoId: number };
+
+export interface TodayTodoItem {
+  todo: Todo;
+  source: TodayTodoSource;
+  occurrenceKey: string;
 }

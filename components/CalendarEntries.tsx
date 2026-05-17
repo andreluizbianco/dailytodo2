@@ -13,7 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
 import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
-import { CalendarEntry, Todo } from "../types";
+import NoteSettingsSectionHeader from "./NoteSettingsSectionHeader";
+import { CalendarEntry, Project, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createTodoCopyFromCalendarEntry } from "../utils/calendarEntryActions";
 import { normalizeNoteForType } from "../utils/checklist";
@@ -34,6 +35,7 @@ interface CalendarEntriesProps {
   todos: Todo[]; // Add this
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
   updateTodo: (id: number, updates: Partial<Todo>) => void;
+  projects: Project[];
 }
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
@@ -46,6 +48,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   todos,
   setTodos,
   updateTodo,
+  projects,
 }) => {
   const { theme } = useTheme();
   const dayScrollRef = useRef<ScrollView>(null);
@@ -60,6 +63,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const [showSettingsForId, setShowSettingsForId] = useState<number | null>(
     null,
   );
+  const [showProjectPickerForId, setShowProjectPickerForId] = useState<
+    number | null
+  >(null);
   const [editingTimerId, setEditingTimerId] = useState<number | null>(null);
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
@@ -312,10 +318,21 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const handleNoteTypeSelect = async (
     entry: CalendarEntry,
     noteType: Todo["noteType"],
+    checkboxBehavior: Todo["checkboxBehavior"] = "simple",
   ) => {
     await handleUpdateEntryTodo(entry, {
       noteType,
       note: normalizeNoteForType(entry.todo.note, noteType),
+      checkboxBehavior: noteType === "checkbox" ? checkboxBehavior : undefined,
+    });
+  };
+
+  const handleProjectSelect = async (
+    entry: CalendarEntry,
+    projectId: number,
+  ) => {
+    await handleUpdateEntryTodo(entry, {
+      projectId: entry.todo.projectId === projectId ? undefined : projectId,
     });
   };
 
@@ -427,7 +444,14 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         </View>
         <NoteTypeSelector
           selectedType={entry.todo.noteType}
+          checkboxBehavior={entry.todo.checkboxBehavior}
           onSelectType={(noteType) => handleNoteTypeSelect(entry, noteType)}
+          onLongSelectType={(noteType) => {
+            if (noteType === "checkbox") {
+              softHaptic();
+              handleNoteTypeSelect(entry, noteType, "completion");
+            }
+          }}
         />
         <NoteScheduleSettings
           schedule={entry.todo.schedule}
@@ -442,6 +466,55 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             handleUpdateEntryTodo(entry, { reminder })
           }
         />
+        {projects.length > 0 && (
+          <View style={styles.projectSection}>
+            <NoteSettingsSectionHeader
+              title="Project"
+              expanded={showProjectPickerForId === entry.id}
+              onPress={() =>
+                setShowProjectPickerForId((currentId) =>
+                  currentId === entry.id ? null : entry.id,
+                )
+              }
+            />
+
+            {showProjectPickerForId === entry.id && (
+              <View style={styles.projectChips}>
+                {projects.map((project) => {
+                  const isSelected = entry.todo.projectId === project.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={project.id}
+                      onPress={() => handleProjectSelect(entry, project.id)}
+                      activeOpacity={0.75}
+                      style={[
+                        styles.projectChip,
+                        {
+                          backgroundColor: isSelected
+                            ? theme.primary
+                            : theme.elevated,
+                          borderColor: isSelected
+                            ? theme.primary
+                            : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.projectChipText,
+                          { color: isSelected ? "#FFFFFF" : theme.text },
+                        ]}
+                      >
+                        {project.title || "Untitled"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.iconButton}
@@ -1020,6 +1093,25 @@ const styles = StyleSheet.create({
   selectedColor: {
     borderWidth: 2,
     borderColor: "#4b5563",
+  },
+  projectSection: {
+    marginTop: 0,
+    marginBottom: 12,
+  },
+  projectChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 4,
+  },
+  projectChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  projectChipText: {
+    fontSize: 14,
   },
   timeEditContainer: {
     flexDirection: "row",

@@ -76,6 +76,8 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   const titleText = todo.text.trim() || "Untitled";
   const isInteractiveList =
     todo.noteType === "checkbox" || todo.noteType === "bullet";
+  const isCompletionChecklist =
+    todo.noteType === "checkbox" && todo.checkboxBehavior === "completion";
 
   useEffect(() => {
     setLocalNote(todo.note);
@@ -179,7 +181,9 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   const getChecklistItems = () => {
     const items =
       todo.noteType === "checkbox"
-        ? normalizeChecklistItems(parseChecklistNote(localNote))
+        ? isCompletionChecklist
+          ? normalizeChecklistItems(parseChecklistNote(localNote))
+          : parseChecklistNote(localNote)
         : parseBulletNote(localNote);
     return items.length > 0 ? items : [{ checked: false, text: "" }];
   };
@@ -190,7 +194,12 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
       const items = getChecklistItems();
       const nextItems =
         todo.noteType === "checkbox"
-          ? splitChecklistItem(toChecklistItems(items), index, leadingText)
+          ? splitChecklistItem(
+              toChecklistItems(items),
+              index,
+              leadingText,
+              isCompletionChecklist,
+            )
           : splitBulletItem(toBulletItems(items), index, leadingText);
       const createdIndex = index + 1;
       const trailingText = restLines.join(" ").trimStart();
@@ -223,6 +232,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
             toChecklistItems(items),
             index,
             items[index]?.text ?? "",
+            isCompletionChecklist,
           )
         : splitBulletItem(toBulletItems(items), index, items[index]?.text ?? "");
 
@@ -250,7 +260,13 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     if (liftedChecklistIndex !== null) return;
 
     softHaptic();
-    saveChecklistItems(toggleChecklistItem(toChecklistItems(getChecklistItems()), index));
+    saveChecklistItems(
+      toggleChecklistItem(
+        toChecklistItems(getChecklistItems()),
+        index,
+        isCompletionChecklist,
+      ),
+    );
   };
 
   const getChecklistDragTargetIndex = (
@@ -330,6 +346,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
               toChecklistItems(getChecklistItems()),
               checklistDragStartIndex.current,
               targetIndex,
+              isCompletionChecklist,
             )
           : reorderBulletItem(
               toBulletItems(getChecklistItems()),
@@ -424,7 +441,11 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
 
           return (
             <Animated.View
-              key={`${index}-${isChecked ? "checked" : "open"}`}
+              key={
+                isCompletionChecklist
+                  ? `${index}-${isChecked ? "checked" : "open"}`
+                  : `checklist-${index}`
+              }
               onLayout={({ nativeEvent }) => {
                 checklistRowHeights.current[index] = nativeEvent.layout.height;
               }}
@@ -458,6 +479,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
               {isCheckboxList ? (
                 <TouchableOpacity
                   activeOpacity={0.82}
+                  hitSlop={{ top: 10, bottom: 10, left: 14, right: 12 }}
                   onPress={() => {
                     if (checklistSuppressToggle.current) {
                       checklistSuppressToggle.current = false;
@@ -514,13 +536,15 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                   styles.checklistInput,
                   {
                     color:
-                      isCheckboxList && isChecked
+                      isCheckboxList && isCompletionChecklist && isChecked
                         ? theme.mutedText
                         : theme.text,
                     fontSize: noteBodyFontSize,
                     lineHeight: Math.round(noteBodyFontSize * 1.45),
                     textDecorationLine:
-                      isCheckboxList && isChecked ? "line-through" : "none",
+                      isCheckboxList && isCompletionChecklist && isChecked
+                        ? "line-through"
+                        : "none",
                   },
                 ]}
               />
@@ -569,13 +593,26 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
               <View key={index} style={styles.checkboxLine}>
                 <TouchableOpacity
                   onPress={() => handleToggleCheckbox(index, lines)}
-                  style={styles.checkboxTouchable}
+                  style={[
+                    styles.checkboxTouchable,
+                    {
+                      height: Math.round(noteBodyFontSize * 1.5),
+                      paddingTop: Math.max(1, noteBodyFontSize * 0.18),
+                    },
+                  ]}
+                  hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
                 >
                   {isChecked ? (
                     <Text
-                      style={[styles.checkmark, { color: theme.mutedText }]}
+                      style={[
+                        styles.checkmark,
+                        {
+                          color: theme.mutedText,
+                          fontSize: Math.max(13, noteBodyFontSize * 0.78),
+                        },
+                      ]}
                     >
-                      ✓
+                      {"\u2713"}
                     </Text>
                   ) : (
                     <View
@@ -698,7 +735,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 0,
-    marginRight: 5,
+    marginRight: 12,
     marginTop: 9,
   },
   bulletIconWrap: {
@@ -724,7 +761,7 @@ const styles = StyleSheet.create({
   },
   checkboxLine: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginVertical: 2,
   },
   checkbox: {
@@ -734,16 +771,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   checkmark: {
-    fontSize: 14,
+    lineHeight: 14,
     width: 13,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   checkboxTouchable: {
-    width: 24,
-    height: 24,
-    justifyContent: "center",
+    width: 34,
+    justifyContent: "flex-start",
     alignItems: "center",
-    marginLeft: -4,
-    marginRight: 4,
+    marginLeft: -8,
+    marginRight: 10,
   },
 });
 

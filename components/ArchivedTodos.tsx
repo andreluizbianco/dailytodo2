@@ -34,6 +34,7 @@ interface ArchivedTodosProps {
   isExpanded?: boolean;
   onNoteBodyDragChange?: (isDragging: boolean) => void;
   onNoteBodyDragMove?: (pageY: number) => number;
+  hiddenArchivedTodoIds?: number[];
 }
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
@@ -47,6 +48,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   isExpanded = false,
   onNoteBodyDragChange,
   onNoteBodyDragMove,
+  hiddenArchivedTodoIds = [],
 }) => {
   const { theme } = useTheme();
   const searchScrollRef = useRef<ScrollView>(null);
@@ -69,12 +71,17 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   const [isSearchNoteDragging, setIsSearchNoteDragging] = useState(false);
   const hasExpandedSearch =
     archiveTitleQuery.trim().length > 0 || archiveBodyQuery.trim().length > 0;
+  const archivedTodosForDisplay = archivedTodos.filter((todo) => {
+    if (hiddenArchivedTodoIds.includes(todo.id)) return false;
+    if (!isExpanded && todo.projectId) return false;
+    return true;
+  });
   const visibleArchivedTodos = isExpanded
-    ? filterArchivedTodos(archivedTodos, {
+    ? filterArchivedTodos(archivedTodosForDisplay, {
         titleQuery: archiveTitleQuery,
         bodyQuery: archiveBodyQuery,
       })
-    : archivedTodos;
+    : archivedTodosForDisplay;
 
   const handleExpandedSearch = useCallback(
     async (titleQuery: string, bodyQuery: string) => {

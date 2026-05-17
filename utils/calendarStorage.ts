@@ -43,9 +43,10 @@ export const addTimerEntryToCalendar = async ({
 
     const calendarEntry: CalendarEntry = {
       id: now,
-      todo: { ...currentTodo },
+      todo: { ...currentTodo, projectId: undefined },
       printedAt: printedAt ?? new Date(startedAt).toISOString(),
       timerCompleted: completed,
+      isTrackingEntry: true,
       timeSpent: {
         elapsed: elapsedMinutes,
       },
@@ -81,4 +82,12 @@ export const addTimerEntryToCalendar = async ({
     console.error("Error adding timer entry to calendar:", error);
     return null;
   }
+};
+
+export const replaceCalendarEntry = (
+  entries: CalendarEntry[],
+  entryId: number,
+  replacement: CalendarEntry,
+) => {
+  return entries.map((entry) => (entry.id === entryId ? replacement : entry));
 };

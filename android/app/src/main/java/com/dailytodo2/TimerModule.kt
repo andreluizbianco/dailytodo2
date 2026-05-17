@@ -3,13 +3,27 @@ package com.dailytodo2
 import android.content.*
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class TimerModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
+  private val ambientHandler = Handler(Looper.getMainLooper())
+  private var ambientCurrentPlayer: MediaPlayer? = null
+  private var ambientNextPlayer: MediaPlayer? = null
+  private var ambientLoopRunnable: Runnable? = null
+  private var ambientFadeRunnable: Runnable? = null
+  private var ambientSoundId: String = "rain"
+  private var ambientVolume: Float = 0.35f
+  private var ambientGeneration: Int = 0
+  private var ambientIsPlaying: Boolean = false
 
 private val receiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
@@ -123,6 +137,43 @@ fun startTimer(
   }
 
   @ReactMethod
+  @Synchronized
+  fun startAmbientSound(soundId: String, volume: Double) {
+    Log.d("TimerModule", "startAmbientSound soundId=$soundId volume=$volume")
+
+    val nextVolume = volume.toFloat().coerceIn(0f, 1f)
+    if (
+      ambientIsPlaying &&
+      ambientSoundId == soundId &&
+      ambientCurrentPlayer?.isPlaying == true
+    ) {
+      ambientVolume = nextVolume
+      setAmbientPlayerVolume(ambientCurrentPlayer, ambientVolume)
+      return
+    }
+
+    ambientSoundId = soundId
+    ambientVolume = nextVolume
+    ambientGeneration += 1
+    releaseAmbientPlayers()
+
+    val player = createAmbientPlayer(ambientSoundId, ambientVolume) ?: return
+    ambientCurrentPlayer = player
+    ambientIsPlaying = true
+    player.start()
+    scheduleAmbientCrossfade(ambientGeneration)
+  }
+
+  @ReactMethod
+  @Synchronized
+  fun stopAmbientSound() {
+    Log.d("TimerModule", "stopAmbientSound")
+    ambientGeneration += 1
+    ambientIsPlaying = false
+    releaseAmbientPlayers()
+  }
+
+  @ReactMethod
   fun setAlertPreferences(soundEnabled: Boolean, vibrationPattern: String, volume: Double) {
     Log.d(
       "TimerModule",
@@ -155,12 +206,24 @@ fun startTimer(
     reminderId: Double,
     triggerAtMillis: Double,
     title: String,
-    body: String
+    body: String,
+    targetTodoId: String,
+    timerMode: String,
+    durationSeconds: Double,
+    timerText: String
   ) {
     val id = reminderId.toInt()
     val triggerAt = triggerAtMillis.toLong()
     val alarmManager = reactContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val pendingIntent = createReminderPendingIntent(id, title, body)
+    val pendingIntent = createReminderPendingIntent(
+      id,
+      title,
+      body,
+      targetTodoId,
+      timerMode,
+      durationSeconds.toInt(),
+      timerText
+    )
 
     Log.d("TimerModule", "scheduleReminder id=$id triggerAt=$triggerAt title=$title")
 
@@ -183,7 +246,7 @@ fun startTimer(
   fun cancelReminder(reminderId: Double) {
     val id = reminderId.toInt()
     val alarmManager = reactContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val pendingIntent = createReminderPendingIntent(id, "", "")
+    val pendingIntent = createReminderPendingIntent(id, "", "", "", "pomodoro", 0, "")
 
     Log.d("TimerModule", "cancelReminder id=$id")
 
@@ -194,13 +257,21 @@ fun startTimer(
   private fun createReminderPendingIntent(
     reminderId: Int,
     title: String,
-    body: String
+    body: String,
+    targetTodoId: String,
+    timerMode: String,
+    durationSeconds: Int,
+    timerText: String
   ): PendingIntent {
     val intent = Intent(reactContext, ReminderReceiver::class.java).apply {
       action = ReminderReceiver.ACTION_REMINDER
       putExtra("reminderId", reminderId)
       putExtra("title", title)
       putExtra("body", body)
+      putExtra("targetTodoId", targetTodoId)
+      putExtra("timerMode", timerMode)
+      putExtra("durationSeconds", durationSeconds)
+      putExtra("timerText", timerText)
     }
 
     return PendingIntent.getBroadcast(
@@ -209,6 +280,164 @@ fun startTimer(
       intent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
+  }
+
+  private fun ambientResourceId(soundId: String): Int {
+    return when (soundId) {
+      "waterfall" -> R.raw.ambient_waterfall
+      "gentle-rain" -> R.raw.ambient_gentle_rain
+      else -> R.raw.ambient_rain
+    }
+  }
+
+  private fun createAmbientPlayer(soundId: String, volume: Float): MediaPlayer? {
+    return try {
+      val assetFileDescriptor = reactContext.resources.openRawResourceFd(
+        ambientResourceId(soundId)
+      )
+      val player = MediaPlayer()
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        player.setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        )
+      } else {
+        @Suppress("DEPRECATION")
+        player.setAudioStreamType(AudioManager.STREAM_MUSIC)
+      }
+
+      player.setDataSource(
+        assetFileDescriptor.fileDescriptor,
+        assetFileDescriptor.startOffset,
+        assetFileDescriptor.length
+      )
+      assetFileDescriptor.close()
+      player.setVolume(volume, volume)
+      player.isLooping = false
+      player.prepare()
+      player
+    } catch (error: Exception) {
+      Log.e("TimerModule", "Error creating ambient player", error)
+      null
+    }
+  }
+
+  private fun scheduleAmbientCrossfade(generation: Int) {
+    val player = ambientCurrentPlayer ?: return
+    val durationMs = player.duration
+    if (durationMs <= 0) {
+      ambientHandler.postDelayed({ beginAmbientCrossfade(generation) }, 10_000L)
+      return
+    }
+
+    val fadeMs = ambientFadeDurationMs(durationMs)
+    val delayMs = maxOf(250L, durationMs.toLong() - fadeMs)
+
+    ambientLoopRunnable?.let { ambientHandler.removeCallbacks(it) }
+
+    ambientLoopRunnable = Runnable {
+      beginAmbientCrossfade(generation)
+    }.also { runnable ->
+      ambientHandler.postDelayed(runnable, delayMs)
+    }
+  }
+
+  private fun ambientFadeDurationMs(durationMs: Int): Long {
+    return minOf(3000L, maxOf(1200L, durationMs.toLong() / 3L))
+  }
+
+  @Synchronized
+  private fun beginAmbientCrossfade(generation: Int) {
+    if (generation != ambientGeneration) return
+    if (!ambientIsPlaying) return
+
+    val outgoingPlayer = ambientCurrentPlayer ?: return
+    val incomingPlayer = createAmbientPlayer(ambientSoundId, 0f) ?: run {
+      outgoingPlayer.seekTo(0)
+      outgoingPlayer.start()
+      scheduleAmbientCrossfade(generation)
+      return
+    }
+
+    ambientNextPlayer = incomingPlayer
+    incomingPlayer.start()
+
+    val fadeMs = ambientFadeDurationMs(outgoingPlayer.duration)
+    val steps = 30
+    val stepDelayMs = maxOf(24L, fadeMs / steps)
+    var step = 0
+
+    ambientFadeRunnable?.let { ambientHandler.removeCallbacks(it) }
+    ambientFadeRunnable = object : Runnable {
+      override fun run() {
+        if (generation != ambientGeneration) return
+
+        step += 1
+        val ratio = smoothAmbientFadeRatio(
+          (step.toFloat() / steps.toFloat()).coerceIn(0f, 1f)
+        )
+        val outgoingVolume = ambientVolume * (1f - ratio)
+        val incomingVolume = ambientVolume * ratio
+
+        try {
+          setAmbientPlayerVolume(outgoingPlayer, outgoingVolume)
+          setAmbientPlayerVolume(incomingPlayer, incomingVolume)
+        } catch (error: Exception) {
+          Log.e("TimerModule", "Error during ambient crossfade", error)
+        }
+
+        if (step < steps) {
+          ambientHandler.postDelayed(this, stepDelayMs)
+          return
+        }
+
+        try {
+          outgoingPlayer.stop()
+        } catch (_: Exception) {}
+        try {
+          outgoingPlayer.release()
+        } catch (_: Exception) {}
+
+        ambientCurrentPlayer = incomingPlayer
+        ambientNextPlayer = null
+        scheduleAmbientCrossfade(generation)
+      }
+    }.also { runnable ->
+      ambientHandler.post(runnable)
+    }
+  }
+
+  private fun smoothAmbientFadeRatio(value: Float): Float {
+    return value * value * (3f - 2f * value)
+  }
+
+  private fun setAmbientPlayerVolume(player: MediaPlayer?, volume: Float) {
+    player?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f))
+  }
+
+  private fun releaseAmbientPlayers() {
+    ambientLoopRunnable?.let { ambientHandler.removeCallbacks(it) }
+    ambientFadeRunnable?.let { ambientHandler.removeCallbacks(it) }
+    ambientLoopRunnable = null
+    ambientFadeRunnable = null
+
+    try {
+      ambientCurrentPlayer?.stop()
+    } catch (_: Exception) {}
+    try {
+      ambientCurrentPlayer?.release()
+    } catch (_: Exception) {}
+    ambientCurrentPlayer = null
+    try {
+      ambientNextPlayer?.stop()
+    } catch (_: Exception) {}
+    try {
+      ambientNextPlayer?.release()
+    } catch (_: Exception) {}
+    ambientNextPlayer = null
   }
 
   @ReactMethod
@@ -310,10 +539,10 @@ val map = Arguments.createMap().apply {
 }
 
 @ReactMethod
-fun clearPendingCompletion() {
-  val prefs = reactContext.getSharedPreferences("timer_prefs", Context.MODE_PRIVATE)
+  fun clearPendingCompletion() {
+    val prefs = reactContext.getSharedPreferences("timer_prefs", Context.MODE_PRIVATE)
 
-  prefs.edit()
+    prefs.edit()
     .remove("hasPendingCompletion")
     .remove("pendingTodoId")
     .remove("pendingStartedAt")
@@ -324,11 +553,38 @@ fun clearPendingCompletion() {
     .apply()
 }
 
+@ReactMethod
+fun getNotificationTarget(promise: Promise) {
+  val intent = currentActivity?.intent
+  val targetTodoId = intent?.getStringExtra("notificationTargetTodoId")
+
+  if (targetTodoId.isNullOrBlank()) {
+    promise.resolve(null)
+    return
+  }
+
+  val map = Arguments.createMap().apply {
+    putString("todoId", targetTodoId)
+    putString("targetType", intent.getStringExtra("notificationTargetType") ?: "notification")
+    putString("reminderId", intent.getStringExtra("notificationTargetReminderId") ?: "")
+  }
+
+  promise.resolve(map)
+}
+
+@ReactMethod
+fun clearNotificationTarget() {
+  currentActivity?.intent?.removeExtra("notificationTargetTodoId")
+  currentActivity?.intent?.removeExtra("notificationTargetType")
+  currentActivity?.intent?.removeExtra("notificationTargetReminderId")
+}
+
   override fun invalidate() {
     try {
       reactContext.unregisterReceiver(receiver)
     } catch (_: Exception) {}
 
+    releaseAmbientPlayers()
     super.invalidate()
   }
 }

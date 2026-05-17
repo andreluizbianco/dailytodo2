@@ -37,12 +37,7 @@ const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const { theme } = useTheme();
   const handleNotesPress = () => {
-    if (activeView !== "notes") {
-      setActiveView("notes");
-      setShowSettings(false);
-    } else {
-      setShowSettings(!showSettings);
-    }
+    setActiveView("notes");
   };
 
   const handleArchivePress = () => {

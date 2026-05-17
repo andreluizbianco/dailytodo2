@@ -30,6 +30,8 @@ When a child note inside a project is selected, the right column shows that note
 
 When no project or note is selected in Projects view, the right column can remain empty or show the existing blank state.
 
+Selected projects also expose a minimal Project Settings area below the project note. The first version includes color selection and safe delete. Deleting a project does not delete notes; it only removes the project association from notes in Notes, Archive, and Calendar.
+
 ## Creating Items
 
 In Projects view:
@@ -72,6 +74,7 @@ Implement the functional foundation:
 - Projects view access from long press on docs icon;
 - project list rendering in the left column;
 - project selection, expansion, collapse, and project note editing;
+- minimal project settings with color and safe delete;
 - child note rendering under selected project across Notes, Archive, and Calendar;
 - create project or note-in-project from long press on `+`;
 - project assignment in `TodoSettings`.

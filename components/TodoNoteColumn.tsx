@@ -5,7 +5,14 @@ import TodoSettings from "./TodoSettings";
 import TimerView from "./TimerView";
 import ArchivedTodos from "./ArchivedTodos";
 import AppSettings from "./AppSettings";
-import { Project, Todo, TrashedTodo, TrashRetention } from "../types";
+import ProjectSettings from "./ProjectSettings";
+import {
+  Project,
+  Todo,
+  TrashedTodo,
+  TrashRetention,
+  TodayTodoItem,
+} from "../types";
 
 interface TodoNoteColumnProps {
   selectedTodo: Todo | null;
@@ -28,6 +35,7 @@ interface TodoNoteColumnProps {
     updates: Partial<Todo>,
   ) => Promise<void>;
   updateProject: (id: number, updates: Partial<Project>) => void;
+  removeProject: (id: number) => void;
   removeTodo: (id: number) => Todo | null;
   archiveTodo: (id: number) => Todo | null;
   archivedTodos: Todo[];
@@ -46,6 +54,7 @@ interface TodoNoteColumnProps {
   importData: () => void;
   todos: Todo[];
   projects: Project[];
+  todayItems?: TodayTodoItem[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this line
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -59,6 +68,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   updateTodo,
   updateCalendarEntryTodo,
   updateProject,
+  removeProject,
   removeTodo,
   archiveTodo,
   archivedTodos,
@@ -77,6 +87,7 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   importData,
   todos,
   projects,
+  todayItems = [],
   setTodos,
   setShowSettings,
 }) => {
@@ -179,45 +190,80 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     if (activeView === "projects") {
       if (localSelectedTodo) {
         return (
-          <TodoItemNote
-            todo={localSelectedTodo}
-            showTitle={isNoteFullscreen}
-            updateNote={(noteText: string) =>
-              handleTodoUpdate({ note: noteText })
-            }
-            onStartEditing={() => {
-              setIsEditing(true);
-              setShowSettings(false);
-            }}
-            onEndEditing={() => setIsEditing(false)}
-            onListDragChange={handleListDragChange}
-            onListDragMove={handleListDragMove}
-          />
+          <>
+            <TodoItemNote
+              todo={localSelectedTodo}
+              showTitle={isNoteFullscreen}
+              updateNote={(noteText: string) =>
+                handleTodoUpdate({ note: noteText })
+              }
+              onStartEditing={() => {
+                setIsEditing(true);
+                setShowSettings(false);
+              }}
+              onEndEditing={() => setIsEditing(false)}
+              onListDragChange={handleListDragChange}
+              onListDragMove={handleListDragMove}
+            />
+            {showSettings && (
+              <View style={styles.settingsContainer}>
+                <TodoSettings
+                  todo={localSelectedTodo}
+                  projects={projects}
+                  updateTodo={handleTodoUpdate}
+                  removeTodo={() => {
+                    if (localSelectedTodo) {
+                      const nextTodo = removeTodo(localSelectedTodo.id);
+                      setLocalSelectedTodo(nextTodo);
+                    }
+                  }}
+                  archiveTodo={() => {
+                    if (localSelectedTodo) {
+                      const nextTodo = archiveTodo(localSelectedTodo.id);
+                      setLocalSelectedTodo(nextTodo);
+                    }
+                  }}
+                  printOnCalendar={printOnCalendar}
+                />
+              </View>
+            )}
+          </>
         );
       }
 
       if (!selectedProject) return null;
 
       return (
-        <TodoItemNote
-          todo={{
-            id: selectedProject.id,
-            text: selectedProject.title,
-            note: selectedProject.note,
-            color: selectedProject.color,
-            isEditing: false,
-            noteType: "text",
-            createdAt: selectedProject.createdAt,
-          }}
-          showTitle
-          updateNote={(noteText: string) =>
-            updateProject(selectedProject.id, { note: noteText })
-          }
-          onStartEditing={() => setIsEditing(true)}
-          onEndEditing={() => setIsEditing(false)}
-          onListDragChange={handleListDragChange}
-          onListDragMove={handleListDragMove}
-        />
+        <>
+          <TodoItemNote
+            todo={{
+              id: selectedProject.id,
+              text: selectedProject.title,
+              note: selectedProject.note,
+              color: selectedProject.color,
+              isEditing: false,
+              noteType: "text",
+              createdAt: selectedProject.createdAt,
+            }}
+            showTitle
+            updateNote={(noteText: string) =>
+              updateProject(selectedProject.id, { note: noteText })
+            }
+            onStartEditing={() => setIsEditing(true)}
+            onEndEditing={() => setIsEditing(false)}
+            onListDragChange={handleListDragChange}
+            onListDragMove={handleListDragMove}
+          />
+          {showSettings && (
+            <ProjectSettings
+              project={selectedProject}
+              updateProject={(updates) =>
+                updateProject(selectedProject.id, updates)
+              }
+              removeProject={() => removeProject(selectedProject.id)}
+            />
+          )}
+        </>
       );
     }
 
@@ -240,6 +286,9 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
       return (
         <ArchivedTodos
           archivedTodos={archivedTodos}
+          hiddenArchivedTodoIds={todayItems
+            .filter((item) => item.source.type === "archived-repeat")
+            .map((item) => item.source.todoId)}
           setArchivedTodos={setArchivedTodos}
           unarchiveTodo={unarchiveTodo}
           updateArchivedTodo={updateArchivedTodo}

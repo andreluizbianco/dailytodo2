@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Project, Todo } from "../types";
 import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
+import NoteSettingsSectionHeader from "./NoteSettingsSectionHeader";
 import { softHaptic } from "../utils/haptics";
 import { useTheme } from "../utils/theme";
 import { normalizeNoteForType } from "../utils/checklist";
@@ -63,7 +64,25 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
     const normalizedNote = normalizeNoteForType(todo.note, type);
 
     setLocalNoteType(type);
-    updateTodo({ noteType: type, note: normalizedNote });
+    updateTodo({
+      noteType: type,
+      note: normalizedNote,
+      checkboxBehavior: type === "checkbox" ? "simple" : undefined,
+    });
+  };
+
+  const handleNoteTypeLongSelect = (type: "text" | "bullet" | "checkbox") => {
+    if (type !== "checkbox") return;
+
+    const normalizedNote = normalizeNoteForType(todo.note, type);
+
+    softHaptic();
+    setLocalNoteType(type);
+    updateTodo({
+      noteType: type,
+      note: normalizedNote,
+      checkboxBehavior: "completion",
+    });
   };
 
   const handleColorSelect = (color: string) => {
@@ -114,7 +133,9 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
 
       <NoteTypeSelector
         selectedType={localNoteType}
+        checkboxBehavior={todo.checkboxBehavior}
         onSelectType={handleNoteTypeSelect}
+        onLongSelectType={handleNoteTypeLongSelect}
       />
 
       <NoteScheduleSettings
@@ -126,22 +147,11 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
 
       {projects.length > 0 && (
         <View style={styles.projectSection}>
-          <TouchableOpacity
-            style={styles.projectHeader}
+          <NoteSettingsSectionHeader
+            title="Project"
+            expanded={isProjectExpanded}
             onPress={() => setIsProjectExpanded((prev) => !prev)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.projectHeaderTitle}>
-              <Ionicons
-                name={isProjectExpanded ? "chevron-down" : "chevron-forward"}
-                size={18}
-                color={theme.mutedText}
-              />
-              <Text style={[styles.projectTitle, { color: theme.text }]}>
-                Project
-              </Text>
-            </View>
-          </TouchableOpacity>
+          />
 
           {isProjectExpanded && (
             <View style={styles.projectChips}>
@@ -294,20 +304,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }], // optional: adds a slight scale effect
   },
   projectSection: {
-    marginTop: 6,
+    marginTop: 0,
     marginBottom: 12,
-  },
-  projectHeader: {
-    paddingVertical: 8,
-  },
-  projectHeaderTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  projectTitle: {
-    fontSize: 15,
-    fontWeight: "500",
   },
   projectChips: {
     flexDirection: "row",

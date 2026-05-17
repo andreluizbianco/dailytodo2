@@ -472,7 +472,7 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
               },
             ]}
           >
-            {">"}
+            {"\u25B8"}
           </Text>
           <Text style={[styles.enableLabel, { color: theme.text }]}>
             Reminder
@@ -694,28 +694,31 @@ const clampWheelOffset = (offset: number, valueCount: number) => {
 const styles = StyleSheet.create({
   container: {
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   enableRow: {
     minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 10,
   },
   enableLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
   enableLabelGroup: {
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
   },
   disclosureIcon: {
     fontSize: 15,
     fontWeight: "800",
-    width: 12,
+    width: 16,
+    lineHeight: 16,
+    marginRight: 7,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   wheelRow: {
     flexDirection: "row",

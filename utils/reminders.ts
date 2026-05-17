@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
 import { CalendarEntry, Todo } from "../types";
+import { stripListSyntaxForText } from "./checklist";
 import { normalizeReminder, normalizeSchedule } from "./schedule";
 
 const REMINDER_IDS_KEY = "scheduledReminderIds";
@@ -30,7 +31,16 @@ const scheduleTodoReminder = async (todo: Todo) => {
 
   const identifier = getReminderNotificationId(todo.id);
   const title = todo.text.trim() || "Note reminder";
-  const body = todo.note.trim() || "Reminder for this note";
+  const body =
+    stripListSyntaxForText(todo.note).trim().replace(/\s+/g, " ") ||
+    "Reminder for this note";
+  const timerMode = todo.timerMode ?? "pomodoro";
+  const durationSeconds =
+    timerMode === "stopwatch" ? 0 : getTodoPomodoroDurationSeconds(todo);
+  const timerText =
+    timerMode === "stopwatch"
+      ? "Stopwatch"
+      : `${Math.max(1, Math.round(durationSeconds / 60))} min pomodoro`;
 
   if (Platform.OS === "android" && TimerModule?.scheduleReminder) {
     TimerModule.scheduleReminder(
@@ -38,6 +48,10 @@ const scheduleTodoReminder = async (todo: Todo) => {
       reminderAt.getTime(),
       title,
       body,
+      String(todo.id),
+      timerMode,
+      durationSeconds,
+      timerText,
     );
   }
 
@@ -96,6 +110,16 @@ const getReminderDate = (todo: Todo) => {
 
 const getReminderNotificationId = (todoId: number) => {
   return `${REMINDER_ID_PREFIX}${todoId}`;
+};
+
+const getTodoPomodoroDurationSeconds = (todo: Todo) => {
+  const hours = Number(todo.timer?.hours ?? "00");
+  const minutes = Number(todo.timer?.minutes ?? "25");
+  const totalMinutes =
+    (Number.isFinite(hours) ? hours : 0) * 60 +
+    (Number.isFinite(minutes) ? minutes : 25);
+
+  return Math.max(60, totalMinutes * 60);
 };
 
 const cancelReminderNotification = async (identifier: string) => {
