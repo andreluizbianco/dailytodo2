@@ -108,7 +108,9 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   }, [selectedTodo]);
 
   React.useEffect(() => {
-    if (!showSettings || activeView !== "notes") return;
+    if (!showSettings || (activeView !== "notes" && activeView !== "projects")) {
+      return;
+    }
 
     const scrollTimeout = setTimeout(() => {
       scrollViewRef.current?.scrollTo({
@@ -206,7 +208,19 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
               onListDragMove={handleListDragMove}
             />
             {showSettings && (
-              <View style={styles.settingsContainer}>
+              <View
+                style={styles.settingsContainer}
+                onLayout={(event) => {
+                  settingsTopRef.current = Math.max(
+                    0,
+                    event.nativeEvent.layout.y - 4,
+                  );
+                  scrollViewRef.current?.scrollTo({
+                    y: settingsTopRef.current,
+                    animated: true,
+                  });
+                }}
+              >
                 <TodoSettings
                   todo={localSelectedTodo}
                   projects={projects}

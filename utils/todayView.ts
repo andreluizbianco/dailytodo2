@@ -46,7 +46,14 @@ export const buildTodayItems = ({
   const todayItems: TodayTodoItem[] = [];
 
   for (const todo of activeTodos) {
-    todayItems.push(createItem(todo, { type: "active", todoId: todo.id }, date));
+    todayItems.push(
+      createItem(
+        todo,
+        { type: "active", todoId: todo.id },
+        date,
+        getScheduleTimeMinutes(todo.schedule),
+      ),
+    );
   }
 
   for (const todo of archivedTodos) {
@@ -56,6 +63,7 @@ export const buildTodayItems = ({
       todo,
       { type: "archived-repeat", todoId: todo.id },
       date,
+      getScheduleTimeMinutes(todo.schedule),
     );
 
     if (!dismissed.has(item.occurrenceKey)) {
@@ -70,6 +78,7 @@ export const buildTodayItems = ({
 
     if (!isSameLocalDay(new Date(entry.printedAt), date)) continue;
 
+    const entryDate = new Date(entry.printedAt);
     const item = createItem(
       entry.todo,
       {
@@ -78,6 +87,7 @@ export const buildTodayItems = ({
         todoId: entry.todo.id,
       },
       date,
+      getDateTimeMinutes(entryDate),
     );
 
     if (!dismissed.has(item.occurrenceKey)) {
@@ -140,11 +150,31 @@ const createItem = (
   todo: Todo,
   source: TodayTodoSource,
   date: Date,
+  sortTimeMinutes?: number,
 ): TodayTodoItem => ({
   todo: { ...todo, isEditing: false },
   source,
   occurrenceKey: getTodayOccurrenceKey({ source, date }),
+  sortTimeMinutes,
 });
+
+const getScheduleTimeMinutes = (schedule?: TodoSchedule) => {
+  if (!schedule?.time) return undefined;
+
+  const [hours, minutes] = schedule.time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return undefined;
+  }
+
+  return hours * 60 + minutes;
+};
+
+const getDateTimeMinutes = (date: Date) => {
+  if (Number.isNaN(date.getTime())) return undefined;
+
+  return date.getHours() * 60 + date.getMinutes();
+};
 
 const isSameLocalDay = (left: Date, right: Date) => {
   return getDayKey(left) === getDayKey(right);

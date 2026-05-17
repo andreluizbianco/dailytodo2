@@ -107,8 +107,14 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   };
 
   const handleProjectSelect = (projectId: number) => {
+    const selectedProject = projects.find((project) => project.id === projectId);
+    const isRemovingProject = todo.projectId === projectId;
+
     updateTodo({
-      projectId: todo.projectId === projectId ? undefined : projectId,
+      projectId: isRemovingProject ? undefined : projectId,
+      ...(isRemovingProject || !selectedProject
+        ? {}
+        : { color: selectedProject.color }),
     });
   };
 

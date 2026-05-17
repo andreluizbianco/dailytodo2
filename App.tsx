@@ -57,12 +57,17 @@ import {
   isScheduleDueOnDay,
 } from "./utils/todayView";
 import {
+  applyTodayDisplayOrder,
+  createTodayDisplayOrder,
+} from "./utils/todayOrder";
+import {
   dismissTodayOccurrence,
   loadDismissedTodayOccurrences,
 } from "./utils/todayDismissals";
 import { shouldArchiveCompletedActiveTodo } from "./utils/todayCompletion";
 
 const { TimerModule } = NativeModules;
+const DAILY_ORDER_KEY_PREFIX = "dailyOrder:";
 
 // Ignore the specific warning about defaultProps
 LogBox.ignoreLogs(["Warning: ExpandableCalendar: Support for defaultProps"]);
@@ -104,6 +109,7 @@ const AppContent = () => {
     useState<SelectedTodoSource>({ type: "todo" });
   const [todayDate, setTodayDate] = useState(() => new Date());
   const [dismissedTodayKeys, setDismissedTodayKeys] = useState<string[]>([]);
+  const [dailyOrderKeys, setDailyOrderKeys] = useState<string[] | null>(null);
   const [selectedTodaySource, setSelectedTodaySource] =
     useState<TodayTodoSource | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -328,8 +334,74 @@ const AppContent = () => {
       }),
     [archivedTodos, calendarEntries, dismissedTodayKeys, todayDate, todos],
   );
-  const hasProjectedTodayItems = todayItems.some(
-    (item) => item.source.type !== "active",
+  const orderedTodayItems = useMemo(
+    () => applyTodayDisplayOrder(todayItems, dailyOrderKeys),
+    [dailyOrderKeys, todayItems],
+  );
+  useEffect(() => {
+    const loadDailyOrder = async () => {
+      try {
+        const savedOrder = await AsyncStorage.getItem(
+          `${DAILY_ORDER_KEY_PREFIX}${getDayKey(todayDate)}`,
+        );
+        const parsedOrder = savedOrder ? JSON.parse(savedOrder) : null;
+
+        setDailyOrderKeys(
+          Array.isArray(parsedOrder)
+            ? parsedOrder.filter((key): key is string => typeof key === "string")
+            : null,
+        );
+      } catch (error) {
+        console.error("Failed to load daily order:", error);
+        setDailyOrderKeys(null);
+      }
+    };
+
+    loadDailyOrder();
+  }, [todayDate]);
+
+  const handleTodayReorder = useCallback(
+    (nextTodos: Todo[]) => {
+      const usedKeys = new Set<string>();
+      const nextItems = nextTodos
+        .map((todo) => {
+          const item = orderedTodayItems.find((candidate) => {
+            return (
+              !usedKeys.has(candidate.occurrenceKey) &&
+              candidate.todo === todo
+            );
+          });
+
+          if (item) {
+            usedKeys.add(item.occurrenceKey);
+            return item;
+          }
+
+          const fallbackItem = orderedTodayItems.find((candidate) => {
+            return (
+              !usedKeys.has(candidate.occurrenceKey) &&
+              candidate.todo.id === todo.id
+            );
+          });
+
+          if (fallbackItem) {
+            usedKeys.add(fallbackItem.occurrenceKey);
+          }
+
+          return fallbackItem;
+        })
+        .filter((item): item is TodayTodoItem => Boolean(item));
+      const nextOrderKeys = createTodayDisplayOrder(nextItems);
+
+      setDailyOrderKeys(nextOrderKeys);
+      AsyncStorage.setItem(
+        `${DAILY_ORDER_KEY_PREFIX}${getDayKey(todayDate)}`,
+        JSON.stringify(nextOrderKeys),
+      ).catch((error) => {
+        console.error("Failed to save daily order:", error);
+      });
+    },
+    [orderedTodayItems, todayDate],
   );
 
   const updateTodayTodo = useCallback(
@@ -977,7 +1049,10 @@ const AppContent = () => {
 
     if (activeView === "projects") {
       if (selectedProject) {
-        const newTodo = addTodo({ projectId: selectedProject.id });
+        const newTodo = addTodo({
+          projectId: selectedProject.id,
+          color: selectedProject.color,
+        });
         handleSelectTodo(newTodo, { type: "todo" });
         return newTodo;
       }
@@ -1227,7 +1302,7 @@ const AppContent = () => {
             <TodoList
               todos={
                 leftColumnMode === "notes"
-                  ? todayItems.map((item) => item.todo)
+                  ? orderedTodayItems.map((item) => item.todo)
                   : todos
               }
               setTodos={setTodos}
@@ -1238,8 +1313,8 @@ const AppContent = () => {
               setSelectedTodo={(todo) => {
                 handleSelectProject(null);
                 if (leftColumnMode === "notes" && todo) {
-                  const todayItem = todayItems.find(
-                    (item) => item.todo.id === todo.id,
+                  const todayItem = orderedTodayItems.find(
+                    (item) => item.todo === todo || item.todo.id === todo.id,
                   );
 
                   if (todayItem) {
@@ -1254,11 +1329,15 @@ const AppContent = () => {
                 if (leftColumnMode !== "notes") return String(todo.id);
 
                 return (
-                  todayItems.find((item) => item.todo.id === todo.id)
+                  orderedTodayItems.find(
+                    (item) => item.todo === todo || item.todo.id === todo.id,
+                  )
                     ?.occurrenceKey ?? String(todo.id)
                 );
               }}
-              disableDrag={leftColumnMode === "notes" && hasProjectedTodayItems}
+              onReorderTodos={
+                leftColumnMode === "notes" ? handleTodayReorder : undefined
+              }
             />
           )}
         </Animated.View>

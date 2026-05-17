@@ -21,6 +21,7 @@ interface TodoListProps {
   onNoteBodyDragMove?: (pageY: number) => number;
   disableDrag?: boolean;
   getTodoKey?: (todo: Todo) => string;
+  onReorderTodos?: (todos: Todo[]) => void;
 }
 
 const ITEM_GAP = 3;
@@ -38,6 +39,7 @@ const TodoList: React.FC<TodoListProps> = ({
   onNoteBodyDragMove,
   disableDrag = false,
   getTodoKey = (todo) => String(todo.id),
+  onReorderTodos,
 }) => {
   const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
   const scrollViewRef = useRef<ScrollView>(null);
@@ -47,7 +49,7 @@ const TodoList: React.FC<TodoListProps> = ({
   const scrollContentHeightRef = useRef(0);
   const [isNoteBodyDragging, setIsNoteBodyDragging] = useState(false);
   const {
-    draggedTodoId,
+    draggedItemKey,
     pan,
     itemAnimations,
     onPanGestureEvent,
@@ -55,7 +57,7 @@ const TodoList: React.FC<TodoListProps> = ({
     handleLayout,
     onDragStart,
     setListLayout,
-  } = useTodoListDrag(todos, setTodos);
+  } = useTodoListDrag(todos, onReorderTodos ?? setTodos, getTodoKey);
 
   const stopOtherEdits = (currentTodoId: number) => {
     Object.entries(todoRefs.current).forEach(([id, ref]) => {
@@ -169,11 +171,11 @@ const TodoList: React.FC<TodoListProps> = ({
           isSelected={isSelected}
           updateTodo={updateTodo}
           stopOtherEdits={() => stopOtherEdits(todo.id)}
-          onDragStart={useDrag ? () => onDragStart(todo.id) : () => {}}
-          isDragging={useDrag && draggedTodoId === todo.id}
+          onDragStart={useDrag ? () => onDragStart(itemKey) : () => {}}
+          isDragging={useDrag && draggedItemKey === itemKey}
           onLayout={(layout) => {
             if (useDrag) {
-              handleLayout(todo.id, layout);
+              handleLayout(itemKey, layout);
             }
           }}
           isArchiveView={isArchiveView}
@@ -196,7 +198,7 @@ const TodoList: React.FC<TodoListProps> = ({
         key={itemKey}
         onGestureEvent={onPanGestureEvent}
         onHandlerStateChange={onHandlerStateChange}
-        enabled={draggedTodoId === todo.id}
+        enabled={draggedItemKey === itemKey}
       >
         {React.cloneElement(content, {
           style: [
@@ -205,14 +207,14 @@ const TodoList: React.FC<TodoListProps> = ({
               transform: [
                 {
                   translateY:
-                    draggedTodoId === todo.id
+                    draggedItemKey === itemKey
                       ? pan.y
-                      : itemAnimations[todo.id]
-                        ? itemAnimations[todo.id]
+                      : itemAnimations[itemKey]
+                        ? itemAnimations[itemKey]
                         : 0,
                 },
               ],
-              zIndex: draggedTodoId === todo.id ? 999 : 1,
+              zIndex: draggedItemKey === itemKey ? 999 : 1,
             },
           ],
         })}

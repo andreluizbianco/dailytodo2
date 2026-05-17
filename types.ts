@@ -91,4 +91,5 @@ export interface TodayTodoItem {
   todo: Todo;
   source: TodayTodoSource;
   occurrenceKey: string;
+  sortTimeMinutes?: number;
 }

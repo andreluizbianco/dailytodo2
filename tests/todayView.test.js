@@ -152,6 +152,17 @@ assert.deepEqual(
   ],
 );
 
+assert.deepEqual(
+  items.map((item) => item.sortTimeMinutes ?? null),
+  [
+    null,
+    9 * 60,
+    9 * 60,
+    new Date(calendarToday.printedAt).getHours() * 60 +
+      new Date(calendarToday.printedAt).getMinutes(),
+  ],
+);
+
 const dismissedKey = getTodayOccurrenceKey({
   source: { type: "archived-repeat", todoId: 2 },
   date: monday,

@@ -1,8 +1,11 @@
-import React, { useRef } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, ScrollView, StyleSheet, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PanGestureHandler } from "react-native-gesture-handler";
 import ProjectItem, { ProjectItemRef } from "./ProjectItem";
 import TodoItem, { TodoItemRef } from "./TodoItem";
 import { CalendarEntry, Project, Todo } from "../types";
+import { useTodoListDrag } from "../hooks/useTodoListDrag";
 
 type ProjectTodoSource =
   | { type: "todo" }
@@ -13,6 +16,8 @@ type ProjectTodoRow = {
   todo: Todo;
   source: ProjectTodoSource;
 };
+
+const PROJECT_ORDER_KEY_PREFIX = "projectOrder:";
 
 interface ProjectListProps {
   projects: Project[];
@@ -150,35 +155,179 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   }
                 }}
               />
-              {childRows.map((row) => (
-                <View
-                  key={`${row.source.type}-${row.source.type === "calendar" ? row.source.entryId : row.todo.id}`}
-                  style={styles.childTodoContainer}
-                >
-                  <TodoItem
-                    todo={row.todo}
-                    selectTodo={() => handleTodoSelect(row)}
-                    isSelected={isSelectedRow(row)}
-                    updateTodo={(id, updates) => updateRowTodo(row, updates)}
-                    stopOtherEdits={() => stopOtherEdits(row.todo.id, "todo")}
-                    onDragStart={() => {}}
-                    isDragging={false}
-                    onLayout={() => {}}
-                    horizontalMargin={12}
-                    ref={(ref) => {
-                      if (ref) {
-                        todoRefs.current[row.todo.id] = ref;
-                      }
-                    }}
-                  />
-                </View>
-              ))}
+              {isSelected ? (
+                <ProjectChildRows
+                  projectId={project.id}
+                  rows={childRows}
+                  isSelectedRow={isSelectedRow}
+                  onSelectRow={handleTodoSelect}
+                  updateRowTodo={updateRowTodo}
+                  stopOtherEdits={(todoId) => stopOtherEdits(todoId, "todo")}
+                  setTodoRef={(todoId, ref) => {
+                    if (ref) {
+                      todoRefs.current[todoId] = ref;
+                    }
+                  }}
+                />
+              ) : null}
             </View>
           );
         })}
       </ScrollView>
     </View>
   );
+};
+
+interface ProjectChildRowsProps {
+  projectId: number;
+  rows: ProjectTodoRow[];
+  isSelectedRow: (row: ProjectTodoRow) => boolean;
+  onSelectRow: (row: ProjectTodoRow) => void;
+  updateRowTodo: (row: ProjectTodoRow, updates: Partial<Todo>) => void;
+  stopOtherEdits: (todoId: number) => void;
+  setTodoRef: (todoId: number, ref: TodoItemRef | null) => void;
+}
+
+const ProjectChildRows: React.FC<ProjectChildRowsProps> = ({
+  projectId,
+  rows,
+  isSelectedRow,
+  onSelectRow,
+  updateRowTodo,
+  stopOtherEdits,
+  setTodoRef,
+}) => {
+  const [orderKeys, setOrderKeys] = useState<string[] | null>(null);
+  const orderedRows = useMemo(
+    () => applyProjectOrder(rows, orderKeys),
+    [orderKeys, rows],
+  );
+  const handleReorderRows = useCallback(
+    (nextRows: ProjectTodoRow[]) => {
+      const nextOrderKeys = nextRows.map(getProjectRowKey);
+
+      setOrderKeys(nextOrderKeys);
+      AsyncStorage.setItem(
+        `${PROJECT_ORDER_KEY_PREFIX}${projectId}`,
+        JSON.stringify(nextOrderKeys),
+      ).catch((error) => {
+        console.error("Failed to save project order:", error);
+      });
+    },
+    [projectId],
+  );
+  const {
+    draggedItemKey,
+    pan,
+    itemAnimations,
+    onPanGestureEvent,
+    onHandlerStateChange,
+    handleLayout,
+    onDragStart,
+    setListLayout,
+  } = useTodoListDrag(orderedRows, handleReorderRows, getProjectRowKey);
+
+  useEffect(() => {
+    const loadProjectOrder = async () => {
+      try {
+        const savedOrder = await AsyncStorage.getItem(
+          `${PROJECT_ORDER_KEY_PREFIX}${projectId}`,
+        );
+        const parsedOrder = savedOrder ? JSON.parse(savedOrder) : null;
+
+        setOrderKeys(
+          Array.isArray(parsedOrder)
+            ? parsedOrder.filter((key): key is string => typeof key === "string")
+            : null,
+        );
+      } catch (error) {
+        console.error("Failed to load project order:", error);
+        setOrderKeys(null);
+      }
+    };
+
+    loadProjectOrder();
+  }, [projectId]);
+
+  return (
+    <View
+      style={styles.projectChildList}
+      onLayout={(event) => setListLayout(event.nativeEvent.layout)}
+    >
+      {orderedRows.map((row) => {
+        const rowKey = getProjectRowKey(row);
+        const isDragging = draggedItemKey === rowKey;
+        const content = (
+          <Animated.View
+            key={rowKey}
+            style={[
+              styles.childTodoContainer,
+              {
+                transform: [
+                  {
+                    translateY: isDragging
+                      ? pan.y
+                      : itemAnimations[rowKey] || 0,
+                  },
+                ],
+                zIndex: isDragging ? 999 : 1,
+              },
+            ]}
+          >
+            <TodoItem
+              todo={row.todo}
+              selectTodo={() => onSelectRow(row)}
+              isSelected={isSelectedRow(row)}
+              updateTodo={(_id, updates) => updateRowTodo(row, updates)}
+              stopOtherEdits={() => stopOtherEdits(row.todo.id)}
+              onDragStart={() => onDragStart(rowKey)}
+              isDragging={isDragging}
+              onLayout={(layout) => handleLayout(rowKey, layout)}
+              horizontalMargin={12}
+              ref={(ref) => setTodoRef(row.todo.id, ref)}
+            />
+          </Animated.View>
+        );
+
+        return (
+          <PanGestureHandler
+            key={rowKey}
+            onGestureEvent={onPanGestureEvent}
+            onHandlerStateChange={onHandlerStateChange}
+            enabled={isDragging}
+          >
+            {content}
+          </PanGestureHandler>
+        );
+      })}
+    </View>
+  );
+};
+
+const getProjectRowKey = (row: ProjectTodoRow) => {
+  return `${row.source.type}-${
+    row.source.type === "calendar" ? row.source.entryId : row.todo.id
+  }`;
+};
+
+const applyProjectOrder = (
+  rows: ProjectTodoRow[],
+  orderKeys: string[] | null,
+) => {
+  if (!orderKeys || orderKeys.length === 0) return rows;
+
+  const rowsByKey = new Map(rows.map((row) => [getProjectRowKey(row), row]));
+  const orderedRows: ProjectTodoRow[] = [];
+
+  for (const key of orderKeys) {
+    const row = rowsByKey.get(key);
+    if (!row) continue;
+
+    orderedRows.push(row);
+    rowsByKey.delete(key);
+  }
+
+  return [...orderedRows, ...rowsByKey.values()];
 };
 
 const styles = StyleSheet.create({
@@ -192,6 +341,9 @@ const styles = StyleSheet.create({
   },
   projectGroup: {
     marginBottom: 3,
+  },
+  projectChildList: {
+    overflow: "hidden",
   },
   childTodoContainer: {
     marginLeft: 4,

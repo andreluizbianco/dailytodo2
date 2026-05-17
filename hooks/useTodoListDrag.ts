@@ -5,51 +5,117 @@ import {
   PanGestureHandlerGestureEvent,
   State,
 } from 'react-native-gesture-handler';
-import { Todo } from '../types';
-
 const ITEM_GAP = 3;
+const SPRING_CONFIG = {
+  useNativeDriver: true,
+  friction: 7,
+  tension: 360,
+};
 
-export const useTodoListDrag = (
-  todos: Todo[],
-  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>,
+export const useTodoListDrag = <Item>(
+  items: Item[],
+  reorderItems: (items: Item[]) => void,
+  getItemKey: (item: Item) => string,
 ) => {
-  const [draggedTodoId, setDraggedTodoId] = useState<number | null>(null);
+  const [draggedItemKey, setDraggedItemKey] = useState<string | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
-  const itemLayouts = useRef<{[key: number]: LayoutRectangle}>({});
+  const itemLayouts = useRef<Record<string, LayoutRectangle>>({});
   const listLayout = useRef<LayoutRectangle | null>(null);
-  const itemAnimations = useRef<{[key: number]: Animated.Value}>({});
+  const itemAnimations = useRef<Record<string, Animated.Value>>({});
 
   useEffect(() => {
-    todos.forEach(todo => {
-      if (!itemAnimations.current[todo.id]) {
-        itemAnimations.current[todo.id] = new Animated.Value(0);
+    items.forEach((item) => {
+      const key = getItemKey(item);
+
+      if (!itemAnimations.current[key]) {
+        itemAnimations.current[key] = new Animated.Value(0);
       }
     });
 
-    Object.keys(itemAnimations.current).forEach(id => {
-      if (!todos.some(todo => todo.id === Number(id))) {
-        delete itemAnimations.current[Number(id)];
+    Object.keys(itemAnimations.current).forEach((key) => {
+      if (!items.some((item) => getItemKey(item) === key)) {
+        delete itemAnimations.current[key];
       }
     });
-  }, [todos]);
+  }, [getItemKey, items]);
 
-  const getItemHeight = (id: number) => {
-    return itemLayouts.current[id]?.height || 0;
+  const getItemHeight = (key: string) => {
+    return itemLayouts.current[key]?.height || 0;
   };
 
   const getItemOffset = (index: number) => {
-    return todos.slice(0, index).reduce((sum, todo, i) => {
-      return sum + getItemHeight(todo.id) + (i > 0 ? ITEM_GAP : 0);
+    return items.slice(0, index).reduce((sum, item, i) => {
+      return sum + getItemHeight(getItemKey(item)) + (i > 0 ? ITEM_GAP : 0);
     }, 0);
   };
 
+  const getTargetIndex = useCallback(
+    (draggedIdx: number, translationY: number) => {
+      if (draggedIdx < 0) return -1;
+
+      const draggedItem = items[draggedIdx];
+      const draggedHeight = getItemHeight(getItemKey(draggedItem));
+      const draggedCenter =
+        getItemOffset(draggedIdx) + translationY + draggedHeight / 2;
+      let targetIndex = items.length;
+
+      for (let index = 0; index < items.length; index += 1) {
+        if (index === draggedIdx) continue;
+
+        const itemHeight = getItemHeight(getItemKey(items[index]));
+        const itemCenter = getItemOffset(index) + itemHeight / 2;
+
+        if (draggedCenter < itemCenter) {
+          targetIndex = index;
+          break;
+        }
+      }
+
+      return targetIndex > draggedIdx ? targetIndex - 1 : targetIndex;
+    },
+    [getItemKey, items],
+  );
+
+  const animateItemsForTargetIndex = useCallback(
+    (draggedIdx: number, targetIdx: number) => {
+      if (draggedIdx < 0 || targetIdx < 0) return;
+
+      const draggedItem = items[draggedIdx];
+      const draggedHeight = getItemHeight(getItemKey(draggedItem));
+
+      items.forEach((item, index) => {
+        const itemKey = getItemKey(item);
+
+        if (index === draggedIdx || !itemAnimations.current[itemKey]) return;
+
+        let targetPosition = 0;
+
+        if (targetIdx > draggedIdx && index > draggedIdx && index <= targetIdx) {
+          targetPosition = -(draggedHeight + ITEM_GAP);
+        } else if (
+          targetIdx < draggedIdx &&
+          index >= targetIdx &&
+          index < draggedIdx
+        ) {
+          targetPosition = draggedHeight + ITEM_GAP;
+        }
+
+        Animated.spring(itemAnimations.current[itemKey], {
+          toValue: targetPosition,
+          ...SPRING_CONFIG,
+        }).start();
+      });
+    },
+    [getItemKey, items],
+  );
+
   const onPanGestureEvent = useCallback(
     (event: PanGestureHandlerGestureEvent) => {
-      if (draggedTodoId !== null && listLayout.current) {
-        const draggedIdx = todos.findIndex(todo => todo.id === draggedTodoId);
-        const draggedItemHeight = getItemHeight(draggedTodoId);
-
-        let newTranslationY = event.nativeEvent.translationY;
+      if (draggedItemKey !== null && listLayout.current) {
+        const draggedIdx = items.findIndex(
+          (item) => getItemKey(item) === draggedItemKey,
+        );
+        const newTranslationY = event.nativeEvent.translationY;
 
         Animated.event([{nativeEvent: {translationY: pan.y}}], {
           useNativeDriver: false,
@@ -60,69 +126,41 @@ export const useTodoListDrag = (
           },
         });
 
-        const draggedTop = getItemOffset(draggedIdx) + newTranslationY;
-        const draggedBottom = draggedTop + draggedItemHeight;
-
-        todos.forEach((todo, index) => {
-          if (index !== draggedIdx && itemAnimations.current[todo.id]) {
-            const itemTop = getItemOffset(index);
-            const itemBottom = itemTop + getItemHeight(todo.id);
-            const itemCenter = (itemTop + itemBottom) / 2;
-
-            let targetPosition = 0;
-            if (index < draggedIdx && draggedTop < itemCenter) {
-              targetPosition = draggedItemHeight + ITEM_GAP;
-            } else if (index > draggedIdx && draggedBottom > itemCenter) {
-              targetPosition = -(draggedItemHeight + ITEM_GAP);
-            }
-
-            Animated.spring(itemAnimations.current[todo.id], {
-              toValue: targetPosition,
-              useNativeDriver: true,
-              friction: 5,
-              tension: 300,
-            }).start();
-          }
-        });
+        animateItemsForTargetIndex(
+          draggedIdx,
+          getTargetIndex(draggedIdx, newTranslationY),
+        );
       }
     },
-    [draggedTodoId, pan.y, todos],
+    [
+      animateItemsForTargetIndex,
+      draggedItemKey,
+      getItemKey,
+      getTargetIndex,
+      items,
+      pan.y,
+    ],
   );
 
   const onHandlerStateChange = useCallback(
     (event: PanGestureHandlerStateChangeEvent) => {
-      if (event.nativeEvent.oldState === State.ACTIVE && draggedTodoId !== null) {
-        const draggedIdx = todos.findIndex(todo => todo.id === draggedTodoId);
-        const draggedItemHeight = getItemHeight(draggedTodoId);
-        const draggedTop = getItemOffset(draggedIdx) + event.nativeEvent.translationY;
-        const draggedBottom = draggedTop + draggedItemHeight;
-
-        let newIdx = todos.findIndex((_, index) => {
-          if (index === draggedIdx) return false;
-          const itemTop = getItemOffset(index);
-          const itemBottom = itemTop + getItemHeight(todos[index].id);
-
-          if (index < draggedIdx) {
-            return draggedTop < (itemTop + itemBottom) / 2;
-          } else {
-            return draggedBottom < (itemTop + itemBottom) / 2;
-          }
-        });
-
-        if (newIdx === -1) {
-          newIdx = todos.length;
-        } else if (newIdx > draggedIdx) {
-          newIdx--;
-        }
+      if (event.nativeEvent.oldState === State.ACTIVE && draggedItemKey !== null) {
+        const draggedIdx = items.findIndex(
+          (item) => getItemKey(item) === draggedItemKey,
+        );
+        const newIdx = getTargetIndex(
+          draggedIdx,
+          event.nativeEvent.translationY,
+        );
 
         if (draggedIdx !== newIdx) {
-          const newTodos = [...todos];
-          const [removed] = newTodos.splice(draggedIdx, 1);
-          newTodos.splice(newIdx, 0, removed);
-          setTodos(newTodos);
+          const nextItems = [...items];
+          const [removed] = nextItems.splice(draggedIdx, 1);
+          nextItems.splice(newIdx, 0, removed);
+          reorderItems(nextItems);
         }
 
-        setDraggedTodoId(null);
+        setDraggedItemKey(null);
         pan.setValue({x: 0, y: 0});
 
         Object.values(itemAnimations.current).forEach(animation => {
@@ -130,15 +168,15 @@ export const useTodoListDrag = (
         });
       }
     },
-    [todos, draggedTodoId, pan, setTodos],
+    [draggedItemKey, getItemKey, getTargetIndex, items, pan, reorderItems],
   );
 
-  const handleLayout = useCallback((id: number, layout: LayoutRectangle) => {
-    itemLayouts.current[id] = layout;
+  const handleLayout = useCallback((key: string, layout: LayoutRectangle) => {
+    itemLayouts.current[key] = layout;
   }, []);
 
-  const onDragStart = useCallback((todoId: number) => {
-    setDraggedTodoId(todoId);
+  const onDragStart = useCallback((key: string) => {
+    setDraggedItemKey(key);
   }, []);
 
   const setListLayout = useCallback((layout: LayoutRectangle) => {
@@ -146,7 +184,7 @@ export const useTodoListDrag = (
   }, []);
 
   return {
-    draggedTodoId,
+    draggedItemKey,
     pan,
     itemAnimations: itemAnimations.current,
     onPanGestureEvent,
