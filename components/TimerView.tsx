@@ -10,16 +10,12 @@ import {
 } from "react-native";
 import TimeWheelPicker from "./TimeWheelPicker";
 import PlayStopControls from "./PlayStopControls";
-import { TimerMode, Todo } from "../types";
+import { AmbientSoundId, TimerMode, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../utils/theme";
 import {
-  loadAmbientSoundEnabled,
-  loadAmbientSoundId,
-  saveAmbientSoundEnabled,
-  saveAmbientSoundId,
   ambientSoundOptions,
-  AmbientSoundId,
+  parseAmbientSoundId,
 } from "../utils/timerAmbientPreferences";
 
 const { TimerModule } = NativeModules;
@@ -54,7 +50,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   const [displayTime, setDisplayTime] = useState<string>("");
   const [loadedTodoId, setLoadedTodoId] = useState<number | null>(null);
   const [ambientSoundEnabled, setAmbientSoundEnabled] = useState(false);
-  const [ambientSoundId, setAmbientSoundId] = useState<AmbientSoundId>("rain");
+  const [ambientSoundId, setAmbientSoundId] =
+    useState<AmbientSoundId>("waterfall");
 
   const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -223,17 +220,6 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
   }, [remainingSeconds]);
 
   useEffect(() => {
-    Promise.all([loadAmbientSoundEnabled(), loadAmbientSoundId()])
-      .then(([enabled, soundId]) => {
-        setAmbientSoundEnabled(enabled);
-        setAmbientSoundId(soundId);
-      })
-      .catch((error) => {
-        console.warn("Failed to load ambient sound preferences:", error);
-      });
-  }, []);
-
-  useEffect(() => {
     const loadTimerForSelectedTodo = async () => {
       clearTimerInterval();
       clearStopwatchInterval();
@@ -247,6 +233,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         setTimerMode("pomodoro");
         setStopwatchSeconds(0);
         setRemainingSeconds(25 * 60);
+        setAmbientSoundEnabled(false);
+        setAmbientSoundId("waterfall");
         return;
       }
 
@@ -260,6 +248,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
           : "pomodoro");
 
       setTimerMode(restoredMode);
+      setAmbientSoundEnabled(selectedTodo.ambientSound?.enabled === true);
+      setAmbientSoundId(parseAmbientSoundId(selectedTodo.ambientSound?.soundId));
 
       if (!selectedTodo.timerMode) {
         updateTodo(selectedTodo.id, { timerMode: restoredMode });
@@ -303,6 +293,8 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     selectedTodo?.id,
     selectedTodo?.timer?.hours,
     selectedTodo?.timer?.minutes,
+    selectedTodo?.ambientSound?.enabled,
+    selectedTodo?.ambientSound?.soundId,
     selectedTodo?.timerMode,
     updateTodo,
   ]);
@@ -493,28 +485,67 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
     TimerModule.stopTimer();
   };
 
+  const handleAddMinute = () => {
+    if (
+      !selectedTodo ||
+      loadedTodoId !== selectedTodo.id ||
+      timerMode !== "pomodoro" ||
+      (!isPlaying && !isPaused)
+    ) {
+      return;
+    }
+
+    TimerModule.addPomodoroMinute?.();
+  };
+
   const setAmbientSoundEnabledValue = (nextValue: boolean) => {
     setAmbientSoundEnabled(nextValue);
-    saveAmbientSoundEnabled(nextValue).catch((error) => {
-      console.warn("Failed to save ambient sound preference:", error);
+    if (!selectedTodo || loadedTodoId !== selectedTodo.id) return;
+
+    updateTodo(selectedTodo.id, {
+      ambientSound: {
+        enabled: nextValue,
+        soundId: ambientSoundId,
+      },
     });
   };
 
   const handleAmbientSoundSelect = (soundId: AmbientSoundId) => {
     setAmbientSoundId(soundId);
-    saveAmbientSoundId(soundId).catch((error) => {
-      console.warn("Failed to save ambient sound preference:", error);
+    if (!selectedTodo || loadedTodoId !== selectedTodo.id) return;
+
+    updateTodo(selectedTodo.id, {
+      ambientSound: {
+        enabled: ambientSoundEnabled,
+        soundId,
+      },
     });
   };
 
   useEffect(() => {
-    if (ambientSoundEnabled && isPlaying) {
-      TimerModule?.startAmbientSound?.(ambientSoundId, 0.34);
+    if (!TimerModule || !selectedTodo || loadedTodoId !== selectedTodo.id) {
+      return;
+    }
+
+    TimerModule?.setAmbientPreferences?.(ambientSoundEnabled, ambientSoundId, 0.34);
+
+    if (ambientSoundEnabled) {
+      TimerModule?.prepareAmbientSound?.(ambientSoundId);
+
+      if (isPlaying) {
+        TimerModule?.startAmbientSound?.(ambientSoundId, 0.34);
+      }
       return;
     }
 
     TimerModule?.stopAmbientSound?.();
-  }, [ambientSoundEnabled, ambientSoundId, isPlaying]);
+  }, [
+    ambientSoundEnabled,
+    ambientSoundId,
+    isPlaying,
+    loadedTodoId,
+    selectedTodo?.id,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -541,6 +572,20 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
         </View>
       )}
       <View style={styles.controlsContainer}>
+        {timerMode === "pomodoro" && (isPlaying || isPaused) ? (
+          <TouchableOpacity
+            style={[
+              styles.addMinuteButton,
+              { backgroundColor: theme.control, borderColor: theme.border },
+            ]}
+            onPress={handleAddMinute}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.addMinuteText, { color: theme.text }]}>
+              +1 min
+            </Text>
+          </TouchableOpacity>
+        ) : null}
         <PlayStopControls
           onPlay={handlePlay}
           onPause={handlePause}
@@ -675,6 +720,17 @@ const styles = StyleSheet.create({
   controlsContainer: {
     marginTop: 30,
     alignItems: "center",
+    gap: 12,
+  },
+  addMinuteButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  addMinuteText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   stopwatchContainer: {
     height: 150,

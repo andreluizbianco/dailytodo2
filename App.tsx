@@ -34,6 +34,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useTheme } from "./utils/theme";
 import {
   addTimerEntryToCalendar,
+  createCalendarLogTodo,
   replaceCalendarEntry,
 } from "./utils/calendarStorage";
 import {
@@ -92,7 +93,7 @@ type NotificationTarget = {
 };
 
 const AppContent = () => {
-  const { isDarkMode, theme } = useTheme();
+  const { isDarkMode, noteListWidthRatio, theme } = useTheme();
   const themeAnimation = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
   const [activeView, setActiveView] = useState<ViewType>("notes");
   const [sideContext, setSideContext] = useState<SideContext>("notes");
@@ -134,6 +135,7 @@ const AppContent = () => {
     removeProject,
     updateArchivedTodo,
     removeTodo,
+    trashTodoSnapshot,
     archiveTodo,
     unarchiveTodo,
     restoreTrashedTodo,
@@ -583,6 +585,7 @@ const AppContent = () => {
       createdAt: project.createdAt,
       timerMode: project.timerMode,
       timer: project.timer,
+      ambientSound: project.ambientSound,
     };
   }
 
@@ -700,7 +703,7 @@ const AppContent = () => {
     if (source?.type === "calendar-instance") {
       const replacement: CalendarEntry = {
         id: source.entryId,
-        todo: { ...todo, projectId: undefined },
+        todo: createCalendarLogTodo(todo),
         printedAt: new Date().toISOString(),
         timerCompleted: event.completed,
         isTrackingEntry: true,
@@ -710,6 +713,9 @@ const AppContent = () => {
       };
 
       await replaceCalendarEntryInStorage(source.entryId, replacement);
+      if (shouldTrashCompletedCalendarTodo(todo)) {
+        trashTodoSnapshot(todo);
+      }
       await dismissTodaySource(source);
       if (selectedTodo?.id === todo.id) {
         setSelectedTodo(null);
@@ -769,6 +775,10 @@ const AppContent = () => {
       Math.trunc(Number(event.activeElapsedSeconds) || 0),
       event.completed ? "completed" : "stopped",
     ].join(":");
+  }
+
+  function shouldTrashCompletedCalendarTodo(todo: Todo) {
+    return todo.schedule?.mode !== "every";
   }
 
   const selectTodoByTargetId = useCallback(
@@ -983,10 +993,19 @@ const AppContent = () => {
     );
 
     if (project) {
-      updateProject(project.id, {
-        timerMode: updates.timerMode,
-        timer: updates.timer,
-      });
+      const projectUpdates: Partial<Project> = {};
+
+      if (updates.ambientSound !== undefined) {
+        projectUpdates.ambientSound = updates.ambientSound;
+      }
+      if (updates.timerMode !== undefined) {
+        projectUpdates.timerMode = updates.timerMode;
+      }
+      if (updates.timer !== undefined) {
+        projectUpdates.timer = updates.timer;
+      }
+
+      updateProject(project.id, projectUpdates);
     }
   }
 
@@ -1112,7 +1131,7 @@ const AppContent = () => {
     ) {
       const replacement: CalendarEntry = {
         id: selectedTodaySource.entryId,
-        todo: { ...todo, projectId: undefined },
+        todo: createCalendarLogTodo(todo),
         printedAt: new Date().toISOString(),
         isTrackingEntry: true,
       };
@@ -1121,13 +1140,16 @@ const AppContent = () => {
         selectedTodaySource.entryId,
         replacement,
       );
+      if (shouldTrashCompletedCalendarTodo(todo)) {
+        trashTodoSnapshot(todo);
+      }
       await dismissSelectedTodayOccurrence();
       return;
     }
 
     const calendarEntry: CalendarEntry = {
       id: Date.now(),
-      todo: { ...todo, projectId: undefined },
+      todo: createCalendarLogTodo(todo),
       printedAt: new Date().toISOString(),
       isTrackingEntry: true,
     };
@@ -1175,11 +1197,35 @@ const AppContent = () => {
   };
 
   const handleRemoveTodo = (id: number): Todo | null => {
+    if (
+      selectedTodo?.id === id &&
+      selectedTodaySource?.type === "calendar-instance"
+    ) {
+      const updatedEntries = calendarEntriesRef.current.filter(
+        (entry) => entry.id !== selectedTodaySource.entryId,
+      );
+
+      trashTodoSnapshot(selectedTodo);
+      setCalendarEntries(updatedEntries);
+      AsyncStorage.setItem(
+        "calendarEntries",
+        JSON.stringify(updatedEntries),
+      ).catch((error) => {
+        console.error("Error deleting calendar entry:", error);
+      });
+
+      setSelectedTodo(null);
+      setSelectedTodoSource({ type: "todo" });
+      setSelectedTodaySource(null);
+      return null;
+    }
+
     if (selectedTodo?.id === id && selectedTodoSource.type === "calendar") {
       const updatedEntries = calendarEntriesRef.current.filter(
         (entry) => entry.id !== selectedTodoSource.entryId,
       );
 
+      trashTodoSnapshot(selectedTodo);
       setCalendarEntries(updatedEntries);
       AsyncStorage.setItem(
         "calendarEntries",
@@ -1195,6 +1241,7 @@ const AppContent = () => {
     }
 
     if (selectedTodo?.id === id && selectedTodoSource.type === "archive") {
+      trashTodoSnapshot(selectedTodo);
       setArchivedTodos((prevTodos) =>
         prevTodos.filter((todo) => todo.id !== id),
       );
@@ -1271,7 +1318,7 @@ const AppContent = () => {
               ],
               width: settingsLayoutAnimation.interpolate({
                 inputRange: [0, 1],
-                outputRange: ["40%", "0%"],
+                outputRange: [`${noteListWidthRatio * 100}%`, "0%"],
               }),
             },
           ]}
@@ -1347,7 +1394,7 @@ const AppContent = () => {
             {
               width: settingsLayoutAnimation.interpolate({
                 inputRange: [0, 1],
-                outputRange: ["60%", "100%"],
+                outputRange: [`${(1 - noteListWidthRatio) * 100}%`, "100%"],
               }),
             },
           ]}
@@ -1387,7 +1434,11 @@ const AppContent = () => {
             printOnCalendar={handlePrintOnCalendar}
             exportData={exportData}
             importData={importData}
+            onOpenTodoFromSettings={(id) => {
+              selectTodoByTargetId(id);
+            }}
             todos={todos}
+            calendarEntries={calendarEntries}
             todayItems={todayItems}
             setTodos={setTodos}
             projects={projects}

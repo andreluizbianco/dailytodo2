@@ -240,6 +240,19 @@ export const useTodos = () => {
     return nextSelectedTodo;
   };
 
+  const trashTodoSnapshot = (todo: Todo): void => {
+    setTrashedTodos((prevTodos) =>
+      getRetainedTrashedTodos(
+        [
+          ...prevTodos,
+          createTrashedTodo(todo, new Date().toISOString()),
+        ],
+        trashRetention,
+        new Date().toISOString(),
+      ),
+    );
+  };
+
   const archiveTodo = (id: number): Todo | null => {
     const todoToArchive = todos.find((todo) => todo.id === id);
     const nextSelectedTodo = getNextSelectedTodoAfterRemoval(todos, id);
@@ -412,6 +425,7 @@ export const useTodos = () => {
     removeProject,
     updateArchivedTodo,
     removeTodo,
+    trashTodoSnapshot,
     archiveTodo,
     unarchiveTodo,
     restoreTrashedTodo,

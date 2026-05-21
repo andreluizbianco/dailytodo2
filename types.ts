@@ -5,6 +5,7 @@ export interface RestoredFrom {
 }
 
 export type TimerMode = "pomodoro" | "stopwatch";
+export type AmbientSoundId = "waterfall" | "cafe" | "stream";
 export type ScheduleMode = "every" | "in" | "date";
 export type ScheduleUnit = "days" | "weeks" | "months" | "years";
 export type ReminderUnit = "minutes" | "hours" | "days";
@@ -40,6 +41,10 @@ export interface Project {
     minutes: string;
     isActive: boolean;
   };
+  ambientSound?: {
+    enabled: boolean;
+    soundId: AmbientSoundId;
+  };
 }
 
 export interface Todo {
@@ -61,6 +66,10 @@ export interface Todo {
     hours: string;
     minutes: string;
     isActive: boolean;
+  };
+  ambientSound?: {
+    enabled: boolean;
+    soundId: AmbientSoundId;
   };
   schedule?: TodoSchedule;
   reminder?: TodoReminder;

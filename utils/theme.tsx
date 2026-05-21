@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useColorScheme } from "react-native";
+import { Appearance, ColorSchemeName } from "react-native";
 
 export type ThemeMode = "light" | "dark";
 export type ThemePreference = "system" | "light" | "dark";
@@ -18,6 +18,7 @@ const LIGHT_INTENSITY_KEY = "app:lightIntensity";
 const LIGHT_NOTE_COLOR_STRENGTH_KEY = "app:lightNoteColorStrength";
 const NOTE_TITLE_FONT_SIZE_KEY = "app:noteTitleFontSize";
 const NOTE_BODY_FONT_SIZE_KEY = "app:noteBodyFontSize";
+const NOTE_LIST_WIDTH_RATIO_KEY = "app:noteListWidthRatio";
 
 export const DEFAULT_DARK_INTENSITY = 0.65;
 export const DEFAULT_LIGHT_INTENSITY = 0.5;
@@ -30,6 +31,9 @@ export const NOTE_TITLE_FONT_SIZE_MIN = 12;
 export const NOTE_TITLE_FONT_SIZE_MAX = 22;
 export const NOTE_BODY_FONT_SIZE_MIN = 14;
 export const NOTE_BODY_FONT_SIZE_MAX = 24;
+export const DEFAULT_NOTE_LIST_WIDTH_RATIO = 0.4;
+export const NOTE_LIST_WIDTH_RATIO_MIN = 0.3;
+export const NOTE_LIST_WIDTH_RATIO_MAX = 0.48;
 
 export const lightTheme = {
   mode: "light" as ThemeMode,
@@ -90,6 +94,7 @@ interface ThemeContextValue {
   lightNoteColorStrength: number;
   noteBodyFontSize: number;
   noteColorStrength: number;
+  noteListWidthRatio: number;
   noteTitleFontSize: number;
   resetThemeTuning: () => void;
   setNoteBodyFontSize: (value: number) => void;
@@ -98,6 +103,7 @@ interface ThemeContextValue {
   setDarkIntensity: (value: number) => void;
   setLightIntensity: (value: number) => void;
   setLightNoteColorStrength: (value: number) => void;
+  setNoteListWidthRatio: (value: number) => void;
   setNoteColorStrength: (value: number) => void;
   setNoteTitleFontSize: (value: number) => void;
   setThemePreference: (preference: ThemePreference) => void;
@@ -114,6 +120,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   lightNoteColorStrength: DEFAULT_LIGHT_NOTE_COLOR_STRENGTH,
   noteBodyFontSize: DEFAULT_NOTE_BODY_FONT_SIZE,
   noteColorStrength: DEFAULT_DARK_NOTE_COLOR_STRENGTH,
+  noteListWidthRatio: DEFAULT_NOTE_LIST_WIDTH_RATIO,
   noteTitleFontSize: DEFAULT_NOTE_TITLE_FONT_SIZE,
   resetThemeTuning: () => undefined,
   setCurrentIntensity: () => undefined,
@@ -122,6 +129,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   setLightIntensity: () => undefined,
   setLightNoteColorStrength: () => undefined,
   setNoteBodyFontSize: () => undefined,
+  setNoteListWidthRatio: () => undefined,
   setNoteColorStrength: () => undefined,
   setNoteTitleFontSize: () => undefined,
   setThemePreference: () => undefined,
@@ -134,7 +142,8 @@ const ThemeContext = createContext<ThemeContextValue>({
 export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
-  const systemColorScheme = useColorScheme();
+  const [systemColorScheme, setSystemColorScheme] =
+    useState<ColorSchemeName>(() => Appearance.getColorScheme());
   const [darkIntensity, setDarkIntensityState] = useState(
     DEFAULT_DARK_INTENSITY,
   );
@@ -153,6 +162,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
   const [noteBodyFontSize, setNoteBodyFontSizeState] = useState(
     DEFAULT_NOTE_BODY_FONT_SIZE,
   );
+  const [noteListWidthRatio, setNoteListWidthRatioState] = useState(
+    DEFAULT_NOTE_LIST_WIDTH_RATIO,
+  );
   const [themePreference, setThemePreferenceState] =
     useState<ThemePreference>("system");
 
@@ -167,6 +179,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
           storedLightNoteColorStrength,
           storedNoteTitleFontSize,
           storedNoteBodyFontSize,
+          storedNoteListWidthRatio,
         ] = await Promise.all([
           AsyncStorage.getItem(THEME_MODE_KEY),
           AsyncStorage.getItem(DARK_INTENSITY_KEY),
@@ -175,6 +188,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
           AsyncStorage.getItem(LIGHT_NOTE_COLOR_STRENGTH_KEY),
           AsyncStorage.getItem(NOTE_TITLE_FONT_SIZE_KEY),
           AsyncStorage.getItem(NOTE_BODY_FONT_SIZE_KEY),
+          AsyncStorage.getItem(NOTE_LIST_WIDTH_RATIO_KEY),
         ]);
 
         if (
@@ -238,12 +252,29 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
         if (nextNoteBodyFontSize !== null) {
           setNoteBodyFontSizeState(nextNoteBodyFontSize);
         }
+
+        const nextNoteListWidthRatio = parseStoredSliderValue(
+          storedNoteListWidthRatio,
+          NOTE_LIST_WIDTH_RATIO_MIN,
+          NOTE_LIST_WIDTH_RATIO_MAX,
+        );
+        if (nextNoteListWidthRatio !== null) {
+          setNoteListWidthRatioState(nextNoteListWidthRatio);
+        }
       } catch (error) {
         console.error("Failed to load theme settings:", error);
       }
     };
 
     loadThemeSettings();
+  }, []);
+
+  useEffect(() => {
+    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemColorScheme(colorScheme);
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const setThemePreference = (preference: ThemePreference) => {
@@ -322,6 +353,20 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
     );
   };
 
+  const setNoteListWidthRatio = (value: number) => {
+    const nextValue = clamp(
+      value,
+      NOTE_LIST_WIDTH_RATIO_MIN,
+      NOTE_LIST_WIDTH_RATIO_MAX,
+    );
+    setNoteListWidthRatioState(nextValue);
+    AsyncStorage.setItem(NOTE_LIST_WIDTH_RATIO_KEY, String(nextValue)).catch(
+      (error) => {
+        console.error("Failed to save note list width:", error);
+      },
+    );
+  };
+
   const resetThemeTuning = () => {
     if (resolvedThemeMode === "dark") {
       setDarkIntensity(DEFAULT_DARK_INTENSITY);
@@ -348,6 +393,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       lightNoteColorStrength,
       noteBodyFontSize,
       noteColorStrength,
+      noteListWidthRatio,
       noteTitleFontSize,
       resetThemeTuning,
       setCurrentIntensity:
@@ -360,6 +406,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       setLightIntensity,
       setLightNoteColorStrength,
       setNoteBodyFontSize,
+      setNoteListWidthRatio,
       setNoteColorStrength,
       setNoteTitleFontSize,
       setThemePreference,
@@ -377,6 +424,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       lightNoteColorStrength,
       noteBodyFontSize,
       noteColorStrength,
+      noteListWidthRatio,
       noteTitleFontSize,
       resolvedThemeMode,
       themePreference,

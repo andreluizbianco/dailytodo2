@@ -4,26 +4,26 @@ import android.content.*
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.MediaPlayer
+import android.media.AudioTrack
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
+import android.os.Process
 import android.util.Log
+import java.io.ByteArrayOutputStream
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class TimerModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
-  private val ambientHandler = Handler(Looper.getMainLooper())
-  private var ambientCurrentPlayer: MediaPlayer? = null
-  private var ambientNextPlayer: MediaPlayer? = null
-  private var ambientLoopRunnable: Runnable? = null
-  private var ambientFadeRunnable: Runnable? = null
-  private var ambientSoundId: String = "rain"
+  private var ambientPlayer: AmbientLoopPlayer? = null
+  private var ambientSoundId: String = "waterfall"
   private var ambientVolume: Float = 0.35f
-  private var ambientGeneration: Int = 0
   private var ambientIsPlaying: Boolean = false
+  private var ambientEnabled: Boolean = false
 
 private val receiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
@@ -50,6 +50,13 @@ private val receiver = object : BroadcastReceiver() {
           "TIMER_FINISHED"
         else
           "TIMER_STATE_CHANGED"
+
+      syncAmbientWithTimerState(
+        isFinishedEvent = intent.action == "com.dailytodo2.TIMER_FINISHED",
+        completed = intent.getBooleanExtra("completed", false),
+        isRunning = intent.getBooleanExtra("isRunning", false),
+        isPaused = intent.getBooleanExtra("isPaused", false)
+      )
 
       reactContext
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
@@ -137,6 +144,17 @@ fun startTimer(
   }
 
   @ReactMethod
+  fun addPomodoroMinute() {
+    Log.d("TimerModule", "addPomodoroMinute")
+
+    val intent = Intent(reactContext, TimerService::class.java).apply {
+      action = "ADD_MINUTE"
+    }
+
+    reactContext.startService(intent)
+  }
+
+  @ReactMethod
   @Synchronized
   fun startAmbientSound(soundId: String, volume: Double) {
     Log.d("TimerModule", "startAmbientSound soundId=$soundId volume=$volume")
@@ -145,32 +163,73 @@ fun startTimer(
     if (
       ambientIsPlaying &&
       ambientSoundId == soundId &&
-      ambientCurrentPlayer?.isPlaying == true
+      ambientPlayer?.isPlaying() == true
     ) {
       ambientVolume = nextVolume
-      setAmbientPlayerVolume(ambientCurrentPlayer, ambientVolume)
+      setAmbientPlayerVolume(ambientVolume)
       return
     }
 
     ambientSoundId = soundId
     ambientVolume = nextVolume
-    ambientGeneration += 1
+    ambientEnabled = true
+    persistAmbientPreferences()
     releaseAmbientPlayers()
 
-    val player = createAmbientPlayer(ambientSoundId, ambientVolume) ?: return
-    ambientCurrentPlayer = player
-    ambientIsPlaying = true
-    player.start()
-    scheduleAmbientCrossfade(ambientGeneration)
+    startAmbientPlayback()
   }
 
   @ReactMethod
   @Synchronized
   fun stopAmbientSound() {
     Log.d("TimerModule", "stopAmbientSound")
-    ambientGeneration += 1
+    ambientEnabled = false
+    ambientIsPlaying = false
+    persistAmbientPreferences()
+    releaseAmbientPlayers()
+  }
+
+  @ReactMethod
+  @Synchronized
+  fun pauseAmbientSound() {
+    Log.d("TimerModule", "pauseAmbientSound")
     ambientIsPlaying = false
     releaseAmbientPlayers()
+  }
+
+  @ReactMethod
+  @Synchronized
+  fun setAmbientPreferences(enabled: Boolean, soundId: String, volume: Double) {
+    val soundChanged = ambientSoundId != soundId
+
+    ambientEnabled = enabled
+    ambientSoundId = soundId
+    ambientVolume = volume.toFloat().coerceIn(0f, 1f)
+    persistAmbientPreferences()
+
+    if (!enabled || (soundChanged && ambientIsPlaying)) {
+      ambientIsPlaying = false
+      releaseAmbientPlayers()
+    }
+  }
+
+  @ReactMethod
+  fun prepareAmbientSound(soundId: String) {
+    if (!ambientEnabled) return
+
+    val resourceId = ambientResourceId(soundId)
+    Thread {
+      Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+      try {
+        AmbientLoopPlayer.prepare(reactContext.applicationContext, resourceId)
+      } catch (error: Exception) {
+        Log.e("TimerModule", "Error preparing ambient sound", error)
+      }
+    }.apply {
+      name = "DailyTodoAmbientPrepare"
+      isDaemon = true
+      start()
+    }
   }
 
   @ReactMethod
@@ -284,160 +343,439 @@ fun startTimer(
 
   private fun ambientResourceId(soundId: String): Int {
     return when (soundId) {
-      "waterfall" -> R.raw.ambient_waterfall
-      "gentle-rain" -> R.raw.ambient_gentle_rain
-      else -> R.raw.ambient_rain
+      "waterfall" -> R.raw.ambient_waves
+      "cafe" -> R.raw.ambient_cafe
+      "stream", "focus" -> R.raw.ambient_stream
+      else -> R.raw.ambient_waves
     }
   }
 
-  private fun createAmbientPlayer(soundId: String, volume: Float): MediaPlayer? {
+  private fun createAmbientPlayer(soundId: String, volume: Float): AmbientLoopPlayer? {
     return try {
-      val assetFileDescriptor = reactContext.resources.openRawResourceFd(
-        ambientResourceId(soundId)
-      )
-      val player = MediaPlayer()
-
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-        player.setAudioAttributes(
-          AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
-        )
-      } else {
-        @Suppress("DEPRECATION")
-        player.setAudioStreamType(AudioManager.STREAM_MUSIC)
-      }
-
-      player.setDataSource(
-        assetFileDescriptor.fileDescriptor,
-        assetFileDescriptor.startOffset,
-        assetFileDescriptor.length
-      )
-      assetFileDescriptor.close()
-      player.setVolume(volume, volume)
-      player.isLooping = false
-      player.prepare()
-      player
+      AmbientLoopPlayer(reactContext, ambientResourceId(soundId), volume.coerceIn(0f, 1f))
     } catch (error: Exception) {
       Log.e("TimerModule", "Error creating ambient player", error)
       null
     }
   }
 
-  private fun scheduleAmbientCrossfade(generation: Int) {
-    val player = ambientCurrentPlayer ?: return
-    val durationMs = player.duration
-    if (durationMs <= 0) {
-      ambientHandler.postDelayed({ beginAmbientCrossfade(generation) }, 10_000L)
-      return
-    }
-
-    val fadeMs = ambientFadeDurationMs(durationMs)
-    val delayMs = maxOf(250L, durationMs.toLong() - fadeMs)
-
-    ambientLoopRunnable?.let { ambientHandler.removeCallbacks(it) }
-
-    ambientLoopRunnable = Runnable {
-      beginAmbientCrossfade(generation)
-    }.also { runnable ->
-      ambientHandler.postDelayed(runnable, delayMs)
-    }
-  }
-
-  private fun ambientFadeDurationMs(durationMs: Int): Long {
-    return minOf(3000L, maxOf(1200L, durationMs.toLong() / 3L))
+  private fun startAmbientPlayback() {
+    val player = createAmbientPlayer(ambientSoundId, ambientVolume) ?: return
+    ambientPlayer = player
+    ambientIsPlaying = true
+    player.start()
   }
 
   @Synchronized
-  private fun beginAmbientCrossfade(generation: Int) {
-    if (generation != ambientGeneration) return
-    if (!ambientIsPlaying) return
-
-    val outgoingPlayer = ambientCurrentPlayer ?: return
-    val incomingPlayer = createAmbientPlayer(ambientSoundId, 0f) ?: run {
-      outgoingPlayer.seekTo(0)
-      outgoingPlayer.start()
-      scheduleAmbientCrossfade(generation)
+  private fun syncAmbientWithTimerState(
+    isFinishedEvent: Boolean,
+    completed: Boolean,
+    isRunning: Boolean,
+    isPaused: Boolean
+  ) {
+    if (isFinishedEvent && completed && ambientIsPlaying) {
+      ambientIsPlaying = false
+      ambientPlayer?.fadeOutAndStop()
       return
     }
 
-    ambientNextPlayer = incomingPlayer
-    incomingPlayer.start()
-
-    val fadeMs = ambientFadeDurationMs(outgoingPlayer.duration)
-    val steps = 30
-    val stepDelayMs = maxOf(24L, fadeMs / steps)
-    var step = 0
-
-    ambientFadeRunnable?.let { ambientHandler.removeCallbacks(it) }
-    ambientFadeRunnable = object : Runnable {
-      override fun run() {
-        if (generation != ambientGeneration) return
-
-        step += 1
-        val ratio = smoothAmbientFadeRatio(
-          (step.toFloat() / steps.toFloat()).coerceIn(0f, 1f)
-        )
-        val outgoingVolume = ambientVolume * (1f - ratio)
-        val incomingVolume = ambientVolume * ratio
-
-        try {
-          setAmbientPlayerVolume(outgoingPlayer, outgoingVolume)
-          setAmbientPlayerVolume(incomingPlayer, incomingVolume)
-        } catch (error: Exception) {
-          Log.e("TimerModule", "Error during ambient crossfade", error)
-        }
-
-        if (step < steps) {
-          ambientHandler.postDelayed(this, stepDelayMs)
-          return
-        }
-
-        try {
-          outgoingPlayer.stop()
-        } catch (_: Exception) {}
-        try {
-          outgoingPlayer.release()
-        } catch (_: Exception) {}
-
-        ambientCurrentPlayer = incomingPlayer
-        ambientNextPlayer = null
-        scheduleAmbientCrossfade(generation)
+    if (!isRunning || isPaused) {
+      if (ambientIsPlaying) {
+        ambientIsPlaying = false
+        releaseAmbientPlayers()
       }
-    }.also { runnable ->
-      ambientHandler.post(runnable)
+      return
     }
+
+    if (!ambientEnabled || ambientIsPlaying) return
+
+    startAmbientPlayback()
   }
 
-  private fun smoothAmbientFadeRatio(value: Float): Float {
-    return value * value * (3f - 2f * value)
+  private fun persistAmbientPreferences() {
+    reactContext
+      .getSharedPreferences("timer_prefs", Context.MODE_PRIVATE)
+      .edit()
+      .putBoolean("ambientSoundEnabled", ambientEnabled)
+      .putString("ambientSoundId", ambientSoundId)
+      .putFloat("ambientVolume", ambientVolume)
+      .apply()
   }
 
-  private fun setAmbientPlayerVolume(player: MediaPlayer?, volume: Float) {
-    player?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f))
+  private fun setAmbientPlayerVolume(volume: Float) {
+    ambientPlayer?.setVolume(volume.coerceIn(0f, 1f))
   }
 
   private fun releaseAmbientPlayers() {
-    ambientLoopRunnable?.let { ambientHandler.removeCallbacks(it) }
-    ambientFadeRunnable?.let { ambientHandler.removeCallbacks(it) }
-    ambientLoopRunnable = null
-    ambientFadeRunnable = null
+    try {
+      ambientPlayer?.stop()
+    } catch (_: Exception) {}
+    ambientPlayer = null
+  }
 
-    try {
-      ambientCurrentPlayer?.stop()
-    } catch (_: Exception) {}
-    try {
-      ambientCurrentPlayer?.release()
-    } catch (_: Exception) {}
-    ambientCurrentPlayer = null
-    try {
-      ambientNextPlayer?.stop()
-    } catch (_: Exception) {}
-    try {
-      ambientNextPlayer?.release()
-    } catch (_: Exception) {}
-    ambientNextPlayer = null
+  private class DecodedAudio(
+    val pcm: ByteArray,
+    val sampleRate: Int,
+    val channelCount: Int
+  )
+
+  private class AmbientLoopPlayer(
+    private val context: Context,
+    private val resourceId: Int,
+    private var volume: Float
+  ) {
+    @Volatile
+    private var stopRequested = false
+    private var audioTrack: AudioTrack? = null
+    private var playbackThread: Thread? = null
+
+    fun start() {
+      stopRequested = false
+
+      playbackThread = Thread {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+        try {
+          val decoded = getLoopedResource(context, resourceId)
+          if (stopRequested) return@Thread
+
+          val frameSize = decoded.channelCount * 2
+          val fadeInFrames = (decoded.sampleRate * 1.2f).toInt()
+          val channelMask =
+            if (decoded.channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+          val minBufferSize = AudioTrack.getMinBufferSize(
+            decoded.sampleRate,
+            channelMask,
+            AudioFormat.ENCODING_PCM_16BIT
+          )
+          val streamBufferSize = maxOf(minBufferSize * 2, 16 * 1024)
+          val track = createAudioTrack(decoded.sampleRate, channelMask, streamBufferSize)
+
+          audioTrack = track
+          applyTrackVolume(track, 0f)
+          track.play()
+          var offset = 0
+          var writtenFrames = 0
+          while (!stopRequested) {
+            val remaining = decoded.pcm.size - offset
+            val chunkSize = minOf(32 * 1024, remaining)
+            if (chunkSize <= 0) {
+              offset = 0
+              continue
+            }
+            val fadeProgress =
+              if (fadeInFrames <= 0) 1f else (writtenFrames.toFloat() / fadeInFrames.toFloat()).coerceIn(0f, 1f)
+            applyTrackVolume(track, volume * fadeProgress)
+            val written = track.write(decoded.pcm, offset, chunkSize)
+            if (written > 0) {
+              offset += written
+              writtenFrames += written / frameSize
+              if (offset >= decoded.pcm.size) {
+                offset = 0
+              }
+            }
+          }
+        } catch (error: Exception) {
+          Log.e("TimerModule", "Ambient AudioTrack playback failed", error)
+        }
+      }.apply {
+        name = "DailyTodoAmbientLoop"
+        isDaemon = true
+        start()
+      }
+    }
+
+    fun isPlaying(): Boolean {
+      return audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING && !stopRequested
+    }
+
+    fun setVolume(nextVolume: Float) {
+      volume = nextVolume.coerceIn(0f, 1f)
+      val track = audioTrack ?: return
+      applyTrackVolume(track, volume)
+    }
+
+    fun fadeOutAndStop(durationMs: Long = 7_000L) {
+      Thread {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+        val steps = 70
+        val stepDelay = maxOf(16L, durationMs / steps)
+        val startVolume = volume
+
+        for (step in 0..steps) {
+          if (stopRequested) return@Thread
+
+          val progress = step.toFloat() / steps.toFloat()
+          val eased = progress * progress
+          setVolume(startVolume * (1f - eased))
+
+          try {
+            Thread.sleep(stepDelay)
+          } catch (_: InterruptedException) {
+            return@Thread
+          }
+        }
+
+        stop()
+      }.apply {
+        name = "DailyTodoAmbientFadeOut"
+        isDaemon = true
+        start()
+      }
+    }
+
+    private fun applyTrackVolume(track: AudioTrack, nextVolume: Float) {
+      val safeVolume = nextVolume.coerceIn(0f, 1f)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        track.setVolume(safeVolume)
+      } else {
+        @Suppress("DEPRECATION")
+        track.setStereoVolume(safeVolume, safeVolume)
+      }
+    }
+
+    fun stop() {
+      stopRequested = true
+      try {
+        playbackThread?.join(500)
+      } catch (_: Exception) {}
+      playbackThread = null
+      try {
+        audioTrack?.pause()
+      } catch (_: Exception) {}
+      try {
+        audioTrack?.flush()
+      } catch (_: Exception) {}
+      try {
+        audioTrack?.release()
+      } catch (_: Exception) {}
+      audioTrack = null
+    }
+
+    private fun applyLoopCrossfade(decoded: DecodedAudio): DecodedAudio {
+      val frameSize = decoded.channelCount * 2
+      if (frameSize <= 0 || decoded.pcm.size < frameSize * 4) return decoded
+
+      val totalFrames = decoded.pcm.size / frameSize
+      val requestedFadeFrames = (decoded.sampleRate * 0.85f).toInt()
+      val fadeFrames = requestedFadeFrames.coerceIn(1, maxOf(1, totalFrames / 6))
+      if (fadeFrames <= 1 || totalFrames <= fadeFrames * 2) return decoded
+
+      val fadeBytes = fadeFrames * frameSize
+      val bodyStart = fadeBytes
+      val bodyEnd = decoded.pcm.size - fadeBytes
+      val output = ByteArray(decoded.pcm.size - fadeBytes)
+      var outputOffset = 0
+
+      System.arraycopy(decoded.pcm, bodyStart, output, outputOffset, bodyEnd - bodyStart)
+      outputOffset += bodyEnd - bodyStart
+
+      for (frame in 0 until fadeFrames) {
+        val fadeIn = frame.toFloat() / (fadeFrames - 1).toFloat()
+        val fadeOut = 1f - fadeIn
+
+        for (channel in 0 until decoded.channelCount) {
+          val endByteIndex = bodyEnd + frame * frameSize + channel * 2
+          val startByteIndex = frame * frameSize + channel * 2
+          val endSample = readPcm16(decoded.pcm, endByteIndex)
+          val startSample = readPcm16(decoded.pcm, startByteIndex)
+          val mixedSample = (endSample * fadeOut + startSample * fadeIn)
+            .toInt()
+            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+          writePcm16(output, outputOffset + frame * frameSize + channel * 2, mixedSample)
+        }
+      }
+
+      return DecodedAudio(output, decoded.sampleRate, decoded.channelCount)
+    }
+
+    private fun readPcm16(bytes: ByteArray, index: Int): Int {
+      val low = bytes[index].toInt() and 0xff
+      val high = bytes[index + 1].toInt()
+      return (high shl 8) or low
+    }
+
+    private fun writePcm16(bytes: ByteArray, index: Int, sample: Int) {
+      bytes[index] = (sample and 0xff).toByte()
+      bytes[index + 1] = ((sample shr 8) and 0xff).toByte()
+    }
+
+    private fun createAudioTrack(
+      sampleRate: Int,
+      channelMask: Int,
+      bufferSize: Int
+    ): AudioTrack {
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        AudioTrack.Builder()
+          .setAudioAttributes(
+            AudioAttributes.Builder()
+              .setUsage(AudioAttributes.USAGE_MEDIA)
+              .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+              .build()
+          )
+          .setAudioFormat(
+            AudioFormat.Builder()
+              .setSampleRate(sampleRate)
+              .setChannelMask(channelMask)
+              .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+              .build()
+          )
+          .setTransferMode(AudioTrack.MODE_STREAM)
+          .setBufferSizeInBytes(bufferSize)
+          .build()
+      } else {
+        @Suppress("DEPRECATION")
+        AudioTrack(
+          AudioManager.STREAM_MUSIC,
+          sampleRate,
+          channelMask,
+          AudioFormat.ENCODING_PCM_16BIT,
+          bufferSize,
+          AudioTrack.MODE_STREAM
+        )
+      }
+    }
+
+    private fun getLoopedResource(context: Context, resourceId: Int): DecodedAudio {
+      synchronized(AmbientLoopPlayer::class.java) {
+        if (lastPreparedResourceId == resourceId && lastPreparedAudio != null) {
+          return lastPreparedAudio as DecodedAudio
+        }
+      }
+
+      val decoded = applyLoopCrossfade(decodeResource(context, resourceId))
+
+      synchronized(AmbientLoopPlayer::class.java) {
+        lastPreparedResourceId = resourceId
+        lastPreparedAudio = decoded
+      }
+
+      return decoded
+    }
+
+    private fun decodeResource(context: Context, resourceId: Int): DecodedAudio {
+      val extractor = MediaExtractor()
+      val pcm = ByteArrayOutputStream()
+      var decoder: MediaCodec? = null
+      var sampleRate = 44100
+      var channelCount = 2
+
+      try {
+        val afd = context.resources.openRawResourceFd(resourceId)
+        extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+        afd.close()
+
+        var audioTrackIndex = -1
+        var inputFormat: MediaFormat? = null
+        for (index in 0 until extractor.trackCount) {
+          val format = extractor.getTrackFormat(index)
+          val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+          if (mime.startsWith("audio/")) {
+            audioTrackIndex = index
+            inputFormat = format
+            break
+          }
+        }
+
+        if (audioTrackIndex < 0 || inputFormat == null) {
+          throw IllegalStateException("No audio track found in ambient resource")
+        }
+
+        extractor.selectTrack(audioTrackIndex)
+        val mime = inputFormat.getString(MediaFormat.KEY_MIME)
+          ?: throw IllegalStateException("Ambient audio track has no MIME type")
+        sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        channelCount = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+
+        decoder = MediaCodec.createDecoderByType(mime)
+        decoder.configure(inputFormat, null, null, 0)
+        decoder.start()
+
+        val bufferInfo = MediaCodec.BufferInfo()
+        var inputDone = false
+        var outputDone = false
+
+        while (!outputDone) {
+          if (!inputDone) {
+            val inputBufferIndex = decoder.dequeueInputBuffer(10_000)
+            if (inputBufferIndex >= 0) {
+              val inputBuffer = decoder.getInputBuffer(inputBufferIndex)
+              val sampleSize = if (inputBuffer != null) {
+                extractor.readSampleData(inputBuffer, 0)
+              } else {
+                -1
+              }
+
+              if (sampleSize < 0) {
+                decoder.queueInputBuffer(
+                  inputBufferIndex,
+                  0,
+                  0,
+                  0,
+                  MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                )
+                inputDone = true
+              } else {
+                decoder.queueInputBuffer(
+                  inputBufferIndex,
+                  0,
+                  sampleSize,
+                  extractor.sampleTime,
+                  0
+                )
+                extractor.advance()
+              }
+            }
+          }
+
+          when (val outputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, 10_000)) {
+            MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+              val outputFormat = decoder.outputFormat
+              sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+              channelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            }
+            MediaCodec.INFO_TRY_AGAIN_LATER -> {}
+            else -> {
+              if (outputBufferIndex >= 0) {
+                val outputBuffer = decoder.getOutputBuffer(outputBufferIndex)
+                if (outputBuffer != null && bufferInfo.size > 0) {
+                  val chunk = ByteArray(bufferInfo.size)
+                  outputBuffer.position(bufferInfo.offset)
+                  outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                  outputBuffer.get(chunk)
+                  pcm.write(chunk)
+                }
+
+                outputDone =
+                  bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                decoder.releaseOutputBuffer(outputBufferIndex, false)
+              }
+            }
+          }
+        }
+
+        return DecodedAudio(pcm.toByteArray(), sampleRate, channelCount)
+      } finally {
+        try {
+          decoder?.stop()
+        } catch (_: Exception) {}
+        try {
+          decoder?.release()
+        } catch (_: Exception) {}
+        try {
+          extractor.release()
+        } catch (_: Exception) {}
+      }
+    }
+
+    companion object {
+      private var lastPreparedResourceId: Int? = null
+      private var lastPreparedAudio: DecodedAudio? = null
+
+      fun prepare(context: Context, resourceId: Int) {
+        AmbientLoopPlayer(context, resourceId, 0f).getLoopedResource(context, resourceId)
+      }
+    }
   }
 
   @ReactMethod

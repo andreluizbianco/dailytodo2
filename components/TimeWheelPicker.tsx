@@ -32,6 +32,7 @@ interface NativePomodoroWheelProps {
   maxMinutes: number;
   enabled: boolean;
   darkMode: boolean;
+  wheelBackgroundColor: string;
   onValueChange?: (event: NativeSyntheticEvent<NativeWheelChangeEvent>) => void;
   style?: object;
 }
@@ -114,6 +115,7 @@ const TimeWheelPicker: React.FC<TimeWheelPickerProps> = ({
           maxMinutes={MAX_MINUTES}
           enabled={!isPlaying}
           darkMode={isDarkMode}
+          wheelBackgroundColor={theme.background}
           onValueChange={handleNativeChange}
           style={styles.nativeWheel}
         />

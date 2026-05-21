@@ -8,6 +8,7 @@ import {
   TextInput,
   Dimensions,
   findNodeHandle,
+  PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TodoItemNote from "./TodoItemNote";
@@ -67,6 +68,140 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     number | null
   >(null);
   const [editingTimerId, setEditingTimerId] = useState<number | null>(null);
+  const [draggingWeekEntryId, setDraggingWeekEntryId] = useState<number | null>(
+    null,
+  );
+  const [armedWeekEntryId, setArmedWeekEntryId] = useState<number | null>(null);
+  const [weekDragOffset, setWeekDragOffset] = useState({ x: 0, y: 0 });
+  const armedWeekEntryIdRef = useRef<number | null>(null);
+  const draggingWeekEntryIdRef = useRef<number | null>(null);
+  const weekDragStartRef = useRef({ pageX: 0, pageY: 0 });
+  const weekLastTapRef = useRef<{ id: number | null; timestamp: number }>({
+    id: null,
+    timestamp: 0,
+  });
+
+  const isMovableCalendarEntry = (entry: CalendarEntry) =>
+    !entry.isTrackingEntry && !entry.timerCompleted;
+
+  const persistCalendarEntries = async (nextEntries: CalendarEntry[]) => {
+    setEntries(nextEntries);
+    await AsyncStorage.setItem("calendarEntries", JSON.stringify(nextEntries));
+  };
+
+  const moveWeekEntryToDate = async (entry: CalendarEntry, targetDate: Date) => {
+    const previousDate = new Date(entry.printedAt);
+    const nextDate = new Date(targetDate);
+
+    nextDate.setHours(
+      previousDate.getHours(),
+      previousDate.getMinutes(),
+      previousDate.getSeconds(),
+      previousDate.getMilliseconds(),
+    );
+
+    const nextPrintedAt = nextDate.toISOString();
+    const updatedEntries = entries.map((currentEntry) =>
+      currentEntry.id === entry.id
+        ? {
+            ...currentEntry,
+            printedAt: nextPrintedAt,
+            todo: {
+              ...currentEntry.todo,
+              schedule: updateScheduleTimeFromEntry(
+                currentEntry,
+                nextPrintedAt,
+              ),
+            },
+          }
+        : currentEntry,
+    );
+
+    await persistCalendarEntries(updatedEntries);
+  };
+
+  const createWeekEntryPanHandlers = (entry: CalendarEntry) => {
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () =>
+        armedWeekEntryIdRef.current === entry.id,
+      onMoveShouldSetPanResponder: (_event, gestureState) =>
+        armedWeekEntryIdRef.current === entry.id &&
+        (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
+      onPanResponderGrant: (event) => {
+        if (armedWeekEntryIdRef.current !== entry.id) return;
+
+        draggingWeekEntryIdRef.current = entry.id;
+        weekDragStartRef.current = {
+          pageX: event.nativeEvent.pageX,
+          pageY: event.nativeEvent.pageY,
+        };
+        setDraggingWeekEntryId(entry.id);
+        setWeekDragOffset({ x: 0, y: 0 });
+      },
+      onPanResponderMove: (event) => {
+        if (draggingWeekEntryIdRef.current !== entry.id) return;
+
+        setWeekDragOffset({
+          x: event.nativeEvent.pageX - weekDragStartRef.current.pageX,
+          y: event.nativeEvent.pageY - weekDragStartRef.current.pageY,
+        });
+      },
+      onPanResponderRelease: async (event) => {
+        if (draggingWeekEntryIdRef.current !== entry.id) return;
+
+        const dx = event.nativeEvent.pageX - weekDragStartRef.current.pageX;
+        const startIndex = weekDates.findIndex(
+          (date) =>
+            date.toISOString().split("T")[0] ===
+            new Date(entry.printedAt).toISOString().split("T")[0],
+        );
+        const fallbackIndex = Math.max(
+          0,
+          Math.min(weekDates.length - 1, startIndex + Math.round(dx / COLUMN_WIDTH)),
+        );
+        const nextDate = weekDates[fallbackIndex];
+
+        draggingWeekEntryIdRef.current = null;
+        armedWeekEntryIdRef.current = null;
+        setDraggingWeekEntryId(null);
+        setArmedWeekEntryId(null);
+        setWeekDragOffset({ x: 0, y: 0 });
+
+        if (nextDate) {
+          await moveWeekEntryToDate(entry, nextDate);
+        }
+      },
+      onPanResponderTerminate: () => {
+        armedWeekEntryIdRef.current = null;
+        draggingWeekEntryIdRef.current = null;
+        setArmedWeekEntryId(null);
+        setDraggingWeekEntryId(null);
+        setWeekDragOffset({ x: 0, y: 0 });
+      },
+    });
+
+    return panResponder.panHandlers;
+  };
+
+  const handleWeekEntryTouchStart = (
+    entry: CalendarEntry,
+  ) => {
+    const now = Date.now();
+    const isDoubleTap =
+      weekLastTapRef.current.id === entry.id &&
+      now - weekLastTapRef.current.timestamp < 320;
+
+    weekLastTapRef.current = { id: entry.id, timestamp: now };
+
+    if (!isDoubleTap || !isMovableCalendarEntry(entry)) {
+      return;
+    }
+
+    softHaptic();
+    armedWeekEntryIdRef.current = entry.id;
+    setArmedWeekEntryId(entry.id);
+    setWeekDragOffset({ x: 0, y: 0 });
+  };
 
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
@@ -173,12 +308,24 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     const time = `${String(nextDate.getHours()).padStart(2, "0")}:${String(
       nextDate.getMinutes(),
     ).padStart(2, "0")}`;
-
-    return {
+    const baseSchedule = {
       ...entry.todo.schedule,
       time,
       targetDate: timestamp,
       nextAt: timestamp,
+    };
+
+    if (entry.todo.schedule.mode !== "every") {
+      return baseSchedule;
+    }
+
+    return {
+      ...baseSchedule,
+      startsAt: timestamp,
+      weekdays:
+        entry.todo.schedule.unit === "weeks"
+          ? [nextDate.getDay()]
+          : entry.todo.schedule.weekdays,
     };
   };
 
@@ -746,20 +893,48 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           <View style={styles.weekRow}>
             {weekDates.map((date) => {
               const dateStr = date.toISOString().split("T")[0];
-              const dayEntries = entries.filter((entry) => {
-                const entryDate = new Date(entry.printedAt)
-                  .toISOString()
-                  .split("T")[0];
-                return entryDate === dateStr;
-              });
+              const dayEntries = entries
+                .filter((entry) => {
+                  const entryDate = new Date(entry.printedAt)
+                    .toISOString()
+                    .split("T")[0];
+                  return entryDate === dateStr;
+                })
+                .sort((a, b) => {
+                  const timeA = new Date(a.printedAt).getTime();
+                  const timeB = new Date(b.printedAt).getTime();
+                  return timeA - timeB;
+                });
 
               return (
                 <View key={dateStr} style={styles.dayColumn}>
                   {dayEntries.map((entry) => (
-                    <View key={entry.id} style={styles.weekEntryItem}>
+                    <View
+                      key={entry.id}
+                      onTouchEnd={() => handleWeekEntryTouchStart(entry)}
+                      style={[
+                        styles.weekEntryItem,
+                        draggingWeekEntryId === entry.id && {
+                          transform: [
+                            { translateX: weekDragOffset.x },
+                            { translateY: weekDragOffset.y },
+                            { scale: 1.03 },
+                          ],
+                          zIndex: 10,
+                          elevation: 8,
+                        },
+                      ]}
+                      {...createWeekEntryPanHandlers(entry)}
+                    >
                       <View
                         style={[
                           styles.weekEntryContent,
+                          armedWeekEntryId === entry.id &&
+                            styles.weekEntryArmed,
+                          draggingWeekEntryId === entry.id &&
+                            styles.weekEntryArmed,
+                          !isMovableCalendarEntry(entry) &&
+                            styles.weekEntryLocked,
                           {
                             backgroundColor: getNoteBackgroundColor(
                               entry.todo.color,
@@ -1053,6 +1228,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     flex: 1,
     justifyContent: "center",
+    borderTopWidth: 3,
+    borderTopColor: "transparent",
+  },
+  weekEntryArmed: {
+    borderTopColor: "#2563eb",
+  },
+  weekEntryLocked: {
+    opacity: 0.78,
   },
   weekEntryText: {
     fontSize: 12,

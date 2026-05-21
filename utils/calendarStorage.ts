@@ -43,7 +43,7 @@ export const addTimerEntryToCalendar = async ({
 
     const calendarEntry: CalendarEntry = {
       id: now,
-      todo: { ...currentTodo, projectId: undefined },
+      todo: createCalendarLogTodo(currentTodo),
       printedAt: printedAt ?? new Date(startedAt).toISOString(),
       timerCompleted: completed,
       isTrackingEntry: true,
@@ -90,4 +90,15 @@ export const replaceCalendarEntry = (
   replacement: CalendarEntry,
 ) => {
   return entries.map((entry) => (entry.id === entryId ? replacement : entry));
+};
+
+export const createCalendarLogTodo = (todo: Todo): Todo => {
+  const {
+    projectId: _projectId,
+    reminder: _reminder,
+    schedule: _schedule,
+    ...calendarTodo
+  } = todo;
+
+  return calendarTodo;
 };

@@ -50,6 +50,7 @@ class PomodoroWheelView(context: Context) : View(context) {
   private var interactionEnabled = true
   private var textColor = Color.rgb(17, 24, 39)
   private var fadeColor = Color.WHITE
+  private var wheelBackgroundColor = Color.WHITE
 
   private val itemHeight: Float
     get() = 40f * resources.displayMetrics.density
@@ -87,7 +88,23 @@ class PomodoroWheelView(context: Context) : View(context) {
 
   fun setDarkMode(enabled: Boolean) {
     textColor = if (enabled) Color.rgb(229, 231, 235) else Color.rgb(17, 24, 39)
-    fadeColor = if (enabled) Color.rgb(16, 18, 20) else Color.WHITE
+    if (wheelBackgroundColor == Color.WHITE || wheelBackgroundColor == Color.rgb(16, 18, 20)) {
+      setWheelBackgroundColor(if (enabled) "#101214" else "#FFFFFF")
+      return
+    }
+    redraw()
+  }
+
+  fun setWheelBackgroundColor(color: String?) {
+    val parsedColor = try {
+      if (color.isNullOrBlank()) null else Color.parseColor(color)
+    } catch (_: IllegalArgumentException) {
+      null
+    } ?: wheelBackgroundColor
+
+    wheelBackgroundColor = parsedColor
+    fadeColor = parsedColor
+    setBackgroundColor(parsedColor)
     redraw()
   }
 

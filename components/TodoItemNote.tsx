@@ -86,7 +86,23 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   useEffect(() => {
     setIsEditing(false);
     onEndEditing();
+    checklistInputRefs.current = {};
+    checklistRowHeights.current = {};
+    checklistItemAnimations.current = {};
+    checklistDragStartIndex.current = null;
+    checklistDragTargetIndex.current = null;
+    checklistTouchStartIndex.current = null;
+    checklistDragScrollDelta.current = 0;
+    checklistPanY.setValue(0);
+    setLiftedChecklistIndex(null);
   }, [todo.id]);
+
+  useEffect(() => {
+    checklistRowHeights.current = {};
+    Object.values(checklistItemAnimations.current).forEach((animation) => {
+      animation.setValue(0);
+    });
+  }, [todo.noteType, localNote, noteBodyFontSize]);
 
   useEffect(() => {
     if (isEditing) {
@@ -443,8 +459,8 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
             <Animated.View
               key={
                 isCompletionChecklist
-                  ? `${index}-${isChecked ? "checked" : "open"}`
-                  : `checklist-${index}`
+                  ? `${todo.id}-${index}-${isChecked ? "checked" : "open"}`
+                  : `${todo.id}-${todo.noteType}-${index}`
               }
               onLayout={({ nativeEvent }) => {
                 checklistRowHeights.current[index] = nativeEvent.layout.height;
@@ -524,6 +540,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                 onFocus={onStartEditing}
                 onBlur={onEndEditing}
                 multiline
+                scrollEnabled={false}
                 blurOnSubmit={false}
                 onChangeText={(text) => handleChecklistTextChange(index, text)}
                 onSubmitEditing={() => handleChecklistSubmit(index)}
@@ -624,6 +641,8 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
                   )}
                 </TouchableOpacity>
                 <Text
+                  android_hyphenationFrequency="normal"
+                  textBreakStrategy="highQuality"
                   style={[
                     styles.noteText,
                     {
@@ -642,6 +661,8 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
           return (
             <Text
               key={index}
+              android_hyphenationFrequency="normal"
+              textBreakStrategy="highQuality"
               style={[
                 styles.noteText,
                 {
@@ -712,6 +733,9 @@ const styles = StyleSheet.create({
   noteText: {
     fontSize: 16,
     lineHeight: 24,
+    alignSelf: "stretch",
+    flexShrink: 1,
+    width: "100%",
   },
   checklistRow: {
     minHeight: CHECKLIST_ROW_HEIGHT,

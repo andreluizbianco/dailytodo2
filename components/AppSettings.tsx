@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -8,6 +7,7 @@ import {
   PanResponder,
   Platform,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -24,24 +24,32 @@ import {
 } from "../utils/timerAlertPreferences";
 import {
   DEFAULT_NOTE_BODY_FONT_SIZE,
+  DEFAULT_NOTE_LIST_WIDTH_RATIO,
   DEFAULT_NOTE_TITLE_FONT_SIZE,
   NOTE_BODY_FONT_SIZE_MAX,
   NOTE_BODY_FONT_SIZE_MIN,
   NOTE_COLOR_STRENGTH_MIN,
+  NOTE_LIST_WIDTH_RATIO_MAX,
+  NOTE_LIST_WIDTH_RATIO_MIN,
   NOTE_TITLE_FONT_SIZE_MAX,
   NOTE_TITLE_FONT_SIZE_MIN,
   useTheme,
 } from "../utils/theme";
 import type { ThemePreference } from "../utils/theme";
-import { TrashedTodo, TrashRetention } from "../types";
+import { CalendarEntry, Todo, TodoReminder, TodoSchedule, TrashedTodo, TrashRetention } from "../types";
+import { WEEKDAYS } from "../utils/schedule";
 
 type PermissionState = "granted" | "denied" | "undetermined";
-type SettingsSectionId = "appearance" | "notifications" | "alert" | "data";
-
-const SETTINGS_SECTIONS_KEY = "app:settingsExpandedSections";
+type SettingsSectionId =
+  | "appearance"
+  | "schedules"
+  | "notifications"
+  | "alert"
+  | "data";
 
 const defaultExpandedSections: Record<SettingsSectionId, boolean> = {
-  appearance: true,
+  appearance: false,
+  schedules: false,
   notifications: false,
   alert: false,
   data: false,
@@ -79,25 +87,39 @@ const trashRetentionOptions: Array<{
 ];
 
 interface AppSettingsProps {
+  archivedTodos: Todo[];
+  calendarEntries: CalendarEntry[];
   deleteTrashedTodo: (id: number) => void;
   emptyTrash: () => void;
   exportData: () => void;
   importData: () => void;
+  onOpenTodo: (id: number | string) => void;
   restoreTrashedTodo: (id: number) => void;
   setTrashRetention: (retention: TrashRetention) => void;
+  todos: Todo[];
   trashedTodos: TrashedTodo[];
   trashRetention: TrashRetention;
+  updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
+  updateCalendarEntryTodo: (entryId: number, updates: Partial<Todo>) => void;
+  updateTodo: (id: number, updates: Partial<Todo>) => void;
 }
 
 const AppSettings: React.FC<AppSettingsProps> = ({
+  archivedTodos,
+  calendarEntries,
   deleteTrashedTodo,
   emptyTrash,
   exportData,
   importData,
+  onOpenTodo,
   restoreTrashedTodo,
   setTrashRetention,
+  todos,
   trashedTodos,
   trashRetention,
+  updateArchivedTodo,
+  updateCalendarEntryTodo,
+  updateTodo,
 }) => {
   const {
     darkIntensity,
@@ -106,11 +128,13 @@ const AppSettings: React.FC<AppSettingsProps> = ({
     lightNoteColorStrength,
     noteBodyFontSize,
     noteColorStrength,
+    noteListWidthRatio,
     noteTitleFontSize,
     resetThemeTuning,
     setCurrentIntensity,
     setCurrentNoteColorStrength,
     setNoteBodyFontSize,
+    setNoteListWidthRatio,
     setNoteTitleFontSize,
     setThemePreference,
     theme,
@@ -124,7 +148,6 @@ const AppSettings: React.FC<AppSettingsProps> = ({
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
-  const [hasLoadedSections, setHasLoadedSections] = useState(false);
 
   const allSectionsExpanded = Object.values(expandedSections).every(Boolean);
 
@@ -146,53 +169,6 @@ const AppSettings: React.FC<AppSettingsProps> = ({
 
     loadPreferences();
   }, []);
-
-  useEffect(() => {
-    const loadExpandedSections = async () => {
-      try {
-        const storedValue = await AsyncStorage.getItem(SETTINGS_SECTIONS_KEY);
-        const parsedValue = storedValue ? JSON.parse(storedValue) : null;
-
-        if (parsedValue && typeof parsedValue === "object") {
-          setExpandedSections({
-            appearance:
-              typeof parsedValue.appearance === "boolean"
-                ? parsedValue.appearance
-                : defaultExpandedSections.appearance,
-            notifications:
-              typeof parsedValue.notifications === "boolean"
-                ? parsedValue.notifications
-                : defaultExpandedSections.notifications,
-            alert:
-              typeof parsedValue.alert === "boolean"
-                ? parsedValue.alert
-                : defaultExpandedSections.alert,
-            data:
-              typeof parsedValue.data === "boolean"
-                ? parsedValue.data
-                : defaultExpandedSections.data,
-          });
-        }
-      } catch (error) {
-        console.warn("Failed to load settings section state", error);
-      } finally {
-        setHasLoadedSections(true);
-      }
-    };
-
-    loadExpandedSections();
-  }, []);
-
-  useEffect(() => {
-    if (!hasLoadedSections) return;
-
-    AsyncStorage.setItem(
-      SETTINGS_SECTIONS_KEY,
-      JSON.stringify(expandedSections),
-    ).catch((error) => {
-      console.warn("Failed to save settings section state", error);
-    });
-  }, [expandedSections, hasLoadedSections]);
 
   const updateAlertPreferences = async (
     updates: Partial<TimerAlertPreferences>,
@@ -233,6 +209,7 @@ const AppSettings: React.FC<AppSettingsProps> = ({
     const nextValue = !allSectionsExpanded;
     setExpandedSections({
       appearance: nextValue,
+      schedules: nextValue,
       notifications: nextValue,
       alert: nextValue,
       data: nextValue,
@@ -353,6 +330,44 @@ const AppSettings: React.FC<AppSettingsProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.layoutControls}>
+          <ThemeSlider
+            label="List width"
+            value={noteListWidthRatio}
+            onValueChange={setNoteListWidthRatio}
+            min={NOTE_LIST_WIDTH_RATIO_MIN}
+            max={NOTE_LIST_WIDTH_RATIO_MAX}
+            minLabel="More text"
+            maxLabel="More list"
+            valueFormatter={(value) => `${Math.round(value * 100)}%`}
+          />
+          <TouchableOpacity
+            style={[styles.resetButton, { borderColor: theme.border }]}
+            onPress={() => setNoteListWidthRatio(DEFAULT_NOTE_LIST_WIDTH_RATIO)}
+          >
+            <Text style={[styles.resetButtonText, { color: theme.text }]}>
+              Reset layout
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SettingsSection>
+
+      <SettingsSection
+        iconName="repeat-outline"
+        isExpanded={expandedSections.schedules}
+        onToggle={() => toggleSection("schedules")}
+        title="Schedules"
+      >
+        <ScheduleOverview
+          archivedTodos={archivedTodos}
+          calendarEntries={calendarEntries}
+          onOpenTodo={onOpenTodo}
+          todos={todos}
+          updateArchivedTodo={updateArchivedTodo}
+          updateCalendarEntryTodo={updateCalendarEntryTodo}
+          updateTodo={updateTodo}
+        />
       </SettingsSection>
 
       <SettingsSection
@@ -748,6 +763,239 @@ const FontSizeControl: React.FC<FontSizeControlProps> = ({
   );
 };
 
+type ScheduleOverviewSource = "daily" | "archive" | "calendar";
+
+interface ScheduleOverviewItem {
+  key: string;
+  todo: Todo;
+  source: ScheduleOverviewSource;
+  entryId?: number;
+}
+
+interface ScheduleOverviewProps {
+  archivedTodos: Todo[];
+  calendarEntries: CalendarEntry[];
+  onOpenTodo: (id: number | string) => void;
+  todos: Todo[];
+  updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
+  updateCalendarEntryTodo: (
+    entryId: number,
+    updates: Partial<Todo>,
+  ) => void | Promise<void>;
+  updateTodo: (id: number, updates: Partial<Todo>) => void | Promise<void>;
+}
+
+const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
+  archivedTodos,
+  calendarEntries,
+  onOpenTodo,
+  todos,
+  updateArchivedTodo,
+  updateCalendarEntryTodo,
+  updateTodo,
+}) => {
+  const { theme } = useTheme();
+  const items = getScheduleOverviewItems(todos, archivedTodos, calendarEntries);
+  const repeatCount = items.filter((item) => item.todo.schedule).length;
+  const reminderCount = items.filter((item) => item.todo.reminder).length;
+
+  const updateItem = (
+    item: ScheduleOverviewItem,
+    updates: Partial<Todo>,
+  ) => {
+    if (item.source === "archive") {
+      updateArchivedTodo(item.todo.id, updates);
+      return;
+    }
+
+    if (item.source === "calendar" && item.entryId !== undefined) {
+      updateCalendarEntryTodo(item.entryId, updates);
+      return;
+    }
+
+    updateTodo(item.todo.id, updates);
+  };
+
+  if (items.length === 0) {
+    return (
+      <Text style={[styles.emptySchedulesText, { color: theme.subtleText }]}>
+        No active repeats or reminders.
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.scheduleOverview}>
+      <View style={styles.scheduleSummaryRow}>
+        <Text style={[styles.scheduleSummaryText, { color: theme.mutedText }]}>
+          {repeatCount} repeats
+        </Text>
+        <Text style={[styles.scheduleSummaryText, { color: theme.mutedText }]}>
+          {reminderCount} reminders
+        </Text>
+      </View>
+      {items.map((item) => (
+        <TouchableOpacity
+          key={item.key}
+          activeOpacity={0.82}
+          onPress={() => onOpenTodo(item.entryId ?? item.todo.id)}
+          style={[
+            styles.scheduleCard,
+            {
+              backgroundColor: theme.control,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={styles.scheduleCardHeader}>
+            <View style={styles.scheduleTitleBlock}>
+              <Text
+                numberOfLines={1}
+                style={[styles.scheduleTitle, { color: theme.text }]}
+              >
+                {item.todo.text.trim() || "Untitled"}
+              </Text>
+              <Text
+                style={[styles.scheduleSource, { color: theme.subtleText }]}
+              >
+                {formatScheduleSource(item.source)}
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={16} color={theme.mutedText} />
+          </View>
+
+          {item.todo.schedule ? (
+            <View style={styles.scheduleToggleRow}>
+              <View style={styles.scheduleLine}>
+                <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+                  Repeat
+                </Text>
+                <Text
+                  style={[
+                    styles.scheduleLineValue,
+                    { color: theme.mutedText },
+                  ]}
+                >
+                  {formatSchedule(item.todo.schedule)}
+                </Text>
+              </View>
+              <Switch
+                value
+                onValueChange={() => updateItem(item, { schedule: undefined })}
+                trackColor={{ false: theme.border, true: theme.primary }}
+                thumbColor={theme.elevated}
+              />
+            </View>
+          ) : null}
+
+          {item.todo.reminder ? (
+            <View style={styles.scheduleToggleRow}>
+              <View style={styles.scheduleLine}>
+                <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+                  Reminder
+                </Text>
+                <Text
+                  style={[
+                    styles.scheduleLineValue,
+                    { color: theme.mutedText },
+                  ]}
+                >
+                  {formatReminder(item.todo.reminder)}
+                </Text>
+              </View>
+              <Switch
+                value
+                onValueChange={() => updateItem(item, { reminder: undefined })}
+                trackColor={{ false: theme.border, true: theme.primary }}
+                thumbColor={theme.elevated}
+              />
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+const getScheduleOverviewItems = (
+  todos: Todo[],
+  archivedTodos: Todo[],
+  calendarEntries: CalendarEntry[],
+): ScheduleOverviewItem[] => [
+  ...todos
+    .filter((todo) => todo.schedule || todo.reminder)
+    .map((todo) => ({
+      key: `daily-${todo.id}`,
+      todo,
+      source: "daily" as const,
+    })),
+  ...archivedTodos
+    .filter((todo) => todo.schedule || todo.reminder)
+    .map((todo) => ({
+      key: `archive-${todo.id}`,
+      todo,
+      source: "archive" as const,
+    })),
+  ...calendarEntries
+    .filter((entry) => entry.todo.schedule || entry.todo.reminder)
+    .map((entry) => ({
+      key: `calendar-${entry.id}`,
+      todo: entry.todo,
+      source: "calendar" as const,
+      entryId: entry.id,
+    })),
+];
+
+const formatSchedule = (schedule: TodoSchedule) => {
+  const amount = schedule.amount ?? 1;
+  const unit = singularizeUnit(schedule.unit, amount);
+  const prefix = schedule.mode === "in" ? "in" : "every";
+  const weekdayText =
+    schedule.mode === "every" &&
+    schedule.unit === "weeks" &&
+    schedule.weekdays?.length
+      ? `, ${formatWeekdays(schedule.weekdays)}`
+      : "";
+  const timeText = schedule.time ? ` at ${schedule.time}` : "";
+
+  if (schedule.mode === "date" && schedule.targetDate) {
+    return `on ${formatDate(schedule.targetDate)}${timeText}`;
+  }
+
+  return `${prefix} ${amount} ${unit}${weekdayText}${timeText}`;
+};
+
+const formatReminder = (reminder: TodoReminder) => {
+  const amount = reminder.amount ?? 1;
+  return `${amount} ${singularizeUnit(reminder.unit, amount)} before`;
+};
+
+const formatWeekdays = (weekdays: number[]) =>
+  WEEKDAYS.filter((day) => weekdays.includes(day.value))
+    .map((day) => day.label)
+    .join(" ");
+
+const formatDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+  });
+};
+
+const formatScheduleSource = (source: ScheduleOverviewSource) => {
+  if (source === "archive") return "Archive";
+  if (source === "calendar") return "Calendar";
+  return "Daily";
+};
+
+const singularizeUnit = (unit: string, amount: number) => {
+  if (amount === 1 && unit.endsWith("s")) return unit.slice(0, -1);
+  return unit;
+};
+
 interface ThemeSliderProps {
   label: string;
   value: number;
@@ -757,6 +1005,7 @@ interface ThemeSliderProps {
   max: number;
   minLabel: string;
   maxLabel: string;
+  valueFormatter?: (value: number) => string;
 }
 
 const ThemeSlider: React.FC<ThemeSliderProps> = ({
@@ -768,6 +1017,7 @@ const ThemeSlider: React.FC<ThemeSliderProps> = ({
   max,
   minLabel,
   maxLabel,
+  valueFormatter,
 }) => {
   const { theme } = useTheme();
   const trackRef = useRef<View>(null);
@@ -810,7 +1060,7 @@ const ThemeSlider: React.FC<ThemeSliderProps> = ({
           {label}
         </Text>
         <Text style={[styles.volumeValue, { color: theme.text }]}>
-          {Math.round(value * 100)}%
+          {valueFormatter ? valueFormatter(value) : `${Math.round(value * 100)}%`}
         </Text>
       </View>
       <View
@@ -918,6 +1168,69 @@ const styles = StyleSheet.create({
   },
   fontControls: {
     gap: 10,
+  },
+  layoutControls: {
+    gap: 10,
+  },
+  scheduleOverview: {
+    gap: 10,
+  },
+  scheduleSummaryRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  scheduleSummaryText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  emptySchedulesText: {
+    fontSize: 13,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  scheduleCard: {
+    borderRadius: 7,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  scheduleCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  scheduleTitleBlock: {
+    flex: 1,
+  },
+  scheduleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  scheduleSource: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  scheduleToggleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  scheduleLine: {
+    flex: 1,
+  },
+  scheduleLineLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  scheduleLineValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
   },
   fontControlRow: {
     alignItems: "center",

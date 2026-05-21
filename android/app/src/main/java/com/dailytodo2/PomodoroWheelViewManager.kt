@@ -35,6 +35,11 @@ class PomodoroWheelViewManager(
     view.setDarkMode(enabled)
   }
 
+  @ReactProp(name = "wheelBackgroundColor")
+  fun setWheelBackgroundColor(view: PomodoroWheelView, color: String?) {
+    view.setWheelBackgroundColor(color)
+  }
+
   override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> {
     return MapBuilder.of(
       "topValueChange",

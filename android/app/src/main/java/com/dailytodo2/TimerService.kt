@@ -29,6 +29,7 @@ private const val ACTION_RESUME = "RESUME"
 private const val ACTION_STOP = "STOP"
 private const val ACTION_TOGGLE_PAUSE = "TOGGLE_PAUSE"
 private const val ACTION_PREVIEW_ALERT_SOUND = "PREVIEW_ALERT_SOUND"
+private const val ACTION_ADD_MINUTE = "ADD_MINUTE"
 
 class TimerService : Service() {
   private val channelId = "pomodoro_timer_channel_v2"
@@ -73,6 +74,7 @@ class TimerService : Service() {
       ACTION_PAUSE -> pauseTimer()
       ACTION_RESUME -> resumeTimer()
       ACTION_STOP -> stopTimer(completed = false)
+      ACTION_ADD_MINUTE -> addPomodoroMinute()
       ACTION_PREVIEW_ALERT_SOUND -> {
         val volume = intent.getFloatExtra("alertVolume", getAlertVolume())
         playAlertSound(volume) {
@@ -150,6 +152,30 @@ class TimerService : Service() {
     startTicker()
   }
 
+  private fun addPomodoroMinute() {
+    if (!currentIsRunning || timerMode != "pomodoro") return
+
+    if (!isPaused) {
+      val elapsedBeforeAdd = getDisplayElapsedSeconds()
+      durationSeconds += 60
+      remainingSeconds = maxOf(0, durationSeconds - elapsedBeforeAdd)
+      activeElapsedSeconds = durationSeconds - remainingSeconds
+      lastStartedAt = System.currentTimeMillis()
+    } else {
+      durationSeconds += 60
+      remainingSeconds += 60
+    }
+
+    Log.d("TimerService", "ACTION_ADD_MINUTE durationSeconds=$durationSeconds remainingSeconds=$remainingSeconds")
+
+    publishState(isRunning = true, isPaused = isPaused)
+    updateNotification()
+
+    if (!isPaused) {
+      startCountdown()
+    }
+  }
+
   private fun stopTimer(completed: Boolean) {
     if (currentIsRunning && !isPaused) {
       activeElapsedSeconds = getDisplayElapsedSeconds()
@@ -169,9 +195,24 @@ class TimerService : Service() {
     sendFinishedEvent(completed)
 
     if (completed) {
-      alertTimerFinished {
-        removeNotification()
-        stopSelf()
+      if (shouldFinishQuietlyForAmbient()) {
+        Handler(Looper.getMainLooper()).postDelayed(
+          {
+            removeNotification()
+            stopSelf()
+          },
+          500L
+        )
+      } else {
+        Handler(Looper.getMainLooper()).postDelayed(
+          {
+            alertTimerFinished {
+              removeNotification()
+              stopSelf()
+            }
+          },
+          150L
+        )
       }
     } else {
       removeNotification()
@@ -410,6 +451,11 @@ class TimerService : Service() {
       Log.e("TimerService", "Error playing finish alert", e)
       onComplete()
     }
+  }
+
+  private fun shouldFinishQuietlyForAmbient(): Boolean {
+    val prefs = getSharedPreferences("timer_prefs", MODE_PRIVATE)
+    return prefs.getBoolean("ambientSoundEnabled", false)
   }
 
   private fun playConfiguredVibration() {

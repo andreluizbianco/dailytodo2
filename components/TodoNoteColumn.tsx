@@ -7,6 +7,7 @@ import ArchivedTodos from "./ArchivedTodos";
 import AppSettings from "./AppSettings";
 import ProjectSettings from "./ProjectSettings";
 import {
+  CalendarEntry,
   Project,
   Todo,
   TrashedTodo,
@@ -52,7 +53,9 @@ interface TodoNoteColumnProps {
   printOnCalendar: (todo: Todo) => void;
   exportData: () => void;
   importData: () => void;
+  onOpenTodoFromSettings: (id: number | string) => void;
   todos: Todo[];
+  calendarEntries: CalendarEntry[];
   projects: Project[];
   todayItems?: TodayTodoItem[];
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this line
@@ -85,7 +88,9 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   printOnCalendar,
   exportData,
   importData,
+  onOpenTodoFromSettings,
   todos,
+  calendarEntries,
   projects,
   todayItems = [],
   setTodos,
@@ -284,14 +289,21 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
     if (activeView === "settings") {
       return (
         <AppSettings
+          archivedTodos={archivedTodos}
+          calendarEntries={calendarEntries}
           deleteTrashedTodo={deleteTrashedTodo}
           emptyTrash={emptyTrash}
           exportData={exportData}
           importData={importData}
+          onOpenTodo={onOpenTodoFromSettings}
           restoreTrashedTodo={restoreTrashedTodo}
           setTrashRetention={setTrashRetention}
+          todos={todos}
           trashedTodos={trashedTodos}
           trashRetention={trashRetention}
+          updateArchivedTodo={updateArchivedTodo}
+          updateCalendarEntryTodo={updateCalendarEntryTodo}
+          updateTodo={updateTodo}
         />
       );
     }
