@@ -84,6 +84,7 @@ export interface CalendarEntry {
   id: number;
   todo: Todo;
   printedAt: string;
+  showInDaily?: boolean;
   timeSpent?: {
     elapsed: number; // Total time in minutes
   };

@@ -72,6 +72,10 @@ export const buildTodayItems = ({
   }
 
   for (const entry of calendarEntries) {
+    if (entry.showInDaily === false) {
+      continue;
+    }
+
     if (entry.isTrackingEntry || entry.timerCompleted || entry.timeSpent) {
       continue;
     }

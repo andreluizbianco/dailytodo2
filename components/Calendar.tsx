@@ -63,6 +63,9 @@ interface CalendarTheme {
 }
 
 interface CalendarProps {
+  autoScrollToNow: boolean;
+  dayTimelineMode: boolean;
+  weekTimelineMode: boolean;
   viewMode: "day" | "week";
   onDateSelect: (date: string) => void;
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
@@ -75,6 +78,9 @@ interface CalendarProps {
 }
 
 const Calendar: React.FC<CalendarProps> = ({
+  autoScrollToNow,
+  dayTimelineMode,
+  weekTimelineMode,
   viewMode,
   onDateSelect,
   onAddEntry,
@@ -240,8 +246,11 @@ const Calendar: React.FC<CalendarProps> = ({
         />
         <CalendarEntries
           selectedDate={formatDate(selectedDate)}
+          autoScrollToNow={autoScrollToNow}
           entries={entries}
           setEntries={setEntries}
+          dayTimelineMode={dayTimelineMode}
+          weekTimelineMode={weekTimelineMode}
           viewMode={viewMode}
           weekDates={weekDates}
           onAddEntry={onAddEntry}

@@ -88,10 +88,6 @@ class PomodoroWheelView(context: Context) : View(context) {
 
   fun setDarkMode(enabled: Boolean) {
     textColor = if (enabled) Color.rgb(229, 231, 235) else Color.rgb(17, 24, 39)
-    if (wheelBackgroundColor == Color.WHITE || wheelBackgroundColor == Color.rgb(16, 18, 20)) {
-      setWheelBackgroundColor(if (enabled) "#101214" else "#FFFFFF")
-      return
-    }
     redraw()
   }
 

@@ -22,6 +22,7 @@ interface TopBarProps {
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
   onCalendarPress: () => void;
+  onCalendarLongPress: () => void;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -34,6 +35,7 @@ const TopBar: React.FC<TopBarProps> = ({
   showSettings,
   setShowSettings,
   onCalendarPress,
+  onCalendarLongPress,
 }) => {
   const { theme } = useTheme();
   const handleNotesPress = () => {
@@ -91,7 +93,12 @@ const TopBar: React.FC<TopBarProps> = ({
             color={activeView === "timer" ? theme.primary : theme.mutedText}
           />
         </TouchableOpacity>
-        <TouchableOpacity onPress={onCalendarPress} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={onCalendarPress}
+          onLongPress={withLongPressHaptic(onCalendarLongPress)}
+          delayLongPress={650}
+          style={styles.iconButton}
+        >
           <Ionicons
             name="calendar"
             size={28}

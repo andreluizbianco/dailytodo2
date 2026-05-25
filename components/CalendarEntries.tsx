@@ -25,11 +25,19 @@ import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 7;
+const TIMELINE_HOUR_HEIGHT = 72;
+const TIMELINE_MINUTE_HEIGHT = TIMELINE_HOUR_HEIGHT / 60;
+const TIMELINE_LABEL_WIDTH = 16;
+const WEEK_TIMELINE_LABEL_WIDTH = 18;
+const WEEK_TIMELINE_GUTTER_WIDTH = 14;
 
 interface CalendarEntriesProps {
+  autoScrollToNow: boolean;
   selectedDate: string | null;
   entries: CalendarEntry[];
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
+  dayTimelineMode: boolean;
+  weekTimelineMode: boolean;
   viewMode: "week" | "day";
   weekDates: Date[];
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
@@ -40,9 +48,12 @@ interface CalendarEntriesProps {
 }
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
+  autoScrollToNow,
   selectedDate,
   entries,
   setEntries,
+  dayTimelineMode,
+  weekTimelineMode,
   viewMode,
   weekDates,
   onAddEntry,
@@ -53,11 +64,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 }) => {
   const { theme } = useTheme();
   const dayScrollRef = useRef<ScrollView>(null);
+  const timelineScrollRef = useRef<ScrollView>(null);
   const settingsRefByEntryId = useRef<Record<number, View | null>>({});
+  const entryRefByEntryId = useRef<Record<number, View | null>>({});
   const dayScrollYRef = useRef(0);
   const dayScrollPageYRef = useRef(0);
   const dayViewportHeightRef = useRef(0);
   const dayContentHeightRef = useRef(0);
+  const timelineViewportHeightRef = useRef(0);
+  const timelineContentHeightRef = useRef(0);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isNoteBodyDragging, setIsNoteBodyDragging] = useState(false);
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -71,18 +87,54 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const [draggingWeekEntryId, setDraggingWeekEntryId] = useState<number | null>(
     null,
   );
+  const [draggingWeekTimelineEntryId, setDraggingWeekTimelineEntryId] =
+    useState<number | null>(null);
+  const [armedTimelineEntryId, setArmedTimelineEntryId] = useState<
+    number | null
+  >(null);
+  const [weekTimelineDropPreview, setWeekTimelineDropPreview] = useState<{
+    dayIndex: number;
+    minutes: number;
+  } | null>(null);
   const [armedWeekEntryId, setArmedWeekEntryId] = useState<number | null>(null);
+  const [draggingDayEntryId, setDraggingDayEntryId] = useState<number | null>(
+    null,
+  );
+  const [dayDragOffsetY, setDayDragOffsetY] = useState(0);
+  const draggingDayEntryIdRef = useRef<number | null>(null);
+  const dayDragStartRef = useRef({ pageY: 0, startMinutes: 0 });
   const [weekDragOffset, setWeekDragOffset] = useState({ x: 0, y: 0 });
   const armedWeekEntryIdRef = useRef<number | null>(null);
+  const armedTimelineEntryIdRef = useRef<number | null>(null);
   const draggingWeekEntryIdRef = useRef<number | null>(null);
+  const draggingWeekTimelineEntryIdRef = useRef<number | null>(null);
+  const weekTimelineDragStartRef = useRef({
+    pageX: 0,
+    pageY: 0,
+    startDayIndex: 0,
+    startMinutes: 0,
+  });
   const weekDragStartRef = useRef({ pageX: 0, pageY: 0 });
   const weekLastTapRef = useRef<{ id: number | null; timestamp: number }>({
+    id: null,
+    timestamp: 0,
+  });
+  const timelineLastTapRef = useRef<{ id: number | null; timestamp: number }>({
     id: null,
     timestamp: 0,
   });
 
   const isMovableCalendarEntry = (entry: CalendarEntry) =>
     !entry.isTrackingEntry && !entry.timerCompleted;
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const snapMinutesToStep = (minutes: number, step = 5) => {
+    return Math.max(0, Math.min(23 * 60 + 55, Math.round(minutes / step) * step));
+  };
 
   const persistCalendarEntries = async (nextEntries: CalendarEntry[]) => {
     setEntries(nextEntries);
@@ -118,6 +170,211 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     );
 
     await persistCalendarEntries(updatedEntries);
+  };
+
+  const moveDayEntryToMinutes = async (
+    entry: CalendarEntry,
+    nextMinutes: number,
+  ) => {
+    const nextDate = new Date(entry.printedAt);
+    nextDate.setHours(Math.floor(nextMinutes / 60), nextMinutes % 60, 0, 0);
+    const nextPrintedAt = nextDate.toISOString();
+    const updatedEntries = entries.map((currentEntry) =>
+      currentEntry.id === entry.id
+        ? {
+            ...currentEntry,
+            printedAt: nextPrintedAt,
+            todo: {
+              ...currentEntry.todo,
+              schedule: updateScheduleTimeFromEntry(
+                currentEntry,
+                nextPrintedAt,
+              ),
+            },
+          }
+        : currentEntry,
+    );
+
+    await persistCalendarEntries(updatedEntries);
+  };
+
+  const moveWeekTimelineEntry = async (
+    entry: CalendarEntry,
+    targetDate: Date,
+    nextMinutes: number,
+  ) => {
+    const nextDate = new Date(targetDate);
+    nextDate.setHours(Math.floor(nextMinutes / 60), nextMinutes % 60, 0, 0);
+    const nextPrintedAt = nextDate.toISOString();
+    const updatedEntries = entries.map((currentEntry) =>
+      currentEntry.id === entry.id
+        ? {
+            ...currentEntry,
+            printedAt: nextPrintedAt,
+            todo: {
+              ...currentEntry.todo,
+              schedule: updateScheduleTimeFromEntry(
+                currentEntry,
+                nextPrintedAt,
+              ),
+            },
+          }
+        : currentEntry,
+    );
+
+    await persistCalendarEntries(updatedEntries);
+  };
+
+  const getWeekTimelineDropPreview = (dx: number, dy: number) => {
+    const dayDelta = Math.round(dx / COLUMN_WIDTH);
+    const dayIndex = Math.max(
+      0,
+      Math.min(
+        weekDates.length - 1,
+        weekTimelineDragStartRef.current.startDayIndex + dayDelta,
+      ),
+    );
+    const minuteDelta = dy / TIMELINE_MINUTE_HEIGHT;
+    const minutes = snapMinutesToStep(
+      weekTimelineDragStartRef.current.startMinutes + minuteDelta,
+    );
+
+    return { dayIndex, minutes };
+  };
+
+  const formatTimelineMinutes = (minutes: number) => {
+    return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(
+      minutes % 60,
+    ).padStart(2, "0")}`;
+  };
+
+  const getLocalDayKey = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
+  const isSelectedDateToday = () =>
+    Boolean(selectedDate) && selectedDate === getLocalDayKey(currentTime);
+
+  const getCurrentMinutes = () =>
+    currentTime.getHours() * 60 + currentTime.getMinutes();
+
+  const scrollTimelineToCurrentTime = (startHour: number) => {
+    if (!autoScrollToNow || !isSelectedDateToday()) return;
+
+    requestAnimationFrame(() => {
+      const currentTop =
+        (getCurrentMinutes() - startHour * 60) * TIMELINE_MINUTE_HEIGHT;
+      const viewportHeight = timelineViewportHeightRef.current;
+      const contentHeight = timelineContentHeightRef.current;
+      if (viewportHeight <= 0 || contentHeight <= 0) return;
+
+      timelineScrollRef.current?.scrollTo({
+        y: Math.max(
+          0,
+          Math.min(
+            currentTop - viewportHeight / 2,
+            Math.max(0, contentHeight - viewportHeight),
+          ),
+        ),
+        animated: true,
+      });
+    });
+  };
+
+  const scrollDayListToCurrentEntry = (dateEntries: CalendarEntry[]) => {
+    if (!autoScrollToNow || dayTimelineMode || !isSelectedDateToday()) return;
+
+    const nowMinutes = getCurrentMinutes();
+    const sortedEntries = [...dateEntries].sort(
+      (a, b) => getEntryStartMinutes(a) - getEntryStartMinutes(b),
+    );
+    const targetEntry =
+      sortedEntries.find(
+        (entry) => getEntryStartMinutes(entry) >= nowMinutes - 30,
+      ) ?? null;
+    if (!targetEntry) return;
+
+    setTimeout(() => {
+      const entryRef = entryRefByEntryId.current[targetEntry.id];
+      const scrollRef = dayScrollRef.current;
+      const scrollNode = scrollRef ? findNodeHandle(scrollRef) : null;
+      if (!entryRef || !scrollRef || !scrollNode) return;
+
+      entryRef.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          const viewportHeight = dayViewportHeightRef.current;
+          const contentHeight = dayContentHeightRef.current;
+          const maxY = Math.max(0, contentHeight - viewportHeight);
+          scrollRef.scrollTo({
+            y: Math.max(0, Math.min(y - 8, maxY)),
+            animated: true,
+          });
+        },
+        () => undefined,
+      );
+    }, 120);
+  };
+
+  const createDayTimelinePanHandlers = (entry: CalendarEntry) => {
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () =>
+        isMovableCalendarEntry(entry) &&
+        armedTimelineEntryIdRef.current === entry.id,
+      onMoveShouldSetPanResponder: (_event, gestureState) =>
+        isMovableCalendarEntry(entry) &&
+        armedTimelineEntryIdRef.current === entry.id &&
+        Math.abs(gestureState.dy) > 3,
+      onPanResponderGrant: (event) => {
+        if (
+          !isMovableCalendarEntry(entry) ||
+          armedTimelineEntryIdRef.current !== entry.id
+        ) {
+          return;
+        }
+
+        draggingDayEntryIdRef.current = entry.id;
+        dayDragStartRef.current = {
+          pageY: event.nativeEvent.pageY,
+          startMinutes: getEntryStartMinutes(entry),
+        };
+        setDraggingDayEntryId(entry.id);
+        setDayDragOffsetY(0);
+      },
+      onPanResponderMove: (event) => {
+        if (draggingDayEntryIdRef.current !== entry.id) return;
+
+        setDayDragOffsetY(event.nativeEvent.pageY - dayDragStartRef.current.pageY);
+      },
+      onPanResponderRelease: async (event) => {
+        if (draggingDayEntryIdRef.current !== entry.id) return;
+
+        const dy = event.nativeEvent.pageY - dayDragStartRef.current.pageY;
+        const minuteDelta = dy / TIMELINE_MINUTE_HEIGHT;
+        const nextMinutes = snapMinutesToStep(
+          dayDragStartRef.current.startMinutes + minuteDelta,
+        );
+
+        draggingDayEntryIdRef.current = null;
+        armedTimelineEntryIdRef.current = null;
+        setDraggingDayEntryId(null);
+        setArmedTimelineEntryId(null);
+        setDayDragOffsetY(0);
+        await moveDayEntryToMinutes(entry, nextMinutes);
+      },
+      onPanResponderTerminate: () => {
+        draggingDayEntryIdRef.current = null;
+        armedTimelineEntryIdRef.current = null;
+        setDraggingDayEntryId(null);
+        setArmedTimelineEntryId(null);
+        setDayDragOffsetY(0);
+      },
+    });
+
+    return panResponder.panHandlers;
   };
 
   const createWeekEntryPanHandlers = (entry: CalendarEntry) => {
@@ -183,6 +440,87 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     return panResponder.panHandlers;
   };
 
+  const createWeekTimelinePanHandlers = (entry: CalendarEntry) => {
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () =>
+        isMovableCalendarEntry(entry) &&
+        armedTimelineEntryIdRef.current === entry.id,
+      onMoveShouldSetPanResponder: (_event, gestureState) =>
+        isMovableCalendarEntry(entry) &&
+        armedTimelineEntryIdRef.current === entry.id &&
+        (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3),
+      onPanResponderGrant: (event) => {
+        if (
+          !isMovableCalendarEntry(entry) ||
+          armedTimelineEntryIdRef.current !== entry.id
+        ) {
+          return;
+        }
+
+        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+        const startDayIndex = Math.max(
+          0,
+          weekDates.findIndex(
+            (date) => date.toISOString().split("T")[0] === entryDate,
+          ),
+        );
+
+        draggingWeekTimelineEntryIdRef.current = entry.id;
+        weekTimelineDragStartRef.current = {
+          pageX: event.nativeEvent.pageX,
+          pageY: event.nativeEvent.pageY,
+          startDayIndex,
+          startMinutes: getEntryStartMinutes(entry),
+        };
+        setDraggingWeekTimelineEntryId(entry.id);
+        setWeekTimelineDropPreview({
+          dayIndex: startDayIndex,
+          minutes: getEntryStartMinutes(entry),
+        });
+        setWeekDragOffset({ x: 0, y: 0 });
+      },
+      onPanResponderMove: (event) => {
+        if (draggingWeekTimelineEntryIdRef.current !== entry.id) return;
+
+        const dx = event.nativeEvent.pageX - weekTimelineDragStartRef.current.pageX;
+        const dy = event.nativeEvent.pageY - weekTimelineDragStartRef.current.pageY;
+
+        setWeekDragOffset({ x: dx, y: dy });
+        setWeekTimelineDropPreview(getWeekTimelineDropPreview(dx, dy));
+      },
+      onPanResponderRelease: async (event) => {
+        if (draggingWeekTimelineEntryIdRef.current !== entry.id) return;
+
+        const dx = event.nativeEvent.pageX - weekTimelineDragStartRef.current.pageX;
+        const dy = event.nativeEvent.pageY - weekTimelineDragStartRef.current.pageY;
+        const { dayIndex: targetDayIndex, minutes: nextMinutes } =
+          getWeekTimelineDropPreview(dx, dy);
+
+        draggingWeekTimelineEntryIdRef.current = null;
+        armedTimelineEntryIdRef.current = null;
+        setDraggingWeekTimelineEntryId(null);
+        setArmedTimelineEntryId(null);
+        setWeekTimelineDropPreview(null);
+        setWeekDragOffset({ x: 0, y: 0 });
+
+        const targetDate = weekDates[targetDayIndex];
+        if (targetDate) {
+          await moveWeekTimelineEntry(entry, targetDate, nextMinutes);
+        }
+      },
+      onPanResponderTerminate: () => {
+        draggingWeekTimelineEntryIdRef.current = null;
+        armedTimelineEntryIdRef.current = null;
+        setDraggingWeekTimelineEntryId(null);
+        setArmedTimelineEntryId(null);
+        setWeekTimelineDropPreview(null);
+        setWeekDragOffset({ x: 0, y: 0 });
+      },
+    });
+
+    return panResponder.panHandlers;
+  };
+
   const handleWeekEntryTouchStart = (
     entry: CalendarEntry,
   ) => {
@@ -203,6 +541,25 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     setWeekDragOffset({ x: 0, y: 0 });
   };
 
+  const handleTimelineEntryTouchEnd = (entry: CalendarEntry) => {
+    const now = Date.now();
+    const isDoubleTap =
+      timelineLastTapRef.current.id === entry.id &&
+      now - timelineLastTapRef.current.timestamp < 320;
+
+    timelineLastTapRef.current = { id: entry.id, timestamp: now };
+
+    if (!isDoubleTap || !isMovableCalendarEntry(entry)) {
+      return;
+    }
+
+    softHaptic();
+    armedTimelineEntryIdRef.current = entry.id;
+    setArmedTimelineEntryId(entry.id);
+    setDayDragOffsetY(0);
+    setWeekDragOffset({ x: 0, y: 0 });
+  };
+
   const formatElapsedTime = (elapsedMinutes: number): string => {
     const hours = Math.floor(elapsedMinutes / 60);
     const minutes = elapsedMinutes % 60;
@@ -211,6 +568,162 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
     return `${minutes}m`;
+  };
+
+  const getEntriesForSelectedDate = () => {
+    if (!selectedDate) return [];
+
+    return entries
+      .filter((entry) => {
+        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+        return entryDate === selectedDate;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.printedAt).getTime();
+        const timeB = new Date(b.printedAt).getTime();
+        return timeA - timeB;
+      });
+  };
+
+  const getEntryStartMinutes = (entry: CalendarEntry) => {
+    const date = new Date(entry.printedAt);
+    return date.getHours() * 60 + date.getMinutes();
+  };
+
+  const getEntryDurationMinutes = (entry: CalendarEntry) => {
+    if (entry.timeSpent?.elapsed && entry.timeSpent.elapsed > 0) {
+      return entry.timeSpent.elapsed;
+    }
+
+    const hours = Number(entry.todo.timer?.hours ?? 0);
+    const minutes = Number(entry.todo.timer?.minutes ?? 0);
+    const plannedMinutes =
+      (Number.isFinite(hours) ? hours : 0) * 60 +
+      (Number.isFinite(minutes) ? minutes : 0);
+
+    return plannedMinutes > 0 ? plannedMinutes : 30;
+  };
+
+  const getTimelineBounds = (dateEntries: CalendarEntry[]) => {
+    if (dateEntries.length === 0) {
+      return { startHour: 0, endHour: 24 };
+    }
+
+    const firstStart = Math.min(...dateEntries.map(getEntryStartMinutes));
+    const lastEnd = Math.max(
+      ...dateEntries.map(
+        (entry) => getEntryStartMinutes(entry) + getEntryDurationMinutes(entry),
+      ),
+    );
+
+    return {
+      startHour: Math.max(0, Math.floor(firstStart / 60) - 1),
+      endHour: Math.min(24, Math.max(Math.ceil(lastEnd / 60) + 1, 1)),
+    };
+  };
+
+  const getDayTimelineBounds = (dateEntries: CalendarEntry[]) => {
+    const bounds = getTimelineBounds(dateEntries);
+    if (!isSelectedDateToday()) return bounds;
+
+    const currentMinutes = getCurrentMinutes();
+    return {
+      startHour: Math.max(0, Math.min(bounds.startHour, Math.floor(currentMinutes / 60) - 1)),
+      endHour: Math.min(24, Math.max(bounds.endHour, Math.ceil(currentMinutes / 60) + 1)),
+    };
+  };
+
+  const getWeekTimelineBounds = (dateEntries: CalendarEntry[]) => {
+    const bounds = getTimelineBounds(dateEntries);
+    const todayKey = getLocalDayKey(currentTime);
+    const weekIncludesToday = weekDates.some(
+      (date) => getLocalDayKey(date) === todayKey,
+    );
+    if (!weekIncludesToday) return bounds;
+
+    const currentMinutes = getCurrentMinutes();
+    return {
+      startHour: Math.max(
+        0,
+        Math.min(bounds.startHour, Math.floor(currentMinutes / 60) - 1),
+      ),
+      endHour: Math.min(
+        24,
+        Math.max(bounds.endHour, Math.ceil(currentMinutes / 60) + 1),
+      ),
+    };
+  };
+
+  useEffect(() => {
+    if (!autoScrollToNow || !selectedDate || !isSelectedDateToday()) return;
+
+    const dateEntries = getEntriesForSelectedDate();
+    if (dateEntries.length === 0) return;
+
+    if (dayTimelineMode) {
+      const { startHour } = getDayTimelineBounds(dateEntries);
+      setTimeout(() => scrollTimelineToCurrentTime(startHour), 140);
+      return;
+    }
+
+    scrollDayListToCurrentEntry(dateEntries);
+  }, [autoScrollToNow, dayTimelineMode, entries, selectedDate]);
+
+  const getTimelineLayoutItems = (dateEntries: CalendarEntry[]) => {
+    const sortedEntries = [...dateEntries].sort((a, b) => {
+      const startA = getEntryStartMinutes(a);
+      const startB = getEntryStartMinutes(b);
+      return startA - startB;
+    });
+    const activeColumns: Array<{ revealEndX: number; visualEnd: number }> = [];
+
+    return sortedEntries.map((entry) => {
+      const startMinutes = getEntryStartMinutes(entry);
+      const durationMinutes = getEntryDurationMinutes(entry);
+      const label = getTimelineEventLabel(entry, durationMinutes);
+      const rawHeight = durationMinutes * TIMELINE_MINUTE_HEIGHT;
+      const visualHeight = Math.max(34, rawHeight);
+      const visualStart = startMinutes * TIMELINE_MINUTE_HEIGHT;
+      const visualEnd = visualStart + visualHeight + 4;
+      const overlappingColumns = activeColumns.filter(
+        (column) => column.visualEnd > visualStart,
+      );
+      const offsetX =
+        overlappingColumns.length > 0
+          ? Math.max(...overlappingColumns.map((column) => column.revealEndX))
+          : 0;
+      const revealEndX = offsetX + estimateTimelineLabelWidth(label);
+      const expiredColumnIndex = activeColumns.findIndex(
+        (column) => column.visualEnd <= visualStart,
+      );
+
+      if (expiredColumnIndex >= 0) {
+        activeColumns[expiredColumnIndex] = { revealEndX, visualEnd };
+      } else {
+        activeColumns.push({ revealEndX, visualEnd });
+      }
+
+      return {
+        entry,
+        durationMinutes,
+        label,
+        offsetX,
+        startMinutes,
+      };
+    });
+  };
+
+  const getTimelineEventLabel = (
+    entry: CalendarEntry,
+    durationMinutes: number,
+  ) => `${entry.todo.text || "Untitled Note"} · ${durationMinutes}m`;
+
+  const estimateTimelineLabelWidth = (label: string) => {
+    const normalizedLength = Array.from(label).reduce((width, character) => {
+      return width + (character.charCodeAt(0) > 255 ? 12 : 7);
+    }, 0);
+
+    return Math.min(190, Math.max(72, normalizedLength + 22));
   };
 
   const handleUpdateNote = async (entryId: number, newNote: string) => {
@@ -789,101 +1302,259 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       );
     }
 
-    // Filter entries for the selected date and sort them by time
-    const dateEntries = entries
-      .filter((entry) => {
-        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
-        return entryDate === selectedDate;
-      })
-      .sort((a, b) => {
-        const timeA = new Date(a.printedAt).getTime();
-        const timeB = new Date(b.printedAt).getTime();
-        return timeA - timeB;
-      });
+    const dateEntries = getEntriesForSelectedDate();
 
     if (dateEntries.length === 0) {
       return (
-        <Text style={[styles.placeholder, { color: theme.mutedText }]}>
-          No entries for this date
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.placeholder, { color: theme.mutedText }]}>
+            No entries for this date
+          </Text>
+        </View>
       );
     }
 
-    return (
-      <ScrollView
-        ref={dayScrollRef}
-        style={styles.dayContainer}
-        scrollEnabled={!isNoteBodyDragging}
-        keyboardShouldPersistTaps="handled"
-        onContentSizeChange={(_, height) => {
-          dayContentHeightRef.current = height;
-        }}
-        onLayout={(event) => {
-          dayViewportHeightRef.current = event.nativeEvent.layout.height;
-        }}
-        onScroll={(event) => {
-          dayScrollYRef.current = event.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
-      >
-        {dateEntries.map((entry) => (
-          <View key={entry.id} style={styles.entryContainer}>
-            <View style={styles.header}>
-              <View style={styles.headerLeft}>
-                {renderTodoText(entry)}
-                {renderTimerInfo(entry)}
-              </View>
-              <View style={styles.headerRight}>
-                <TimeEditor
-                  timestamp={entry.printedAt}
-                  onSave={async (newTimestamp) => {
-                    const updatedEntry = {
-                      ...entry,
-                      printedAt: newTimestamp,
-                      todo: {
-                        ...entry.todo,
-                        schedule: updateScheduleTimeFromEntry(
-                          entry,
-                          newTimestamp,
-                        ),
-                      },
-                    };
-                    // Remove the old entry and add the updated one
-                    const updatedEntries = entries
-                      .filter((e) => e.id !== entry.id)
-                      .concat(updatedEntry)
-                      // Re-sort after update
-                      .sort((a, b) => {
-                        const timeA = new Date(a.printedAt).getTime();
-                        const timeB = new Date(b.printedAt).getTime();
-                        return timeA - timeB;
-                      });
+    if (dayTimelineMode) {
+      return renderDayTimeline(dateEntries);
+    }
 
-                    setEntries(updatedEntries);
-                    await AsyncStorage.setItem(
-                      "calendarEntries",
-                      JSON.stringify(updatedEntries),
-                    );
-                  }}
+    return (
+      <View style={styles.dayModeToggleSurface}>
+        <ScrollView
+          ref={dayScrollRef}
+          style={styles.dayContainer}
+          scrollEnabled={!isNoteBodyDragging}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={(_, height) => {
+            dayContentHeightRef.current = height;
+          }}
+          onLayout={(event) => {
+            dayViewportHeightRef.current = event.nativeEvent.layout.height;
+          }}
+          onScroll={(event) => {
+            dayScrollYRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+        >
+          {dateEntries.map((entry) => (
+            <View
+              key={entry.id}
+              ref={(ref) => {
+                entryRefByEntryId.current[entry.id] = ref;
+              }}
+              style={styles.entryContainer}
+            >
+              <View style={styles.header}>
+                <View style={styles.headerLeft}>
+                  {renderTodoText(entry)}
+                  {renderTimerInfo(entry)}
+                </View>
+                <View style={styles.headerRight}>
+                  <TimeEditor
+                    timestamp={entry.printedAt}
+                    onSave={async (newTimestamp) => {
+                      const updatedEntry = {
+                        ...entry,
+                        printedAt: newTimestamp,
+                        todo: {
+                          ...entry.todo,
+                          schedule: updateScheduleTimeFromEntry(
+                            entry,
+                            newTimestamp,
+                          ),
+                        },
+                      };
+                      // Remove the old entry and add the updated one
+                      const updatedEntries = entries
+                        .filter((e) => e.id !== entry.id)
+                        .concat(updatedEntry)
+                        // Re-sort after update
+                        .sort((a, b) => {
+                          const timeA = new Date(a.printedAt).getTime();
+                          const timeB = new Date(b.printedAt).getTime();
+                          return timeA - timeB;
+                        });
+
+                      setEntries(updatedEntries);
+                      await AsyncStorage.setItem(
+                        "calendarEntries",
+                        JSON.stringify(updatedEntries),
+                      );
+                    }}
+                  />
+                </View>
+              </View>
+              <TodoItemNote
+                todo={entry.todo}
+                updateNote={(note) => handleUpdateNote(entry.id, note)}
+                onStartEditing={() => {}}
+                onEndEditing={() => setIsNoteBodyDragging(false)}
+                onListDragChange={handleNoteBodyDragChange}
+                onListDragMove={handleNoteBodyDragMove}
+              />
+              {renderSettings(entry)}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderDayTimeline = (dateEntries: CalendarEntry[]) => {
+    const { startHour, endHour } = getDayTimelineBounds(dateEntries);
+    const totalHeight = (endHour - startHour) * TIMELINE_HOUR_HEIGHT;
+    const layoutItems = getTimelineLayoutItems(dateEntries);
+    const hours = Array.from(
+      { length: endHour - startHour + 1 },
+      (_, index) => startHour + index,
+    );
+
+    return (
+      <View style={styles.dayModeToggleSurface}>
+        <ScrollView
+          ref={timelineScrollRef}
+          style={styles.timelineScroll}
+          onContentSizeChange={(_, height) => {
+            timelineContentHeightRef.current = height;
+            scrollTimelineToCurrentTime(startHour);
+          }}
+          onLayout={(event) => {
+            timelineViewportHeightRef.current = event.nativeEvent.layout.height;
+            scrollTimelineToCurrentTime(startHour);
+          }}
+        >
+          <View style={[styles.timelineCanvas, { height: totalHeight }]}>
+            {hours.map((hour) => {
+              const top = (hour - startHour) * TIMELINE_HOUR_HEIGHT;
+
+              return (
+                <View
+                  key={hour}
+                  style={[styles.timelineHourRow, { top }]}
+                >
+                  <Text
+                    style={[
+                      styles.timelineHourLabel,
+                      { color: theme.subtleText },
+                    ]}
+                  >
+                    {String(hour).padStart(2, "0")}
+                  </Text>
+                  <View
+                    style={[
+                      styles.timelineHourLine,
+                      { backgroundColor: theme.border },
+                    ]}
+                  />
+                </View>
+              );
+            })}
+            {isSelectedDateToday() ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.currentTimeRule,
+                  {
+                    top:
+                      (getCurrentMinutes() - startHour * 60) *
+                      TIMELINE_MINUTE_HEIGHT,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.currentTimeLine,
+                    { backgroundColor: theme.primary },
+                  ]}
                 />
               </View>
-            </View>
-            <TodoItemNote
-              todo={entry.todo}
-              updateNote={(note) => handleUpdateNote(entry.id, note)}
-              onStartEditing={() => {}}
-              onEndEditing={() => setIsNoteBodyDragging(false)}
-              onListDragChange={handleNoteBodyDragChange}
-              onListDragMove={handleNoteBodyDragMove}
-            />
-            {renderSettings(entry)}
+            ) : null}
+            {layoutItems.map((item) => {
+              const { durationMinutes, entry, label, offsetX, startMinutes } =
+                item;
+              const top =
+                (startMinutes - startHour * 60) * TIMELINE_MINUTE_HEIGHT;
+              const rawHeight = durationMinutes * TIMELINE_MINUTE_HEIGHT;
+              const height = Math.max(
+                offsetX > 0 ? 38 : 34,
+                rawHeight,
+              );
+              const isCompactEvent = height < 44;
+              const eventLaneLeft = TIMELINE_LABEL_WIDTH + 8;
+              const cascadeOffset = Math.min(offsetX, 210);
+
+              return (
+                <View
+                  key={entry.id}
+                  style={[
+                    styles.timelineEvent,
+                    isCompactEvent && styles.timelineEventCompact,
+                    !isMovableCalendarEntry(entry) &&
+                      styles.timelineEventLocked,
+                    draggingDayEntryId === entry.id && {
+                      transform: [{ translateY: dayDragOffsetY }],
+                      zIndex: 20,
+                      elevation: 8,
+                    },
+                    {
+                      top,
+                      height,
+                      left: eventLaneLeft + cascadeOffset,
+                      right: 4,
+                      backgroundColor: getNoteBackgroundColor(
+                        entry.todo.color,
+                        theme,
+                      ),
+                      borderColor: theme.border,
+                    },
+                    armedTimelineEntryId === entry.id &&
+                      styles.timelineEventArmed,
+                  ]}
+                  onTouchEnd={() => handleTimelineEntryTouchEnd(entry)}
+                  {...createDayTimelinePanHandlers(entry)}
+                >
+                  {editingTitleId === entry.id ? (
+                    <TextInput
+                      value={editingText}
+                      onChangeText={setEditingText}
+                      onBlur={() => handleEndTitleEditing(entry.id)}
+                      style={[
+                        styles.timelineEventTitle,
+                        styles.todoInput,
+                        isCompactEvent && styles.timelineEventTitleCompact,
+                        { color: theme.text },
+                      ]}
+                      autoFocus
+                    />
+                  ) : (
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.timelineEventTitle,
+                        isCompactEvent && styles.timelineEventTitleCompact,
+                        { color: theme.text },
+                      ]}
+                      onLongPress={withLongPressHaptic(() =>
+                        handleStartTitleEditing(entry),
+                      )}
+                    >
+                      {label}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
-        ))}
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   };
 
   const renderWeekView = () => {
+    if (weekTimelineMode) {
+      return renderWeekTimeline();
+    }
+
     return (
       <View style={styles.weekContainer}>
         <ScrollView
@@ -975,6 +1646,231 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 </View>
               );
             })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderWeekTimeline = () => {
+    const weekEntries = entries.filter((entry) => {
+      const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+      return weekDates.some(
+        (date) => date.toISOString().split("T")[0] === entryDate,
+      );
+    });
+    const { startHour, endHour } = getWeekTimelineBounds(weekEntries);
+    const totalHeight = (endHour - startHour) * TIMELINE_HOUR_HEIGHT;
+    const hours = Array.from(
+      { length: endHour - startHour + 1 },
+      (_, index) => startHour + index,
+    );
+
+    return (
+      <View style={styles.weekTimelineContainer}>
+        <ScrollView style={styles.timelineScroll}>
+          <View style={[styles.weekTimelineCanvas, { height: totalHeight }]}>
+            {hours.map((hour) => {
+              const top = (hour - startHour) * TIMELINE_HOUR_HEIGHT;
+
+              return (
+                <Text
+                  key={hour}
+                  numberOfLines={1}
+                  style={[
+                    styles.weekTimelineHourLabel,
+                    { color: theme.subtleText, top },
+                  ]}
+                >
+                  {String(hour).padStart(2, "0")}
+                </Text>
+              );
+            })}
+            {hours.map((hour) => {
+              const top = (hour - startHour) * TIMELINE_HOUR_HEIGHT;
+
+              return (
+                <View
+                  key={`line-${hour}`}
+                  style={[
+                    styles.weekTimelineHourLine,
+                    { backgroundColor: theme.border, top },
+                  ]}
+                />
+              );
+            })}
+            <View style={styles.weekTimelineColumns}>
+              {weekDates.map((date, dayIndex) => {
+                const dateStr = date.toISOString().split("T")[0];
+                const isTodayColumn = dateStr === getLocalDayKey(currentTime);
+                const dayEntries = entries
+                  .filter((entry) => {
+                    const entryDate = new Date(entry.printedAt)
+                      .toISOString()
+                      .split("T")[0];
+                    return entryDate === dateStr;
+                  })
+                  .sort((a, b) => {
+                    const timeA = new Date(a.printedAt).getTime();
+                    const timeB = new Date(b.printedAt).getTime();
+                    return timeA - timeB;
+                  });
+                const layoutItems = getTimelineLayoutItems(dayEntries);
+
+                return (
+                  <View key={dateStr} style={styles.weekTimelineColumn}>
+                    {weekTimelineDropPreview?.dayIndex === dayIndex && (
+                      <View
+                        pointerEvents="none"
+                        style={[
+                          styles.weekTimelineDropColumn,
+                          {
+                            backgroundColor: theme.primary,
+                            borderColor: theme.primary,
+                          },
+                        ]}
+                      />
+                    )}
+                    {isTodayColumn && (
+                      <View
+                        pointerEvents="none"
+                        style={[
+                          styles.weekTimelineCurrentTimeRule,
+                          {
+                            backgroundColor: theme.primary,
+                            top:
+                              (getCurrentMinutes() - startHour * 60) *
+                              TIMELINE_MINUTE_HEIGHT,
+                          },
+                        ]}
+                      />
+                    )}
+                    {layoutItems.map((item) => {
+                      const {
+                        durationMinutes,
+                        entry,
+                        startMinutes,
+                      } = item;
+                      const top =
+                        (startMinutes - startHour * 60) *
+                        TIMELINE_MINUTE_HEIGHT;
+                      const rawHeight =
+                        durationMinutes * TIMELINE_MINUTE_HEIGHT;
+                      const height = Math.max(22, rawHeight);
+                      const isTinyTimelineEntry = height < 30;
+                      const isCompactTimelineEntry = height < 48;
+                      const timelineTextLines = isTinyTimelineEntry
+                        ? 1
+                        : isCompactTimelineEntry
+                          ? 2
+                          : undefined;
+
+                      return (
+                        <View
+                          key={entry.id}
+                          style={[
+                            styles.weekTimelineEntryItem,
+                            armedTimelineEntryId === entry.id &&
+                              styles.weekTimelineEntryArmed,
+                            !isMovableCalendarEntry(entry) &&
+                              styles.weekEntryLocked,
+                            draggingWeekTimelineEntryId === entry.id && {
+                              transform: [
+                                { translateX: weekDragOffset.x },
+                                { translateY: weekDragOffset.y },
+                                { scale: 1.03 },
+                              ],
+                              zIndex: 20,
+                              elevation: 8,
+                            },
+                            {
+                              top,
+                              height,
+                              left: 0,
+                              right: 0,
+                            },
+                          ]}
+                          onTouchEnd={() => handleTimelineEntryTouchEnd(entry)}
+                          {...createWeekTimelinePanHandlers(entry)}
+                        >
+                          <View
+                            style={[
+                              styles.weekEntryContent,
+                              armedTimelineEntryId === entry.id &&
+                                styles.weekEntryArmed,
+                              {
+                                backgroundColor: getNoteBackgroundColor(
+                                  entry.todo.color,
+                                  theme,
+                                ),
+                              },
+                            ]}
+                          >
+                            {editingTitleId === entry.id ? (
+                              <TextInput
+                                value={editingText}
+                                onChangeText={setEditingText}
+                                onBlur={() => handleEndTitleEditing(entry.id)}
+                                style={[
+                                  styles.weekEntryText,
+                                  isCompactTimelineEntry &&
+                                    styles.weekTimelineEntryTextTiny,
+                                  styles.todoInput,
+                                  { color: theme.text },
+                                ]}
+                                autoFocus
+                                multiline
+                              />
+                            ) : (
+                              <Text
+                                style={[
+                                  styles.weekEntryText,
+                                  isCompactTimelineEntry &&
+                                    styles.weekTimelineEntryTextTiny,
+                                  { color: theme.text },
+                                ]}
+                                ellipsizeMode="clip"
+                                numberOfLines={timelineTextLines}
+                                onLongPress={withLongPressHaptic(() =>
+                                  handleStartTitleEditing(entry),
+                                )}
+                              >
+                                {entry.todo.text || ""}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </View>
+            {weekTimelineDropPreview && (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.weekTimelineDropBadge,
+                  {
+                    backgroundColor: theme.primary,
+                    left:
+                      WEEK_TIMELINE_GUTTER_WIDTH +
+                      weekTimelineDropPreview.dayIndex * COLUMN_WIDTH +
+                      Math.max(2, COLUMN_WIDTH - 44),
+                    top: Math.max(
+                      0,
+                      (weekTimelineDropPreview.minutes - startHour * 60) *
+                        TIMELINE_MINUTE_HEIGHT -
+                        34,
+                    ),
+                  },
+                ]}
+              >
+                <Text style={styles.weekTimelineDropBadgeText}>
+                  {formatTimelineMinutes(weekTimelineDropPreview.minutes)}
+                </Text>
+              </View>
+            )}
           </View>
         </ScrollView>
       </View>
@@ -1135,6 +2031,9 @@ const styles = StyleSheet.create({
   dayContainer: {
     flex: 1,
   },
+  dayModeToggleSurface: {
+    flex: 1,
+  },
   placeholder: {
     textAlign: "center",
     color: "#666",
@@ -1201,6 +2100,156 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginLeft: 0,
   },
+  timelineScroll: {
+    flex: 1,
+  },
+  timelineCanvas: {
+    position: "relative",
+  },
+  timelineHourRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  timelineHourLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    marginLeft: -4,
+    textAlign: "right",
+    width: TIMELINE_LABEL_WIDTH,
+  },
+  timelineHourLine: {
+    flex: 1,
+    height: 1,
+    marginLeft: 4,
+  },
+  currentTimeRule: {
+    alignItems: "center",
+    flexDirection: "row",
+    left: TIMELINE_LABEL_WIDTH + 8,
+    position: "absolute",
+    right: 0,
+    zIndex: 6,
+  },
+  currentTimeLine: {
+    flex: 1,
+    height: 1,
+    opacity: 0.5,
+  },
+  timelineEvent: {
+    borderRadius: 5,
+    borderWidth: 1,
+    justifyContent: "center",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: "absolute",
+  },
+  timelineEventCompact: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  timelineEventArmed: {
+    borderColor: "#2563eb",
+    borderWidth: 2,
+  },
+  timelineEventLocked: {
+    opacity: 0.82,
+  },
+  timelineEventTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  timelineEventTitleCompact: {
+    fontSize: 12,
+  },
+  timelineEventMeta: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  weekTimelineContainer: {
+    flex: 1,
+    marginLeft: -WEEK_TIMELINE_GUTTER_WIDTH,
+    marginTop: 10,
+    overflow: "visible",
+  },
+  weekTimelineCanvas: {
+    marginTop: 1,
+    overflow: "visible",
+    position: "relative",
+  },
+  weekTimelineHourLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    left: 0,
+    position: "absolute",
+    textAlign: "right",
+    transform: [{ rotate: "-90deg" }],
+    width: 22,
+  },
+  weekTimelineHourLine: {
+    height: 1,
+    left: WEEK_TIMELINE_GUTTER_WIDTH,
+    position: "absolute",
+    right: 0,
+  },
+  weekTimelineColumns: {
+    bottom: 0,
+    flexDirection: "row",
+    left: WEEK_TIMELINE_GUTTER_WIDTH,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  weekTimelineColumn: {
+    flex: 1,
+    position: "relative",
+  },
+  weekTimelineDropColumn: {
+    bottom: 0,
+    left: 2,
+    opacity: 0.055,
+    position: "absolute",
+    right: 2,
+    top: 0,
+  },
+  weekTimelineCurrentTimeRule: {
+    height: 1,
+    left: 2,
+    opacity: 0.55,
+    position: "absolute",
+    right: 2,
+    zIndex: 7,
+  },
+  weekTimelineDropBadge: {
+    alignItems: "center",
+    borderRadius: 10,
+    minWidth: 38,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    position: "absolute",
+    zIndex: 30,
+    elevation: 9,
+  },
+  weekTimelineDropBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  weekTimelineEntryItem: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    position: "absolute",
+    width: "100%",
+  },
+  weekTimelineEntryArmed: {
+    transform: [{ scale: 1.03 }],
+    zIndex: 12,
+    elevation: 5,
+  },
   weekContainer: {
     flex: 1,
     marginTop: 10,
@@ -1242,6 +2291,11 @@ const styles = StyleSheet.create({
     color: "#1f2937",
     flexWrap: "wrap",
     textAlign: "center",
+  },
+  weekTimelineEntryTextTiny: {
+    fontSize: 9,
+    fontWeight: "700",
+    lineHeight: 11,
   },
   settingsContainer: {
     padding: 12,

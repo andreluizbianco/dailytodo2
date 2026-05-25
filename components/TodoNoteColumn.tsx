@@ -50,6 +50,8 @@ interface TodoNoteColumnProps {
   deleteTrashedTodo: (id: number) => void;
   emptyTrash: () => void;
   setTrashRetention: (retention: TrashRetention) => void;
+  calendarAutoScrollToNow: boolean;
+  setCalendarAutoScrollToNow: (enabled: boolean) => void;
   printOnCalendar: (todo: Todo) => void;
   exportData: () => void;
   importData: () => void;
@@ -85,6 +87,8 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
   deleteTrashedTodo,
   emptyTrash,
   setTrashRetention,
+  calendarAutoScrollToNow,
+  setCalendarAutoScrollToNow,
   printOnCalendar,
   exportData,
   importData,
@@ -297,6 +301,8 @@ const TodoNoteColumn: React.FC<TodoNoteColumnProps> = ({
           importData={importData}
           onOpenTodo={onOpenTodoFromSettings}
           restoreTrashedTodo={restoreTrashedTodo}
+          calendarAutoScrollToNow={calendarAutoScrollToNow}
+          setCalendarAutoScrollToNow={setCalendarAutoScrollToNow}
           setTrashRetention={setTrashRetention}
           todos={todos}
           trashedTodos={trashedTodos}

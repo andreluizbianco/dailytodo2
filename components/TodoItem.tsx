@@ -228,6 +228,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
+    ...Platform.select({
+      android: {
+        elevation: 0.6,
+      },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.045,
+        shadowRadius: 1.2,
+      },
+    }),
   },
   todoContent: {
     flex: 1,

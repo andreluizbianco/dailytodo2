@@ -290,13 +290,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     marginRight: 0,
+    overflow: "visible",
   },
   scrollView: {
     flex: 1,
+    overflow: "visible",
     paddingTop: 8,
   },
   todoItemContainer: {
     marginBottom: ITEM_GAP,
+    overflow: "visible",
   },
   gridScrollContent: {
     paddingLeft: 4,

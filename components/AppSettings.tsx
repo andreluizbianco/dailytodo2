@@ -42,6 +42,7 @@ import { WEEKDAYS } from "../utils/schedule";
 type PermissionState = "granted" | "denied" | "undetermined";
 type SettingsSectionId =
   | "appearance"
+  | "calendar"
   | "schedules"
   | "notifications"
   | "alert"
@@ -49,6 +50,7 @@ type SettingsSectionId =
 
 const defaultExpandedSections: Record<SettingsSectionId, boolean> = {
   appearance: false,
+  calendar: false,
   schedules: false,
   notifications: false,
   alert: false,
@@ -95,7 +97,9 @@ interface AppSettingsProps {
   importData: () => void;
   onOpenTodo: (id: number | string) => void;
   restoreTrashedTodo: (id: number) => void;
+  setCalendarAutoScrollToNow: (enabled: boolean) => void;
   setTrashRetention: (retention: TrashRetention) => void;
+  calendarAutoScrollToNow: boolean;
   todos: Todo[];
   trashedTodos: TrashedTodo[];
   trashRetention: TrashRetention;
@@ -113,7 +117,9 @@ const AppSettings: React.FC<AppSettingsProps> = ({
   importData,
   onOpenTodo,
   restoreTrashedTodo,
+  setCalendarAutoScrollToNow,
   setTrashRetention,
+  calendarAutoScrollToNow,
   todos,
   trashedTodos,
   trashRetention,
@@ -209,6 +215,7 @@ const AppSettings: React.FC<AppSettingsProps> = ({
     const nextValue = !allSectionsExpanded;
     setExpandedSections({
       appearance: nextValue,
+      calendar: nextValue,
       schedules: nextValue,
       notifications: nextValue,
       alert: nextValue,
@@ -350,6 +357,31 @@ const AppSettings: React.FC<AppSettingsProps> = ({
               Reset layout
             </Text>
           </TouchableOpacity>
+        </View>
+      </SettingsSection>
+
+      <SettingsSection
+        iconName="calendar-outline"
+        isExpanded={expandedSections.calendar}
+        onToggle={() => toggleSection("calendar")}
+        title="Calendar"
+      >
+        <View style={styles.scheduleToggleRow}>
+          <View style={styles.scheduleLine}>
+            <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+              Auto-scroll to now
+            </Text>
+            <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+              Center the current time in timeline view and jump to the nearest
+              current sticky in day view.
+            </Text>
+          </View>
+          <Switch
+            value={calendarAutoScrollToNow}
+            onValueChange={setCalendarAutoScrollToNow}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+          />
         </View>
       </SettingsSection>
 

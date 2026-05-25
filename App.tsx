@@ -92,9 +92,10 @@ type NotificationTarget = {
   reminderId?: string;
 };
 
+const CALENDAR_AUTO_SCROLL_TO_NOW_KEY = "calendarAutoScrollToNow";
+
 const AppContent = () => {
   const { isDarkMode, noteListWidthRatio, theme } = useTheme();
-  const themeAnimation = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
   const [activeView, setActiveView] = useState<ViewType>("notes");
   const [sideContext, setSideContext] = useState<SideContext>("notes");
   const [didRestoreSideContext, setDidRestoreSideContext] = useState(false);
@@ -105,6 +106,12 @@ const AppContent = () => {
   const [isNoteFullscreen, setIsNoteFullscreen] = useState(false);
   const [calendarViewMode, setCalendarViewMode] =
     useState<CalendarViewMode>("day");
+  const [isCalendarDayTimelineMode, setIsCalendarDayTimelineMode] =
+    useState(false);
+  const [isCalendarWeekTimelineMode, setIsCalendarWeekTimelineMode] =
+    useState(false);
+  const [calendarAutoScrollToNow, setCalendarAutoScrollToNowState] =
+    useState(true);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [selectedTodoSource, setSelectedTodoSource] =
     useState<SelectedTodoSource>({ type: "todo" });
@@ -157,20 +164,32 @@ const AppContent = () => {
   const processedTimerCompletionKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    Animated.timing(themeAnimation, {
-      toValue: isDarkMode ? 1 : 0,
-      duration: 220,
-      useNativeDriver: false,
-    }).start();
-  }, [isDarkMode, themeAnimation]);
-
-  useEffect(() => {
     Animated.timing(settingsLayoutAnimation, {
       toValue: activeView === "settings" || isNoteFullscreen ? 1 : 0,
       duration: 220,
       useNativeDriver: false,
     }).start();
   }, [activeView, isNoteFullscreen, settingsLayoutAnimation]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(CALENDAR_AUTO_SCROLL_TO_NOW_KEY)
+      .then((storedValue) => {
+        if (storedValue === null) return;
+        setCalendarAutoScrollToNowState(storedValue === "true");
+      })
+      .catch((error) => {
+        console.error("Error loading calendar auto-scroll preference:", error);
+      });
+  }, []);
+
+  const setCalendarAutoScrollToNow = useCallback((enabled: boolean) => {
+    setCalendarAutoScrollToNowState(enabled);
+    AsyncStorage.setItem(CALENDAR_AUTO_SCROLL_TO_NOW_KEY, String(enabled)).catch(
+      (error) => {
+        console.error("Error saving calendar auto-scroll preference:", error);
+      },
+    );
+  }, []);
 
   const handleSelectTodo = useCallback(
     (todo: Todo | null, source: SelectedTodoSource = { type: "todo" }) => {
@@ -1097,6 +1116,7 @@ const AppContent = () => {
         id: Date.now(),
         todo: newTodo,
         printedAt: `${selectedDate}T${new Date().toTimeString().split(" ")[0]}`,
+        showInDaily: selectedDate > getDayKey(new Date()),
       };
 
       // Update state immediately
@@ -1201,22 +1221,8 @@ const AppContent = () => {
       selectedTodo?.id === id &&
       selectedTodaySource?.type === "calendar-instance"
     ) {
-      const updatedEntries = calendarEntriesRef.current.filter(
-        (entry) => entry.id !== selectedTodaySource.entryId,
-      );
-
       trashTodoSnapshot(selectedTodo);
-      setCalendarEntries(updatedEntries);
-      AsyncStorage.setItem(
-        "calendarEntries",
-        JSON.stringify(updatedEntries),
-      ).catch((error) => {
-        console.error("Error deleting calendar entry:", error);
-      });
-
-      setSelectedTodo(null);
-      setSelectedTodoSource({ type: "todo" });
-      setSelectedTodaySource(null);
+      void dismissSelectedTodayOccurrence();
       return null;
     }
 
@@ -1276,6 +1282,9 @@ const AppContent = () => {
       return (
         <View style={styles.calendarContainer}>
           <Calendar
+            autoScrollToNow={calendarAutoScrollToNow}
+            dayTimelineMode={isCalendarDayTimelineMode}
+            weekTimelineMode={isCalendarWeekTimelineMode}
             viewMode={calendarViewMode}
             onDateSelect={setSelectedDate}
             onAddEntry={handleCalendarAddEntry}
@@ -1430,6 +1439,8 @@ const AppContent = () => {
             restoreTrashedTodo={restoreTrashedTodo}
             deleteTrashedTodo={deleteTrashedTodo}
             emptyTrash={emptyTrash}
+            calendarAutoScrollToNow={calendarAutoScrollToNow}
+            setCalendarAutoScrollToNow={setCalendarAutoScrollToNow}
             setTrashRetention={setTrashRetention}
             printOnCalendar={handlePrintOnCalendar}
             exportData={exportData}
@@ -1456,6 +1467,22 @@ const AppContent = () => {
     } else {
       setCalendarViewMode((prev) => (prev === "day" ? "week" : "day"));
     }
+  };
+
+  const handleCalendarLongPress = () => {
+    setIsNoteFullscreen(false);
+
+    if (activeView !== "calendar") {
+      setActiveView("calendar");
+      return;
+    }
+
+    if (calendarViewMode === "day") {
+      setIsCalendarDayTimelineMode((current) => !current);
+      return;
+    }
+
+    setIsCalendarWeekTimelineMode((current) => !current);
   };
 
   const handleSettingsLongPress = () => {
@@ -1575,16 +1602,11 @@ const AppContent = () => {
       <Animated.View
         style={[
           styles.container,
-          {
-            backgroundColor: themeAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: ["#FFFFFF", theme.background],
-            }),
-          },
+          { backgroundColor: theme.background },
         ]}
       >
         <SafeAreaView
-          style={[styles.container, { backgroundColor: "transparent" }]}
+          style={[styles.container, { backgroundColor: theme.background }]}
         >
           <StatusBar style={isDarkMode ? "light" : "dark"} />
           <TopBar
@@ -1597,6 +1619,7 @@ const AppContent = () => {
             showSettings={showSettings}
             setShowSettings={setShowSettings}
             onCalendarPress={handleCalendarPress}
+            onCalendarLongPress={handleCalendarLongPress}
           />
           {renderMainContent()}
         </SafeAreaView>
