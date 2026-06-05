@@ -19,6 +19,7 @@ const LIGHT_NOTE_COLOR_STRENGTH_KEY = "app:lightNoteColorStrength";
 const NOTE_TITLE_FONT_SIZE_KEY = "app:noteTitleFontSize";
 const NOTE_BODY_FONT_SIZE_KEY = "app:noteBodyFontSize";
 const NOTE_LIST_WIDTH_RATIO_KEY = "app:noteListWidthRatio";
+const NOTE_LIST_SPACING_KEY = "app:noteListSpacing";
 
 export const DEFAULT_DARK_INTENSITY = 0.65;
 export const DEFAULT_LIGHT_INTENSITY = 0.5;
@@ -27,10 +28,13 @@ export const DEFAULT_LIGHT_NOTE_COLOR_STRENGTH = 0.76;
 export const NOTE_COLOR_STRENGTH_MIN = 0.4;
 export const DEFAULT_NOTE_TITLE_FONT_SIZE = 14;
 export const DEFAULT_NOTE_BODY_FONT_SIZE = 16;
+export const DEFAULT_NOTE_LIST_SPACING = 1;
 export const NOTE_TITLE_FONT_SIZE_MIN = 12;
 export const NOTE_TITLE_FONT_SIZE_MAX = 22;
 export const NOTE_BODY_FONT_SIZE_MIN = 14;
 export const NOTE_BODY_FONT_SIZE_MAX = 24;
+export const NOTE_LIST_SPACING_MIN = 0;
+export const NOTE_LIST_SPACING_MAX = 1;
 export const DEFAULT_NOTE_LIST_WIDTH_RATIO = 0.4;
 export const NOTE_LIST_WIDTH_RATIO_MIN = 0.3;
 export const NOTE_LIST_WIDTH_RATIO_MAX = 0.48;
@@ -94,6 +98,7 @@ interface ThemeContextValue {
   lightNoteColorStrength: number;
   noteBodyFontSize: number;
   noteColorStrength: number;
+  noteListSpacing: number;
   noteListWidthRatio: number;
   noteTitleFontSize: number;
   resetThemeTuning: () => void;
@@ -103,6 +108,7 @@ interface ThemeContextValue {
   setDarkIntensity: (value: number) => void;
   setLightIntensity: (value: number) => void;
   setLightNoteColorStrength: (value: number) => void;
+  setNoteListSpacing: (value: number) => void;
   setNoteListWidthRatio: (value: number) => void;
   setNoteColorStrength: (value: number) => void;
   setNoteTitleFontSize: (value: number) => void;
@@ -120,6 +126,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   lightNoteColorStrength: DEFAULT_LIGHT_NOTE_COLOR_STRENGTH,
   noteBodyFontSize: DEFAULT_NOTE_BODY_FONT_SIZE,
   noteColorStrength: DEFAULT_DARK_NOTE_COLOR_STRENGTH,
+  noteListSpacing: DEFAULT_NOTE_LIST_SPACING,
   noteListWidthRatio: DEFAULT_NOTE_LIST_WIDTH_RATIO,
   noteTitleFontSize: DEFAULT_NOTE_TITLE_FONT_SIZE,
   resetThemeTuning: () => undefined,
@@ -128,6 +135,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   setDarkIntensity: () => undefined,
   setLightIntensity: () => undefined,
   setLightNoteColorStrength: () => undefined,
+  setNoteListSpacing: () => undefined,
   setNoteBodyFontSize: () => undefined,
   setNoteListWidthRatio: () => undefined,
   setNoteColorStrength: () => undefined,
@@ -162,6 +170,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
   const [noteBodyFontSize, setNoteBodyFontSizeState] = useState(
     DEFAULT_NOTE_BODY_FONT_SIZE,
   );
+  const [noteListSpacing, setNoteListSpacingState] = useState(
+    DEFAULT_NOTE_LIST_SPACING,
+  );
   const [noteListWidthRatio, setNoteListWidthRatioState] = useState(
     DEFAULT_NOTE_LIST_WIDTH_RATIO,
   );
@@ -179,6 +190,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
           storedLightNoteColorStrength,
           storedNoteTitleFontSize,
           storedNoteBodyFontSize,
+          storedNoteListSpacing,
           storedNoteListWidthRatio,
         ] = await Promise.all([
           AsyncStorage.getItem(THEME_MODE_KEY),
@@ -188,6 +200,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
           AsyncStorage.getItem(LIGHT_NOTE_COLOR_STRENGTH_KEY),
           AsyncStorage.getItem(NOTE_TITLE_FONT_SIZE_KEY),
           AsyncStorage.getItem(NOTE_BODY_FONT_SIZE_KEY),
+          AsyncStorage.getItem(NOTE_LIST_SPACING_KEY),
           AsyncStorage.getItem(NOTE_LIST_WIDTH_RATIO_KEY),
         ]);
 
@@ -251,6 +264,15 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
         );
         if (nextNoteBodyFontSize !== null) {
           setNoteBodyFontSizeState(nextNoteBodyFontSize);
+        }
+
+        const nextNoteListSpacing = parseStoredSliderValue(
+          storedNoteListSpacing,
+          NOTE_LIST_SPACING_MIN,
+          NOTE_LIST_SPACING_MAX,
+        );
+        if (nextNoteListSpacing !== null) {
+          setNoteListSpacingState(nextNoteListSpacing);
         }
 
         const nextNoteListWidthRatio = parseStoredSliderValue(
@@ -353,6 +375,20 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
     );
   };
 
+  const setNoteListSpacing = (value: number) => {
+    const nextValue = clamp(
+      value,
+      NOTE_LIST_SPACING_MIN,
+      NOTE_LIST_SPACING_MAX,
+    );
+    setNoteListSpacingState(nextValue);
+    AsyncStorage.setItem(NOTE_LIST_SPACING_KEY, String(nextValue)).catch(
+      (error) => {
+        console.error("Failed to save note list spacing:", error);
+      },
+    );
+  };
+
   const setNoteListWidthRatio = (value: number) => {
     const nextValue = clamp(
       value,
@@ -393,6 +429,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       lightNoteColorStrength,
       noteBodyFontSize,
       noteColorStrength,
+      noteListSpacing,
       noteListWidthRatio,
       noteTitleFontSize,
       resetThemeTuning,
@@ -406,6 +443,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       setLightIntensity,
       setLightNoteColorStrength,
       setNoteBodyFontSize,
+      setNoteListSpacing,
       setNoteListWidthRatio,
       setNoteColorStrength,
       setNoteTitleFontSize,
@@ -424,6 +462,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({
       lightNoteColorStrength,
       noteBodyFontSize,
       noteColorStrength,
+      noteListSpacing,
       noteListWidthRatio,
       noteTitleFontSize,
       resolvedThemeMode,

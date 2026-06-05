@@ -9,6 +9,7 @@ interface NoteSettingsSectionHeaderProps {
   disabled?: boolean;
   enabled?: boolean;
   onToggleEnabled?: () => void;
+  detail?: string;
 }
 
 const NoteSettingsSectionHeader: React.FC<NoteSettingsSectionHeaderProps> = ({
@@ -18,6 +19,7 @@ const NoteSettingsSectionHeader: React.FC<NoteSettingsSectionHeaderProps> = ({
   disabled = false,
   enabled,
   onToggleEnabled,
+  detail,
 }) => {
   const { theme } = useTheme();
   const isDimmed = disabled || enabled === false;
@@ -42,6 +44,14 @@ const NoteSettingsSectionHeader: React.FC<NoteSettingsSectionHeaderProps> = ({
           {"\u25B8"}
         </Text>
         <Text style={[styles.label, { color: theme.text }]}>{title}</Text>
+        {!!detail && (
+          <Text
+            numberOfLines={1}
+            style={[styles.detail, { color: theme.mutedText }]}
+          >
+            {detail}
+          </Text>
+        )}
       </TouchableOpacity>
 
       {typeof enabled === "boolean" && onToggleEnabled ? (
@@ -69,6 +79,8 @@ const styles = StyleSheet.create({
     minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    paddingRight: 8,
   },
   disclosureIcon: {
     width: 16,
@@ -82,6 +94,16 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: "700",
+    includeFontPadding: false,
+    lineHeight: 18,
+  },
+  detail: {
+    flexShrink: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    includeFontPadding: false,
+    lineHeight: 18,
   },
   switchPlaceholder: {
     width: 44,

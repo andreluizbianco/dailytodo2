@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { TodoReminder, TodoSchedule } from "../types";
+import { DateFormatPreference, TodoReminder, TodoSchedule } from "../types";
 import { softHaptic } from "../utils/haptics";
 import {
   REMINDER_AMOUNT_MAX,
@@ -17,7 +17,10 @@ import {
   SCHEDULE_AMOUNT_MAX,
   SCHEDULE_MODES,
   SCHEDULE_UNITS,
+  createTodayTargetDate,
+  formatScheduleDateParts,
   normalizeScheduleTime,
+  parseScheduleDateParts,
   toggleScheduleWeekday,
   updateReminder,
   updateSchedule,
@@ -37,6 +40,7 @@ interface NoteScheduleSettingsProps {
   reminder?: TodoReminder;
   onChange: (schedule: TodoSchedule | undefined) => void;
   onReminderChange: (reminder: TodoReminder | undefined) => void;
+  dateFormat?: DateFormatPreference;
 }
 
 const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
@@ -44,6 +48,7 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
   reminder,
   onChange,
   onReminderChange,
+  dateFormat = "dmy",
 }) => {
   const { theme } = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -53,10 +58,23 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
   >(null);
   const [draftHours, setDraftHours] = useState("");
   const [draftMinutes, setDraftMinutes] = useState("");
+  const [editingDatePart, setEditingDatePart] = useState<
+    "day" | "month" | "year" | null
+  >(null);
+  const [draftDateParts, setDraftDateParts] = useState({
+    day: "",
+    month: "",
+    year: "",
+  });
   const hoursInputRef = useRef<TextInput>(null);
   const minutesInputRef = useRef<TextInput>(null);
+  const dayInputRef = useRef<TextInput>(null);
+  const monthInputRef = useRef<TextInput>(null);
+  const yearInputRef = useRef<TextInput>(null);
   const movingToMinutesRef = useRef(false);
   const finishingTimeRef = useRef(false);
+  const movingDatePartRef = useRef(false);
+  const finishingDateRef = useRef(false);
   const weekdayOpacity = useRef(new Animated.Value(0)).current;
   const isScheduleEnabled = Boolean(schedule);
   const isReminderEnabled = Boolean(reminder);
@@ -137,6 +155,13 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
 
   const normalizedScheduleTime = normalizeScheduleTime(activeSchedule.time);
   const [scheduleHours, scheduleMinutes] = normalizedScheduleTime.split(":");
+  const scheduleTargetDate =
+    activeSchedule.targetDate ?? createTodayTargetDate();
+  const scheduleDateParts = formatScheduleDateParts(
+    scheduleTargetDate,
+    dateFormat,
+  );
+  const datePartOrder = getDatePartOrder(dateFormat);
 
   const startEditingTime = (part: "hours" | "minutes") => {
     softHaptic();
@@ -170,8 +195,33 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
     }, 90);
   };
 
+  const selectDateInput = (part: "day" | "month" | "year") => {
+    const inputRef = getDateInputRef(part, {
+      day: dayInputRef,
+      month: monthInputRef,
+      year: yearInputRef,
+    });
+    const end = part === "year" ? 4 : 2;
+
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setNativeProps({
+        selection: { start: 0, end },
+      });
+    }, 20);
+    setTimeout(() => {
+      inputRef.current?.setNativeProps({
+        selection: { start: 0, end },
+      });
+    }, 90);
+  };
+
   const sanitizeTimeInput = (text: string) => {
     return text.replace(/\D/g, "").slice(0, 2);
+  };
+
+  const sanitizeDateInput = (text: string, part: "day" | "month" | "year") => {
+    return text.replace(/\D/g, "").slice(0, part === "year" ? 4 : 2);
   };
 
   const normalizeTimePart = (
@@ -259,6 +309,76 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
 
     saveDraftTime(draftHours, draftMinutes);
     setEditingTimePart(null);
+  };
+
+  const startEditingDate = (part: "day" | "month" | "year") => {
+    softHaptic();
+    setDraftDateParts(scheduleDateParts);
+    setEditingDatePart(part);
+  };
+
+  useEffect(() => {
+    if (editingDatePart) {
+      selectDateInput(editingDatePart);
+    }
+  }, [editingDatePart]);
+
+  const resetDateEditing = () => {
+    setDraftDateParts(scheduleDateParts);
+    setEditingDatePart(null);
+  };
+
+  const saveDraftDate = (nextParts = draftDateParts) => {
+    const nextTargetDate = parseScheduleDateParts(
+      nextParts,
+      dateFormat,
+      scheduleTargetDate,
+    );
+    const nextDisplayParts = formatScheduleDateParts(nextTargetDate, dateFormat);
+
+    setDraftDateParts(nextDisplayParts);
+
+    if (nextTargetDate !== scheduleTargetDate) {
+      handleScheduleChange({ targetDate: nextTargetDate });
+    }
+
+    return true;
+  };
+
+  const moveToNextDatePart = (
+    part: "day" | "month" | "year",
+    nextParts: typeof draftDateParts,
+  ) => {
+    const currentIndex = datePartOrder.indexOf(part);
+    const nextPart = datePartOrder[currentIndex + 1];
+
+    if (!nextPart) {
+      if (saveDraftDate(nextParts)) {
+        finishingDateRef.current = true;
+        setEditingDatePart(null);
+      }
+      return;
+    }
+
+    movingDatePartRef.current = true;
+    setEditingDatePart(nextPart);
+    setTimeout(() => {
+      movingDatePartRef.current = false;
+    }, 120);
+  };
+
+  const finishDateEditing = () => {
+    if (finishingDateRef.current) {
+      finishingDateRef.current = false;
+      return;
+    }
+
+    if (movingDatePartRef.current) {
+      return;
+    }
+
+    saveDraftDate();
+    setEditingDatePart(null);
   };
 
   return (
@@ -391,33 +511,111 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
             <MiniWheelPicker
               values={SCHEDULE_MODES}
               selectedValue={activeSchedule.mode}
-              formatValue={(value) => value}
-              onChange={(mode) => handleScheduleChange({ mode })}
-              dragSensitivity={0.42}
-              velocityProjection={42}
-            />
-            <MiniWheelPicker
-              values={amountValues}
-              selectedValue={activeSchedule.amount}
-              formatValue={(value) => String(value)}
-              onChange={(amount) => handleScheduleChange({ amount })}
-              dragSensitivity={0.92}
-              velocityProjection={180}
-            />
-            <MiniWheelPicker
-              values={SCHEDULE_UNITS}
-              selectedValue={activeSchedule.unit}
-              formatValue={(value, isSelected) =>
-                isSelected
-                  ? activeSchedule.amount === 1
-                    ? value.replace(/s$/, "")
-                    : value
-                  : value
+              formatValue={(value) => (value === "date" ? "on" : value)}
+              onChange={(mode) =>
+                handleScheduleChange({
+                  mode,
+                  ...(mode === "date" && !activeSchedule.targetDate
+                    ? { targetDate: createTodayTargetDate() }
+                    : {}),
+                })
               }
-              onChange={(unit) => handleScheduleChange({ unit })}
               dragSensitivity={0.42}
               velocityProjection={42}
             />
+            {activeSchedule.mode === "date" ? (
+              <View style={styles.dateEditorColumn}>
+                <View
+                  style={[
+                    styles.dateEditor,
+                    {
+                      backgroundColor: theme.control,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                >
+                  {datePartOrder.map((part, index) => (
+                    <React.Fragment key={part}>
+                      <DatePart
+                        inputRef={getDateInputRef(part, {
+                          day: dayInputRef,
+                          month: monthInputRef,
+                          year: yearInputRef,
+                        })}
+                        isEditing={editingDatePart !== null}
+                        maxLength={part === "year" ? 4 : 2}
+                        onBlur={finishDateEditing}
+                        onChangeText={(text) => {
+                          const numericText = sanitizeDateInput(text, part);
+                          const nextParts = {
+                            ...draftDateParts,
+                            [part]: numericText,
+                          };
+
+                          setEditingDatePart(part);
+                          setDraftDateParts(nextParts);
+
+                          if (
+                            numericText.length ===
+                            (part === "year" ? 4 : 2)
+                          ) {
+                            moveToNextDatePart(part, nextParts);
+                          }
+                        }}
+                        onFocus={() => {
+                          if (editingDatePart !== part) {
+                            setEditingDatePart(part);
+                            selectDateInput(part);
+                          }
+                        }}
+                        onPress={() => startEditingDate(part)}
+                        textColor={theme.text}
+                        value={
+                          editingDatePart === null
+                            ? scheduleDateParts[part]
+                            : draftDateParts[part]
+                        }
+                      />
+                      {index < datePartOrder.length - 1 && (
+                        <Text
+                          style={[
+                            styles.dateSeparator,
+                            { color: theme.mutedText },
+                          ]}
+                        >
+                          {dateFormat === "ymd" ? "-" : "/"}
+                        </Text>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <>
+                <MiniWheelPicker
+                  values={amountValues}
+                  selectedValue={activeSchedule.amount}
+                  formatValue={(value) => String(value)}
+                  onChange={(amount) => handleScheduleChange({ amount })}
+                  dragSensitivity={0.92}
+                  velocityProjection={180}
+                />
+                <MiniWheelPicker
+                  values={SCHEDULE_UNITS}
+                  selectedValue={activeSchedule.unit}
+                  formatValue={(value, isSelected) =>
+                    isSelected
+                      ? activeSchedule.amount === 1
+                        ? value.replace(/s$/, "")
+                        : value
+                      : value
+                  }
+                  onChange={(unit) => handleScheduleChange({ unit })}
+                  dragSensitivity={0.42}
+                  velocityProjection={42}
+                />
+              </>
+            )}
           </View>
 
           <Animated.View
@@ -518,6 +716,67 @@ const NoteScheduleSettings: React.FC<NoteScheduleSettingsProps> = ({
         </View>
       )}
     </View>
+  );
+};
+
+type DatePartName = "day" | "month" | "year";
+
+const getDatePartOrder = (
+  dateFormat: DateFormatPreference,
+): DatePartName[] => {
+  if (dateFormat === "mdy") return ["month", "day", "year"];
+  if (dateFormat === "ymd") return ["year", "month", "day"];
+  return ["day", "month", "year"];
+};
+
+const getDateInputRef = (
+  part: DatePartName,
+  refs: Record<DatePartName, React.RefObject<TextInput>>,
+) => refs[part];
+
+interface DatePartProps {
+  inputRef: React.RefObject<TextInput>;
+  isEditing: boolean;
+  maxLength: number;
+  onBlur: () => void;
+  onChangeText: (text: string) => void;
+  onFocus: () => void;
+  onPress: () => void;
+  textColor: string;
+  value: string;
+}
+
+const DatePart: React.FC<DatePartProps> = ({
+  inputRef,
+  isEditing,
+  maxLength,
+  onBlur,
+  onChangeText,
+  onFocus,
+  onPress,
+  textColor,
+  value,
+}) => {
+  if (!isEditing) {
+    return (
+      <Text style={[styles.dateText, { color: textColor }]} onPress={onPress}>
+        {value}
+      </Text>
+    );
+  }
+
+  return (
+    <TextInput
+      ref={inputRef}
+      style={[styles.dateInput, { color: textColor }]}
+      value={value}
+      onChangeText={onChangeText}
+      keyboardType="number-pad"
+      selectTextOnFocus
+      maxLength={maxLength}
+      onFocus={onFocus}
+      onBlur={onBlur}
+    />
   );
 };
 
@@ -780,6 +1039,41 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   timeColon: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginHorizontal: 1,
+  },
+  dateEditorColumn: {
+    flex: 2,
+    height: WHEEL_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateEditor: {
+    minHeight: 30,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  dateText: {
+    minWidth: 22,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  dateInput: {
+    width: 36,
+    padding: 0,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  dateSeparator: {
     fontSize: 15,
     fontWeight: "600",
     marginHorizontal: 1,

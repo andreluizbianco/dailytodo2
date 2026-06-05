@@ -24,11 +24,14 @@ import {
 } from "../utils/timerAlertPreferences";
 import {
   DEFAULT_NOTE_BODY_FONT_SIZE,
+  DEFAULT_NOTE_LIST_SPACING,
   DEFAULT_NOTE_LIST_WIDTH_RATIO,
   DEFAULT_NOTE_TITLE_FONT_SIZE,
   NOTE_BODY_FONT_SIZE_MAX,
   NOTE_BODY_FONT_SIZE_MIN,
   NOTE_COLOR_STRENGTH_MIN,
+  NOTE_LIST_SPACING_MAX,
+  NOTE_LIST_SPACING_MIN,
   NOTE_LIST_WIDTH_RATIO_MAX,
   NOTE_LIST_WIDTH_RATIO_MIN,
   NOTE_TITLE_FONT_SIZE_MAX,
@@ -36,14 +39,28 @@ import {
   useTheme,
 } from "../utils/theme";
 import type { ThemePreference } from "../utils/theme";
-import { CalendarEntry, Todo, TodoReminder, TodoSchedule, TrashedTodo, TrashRetention } from "../types";
-import { WEEKDAYS } from "../utils/schedule";
+import {
+  CalendarEntry,
+  CalendarProjectionRange,
+  DateFormatPreference,
+  PhotoScanFormat,
+  Todo,
+  TodoReminder,
+  TodoSchedule,
+  TrashedTodo,
+  TrashRetention,
+  VoiceLanguagePreference,
+} from "../types";
+import { formatScheduleDateParts, WEEKDAYS } from "../utils/schedule";
+import { voiceLanguageOptions } from "../utils/voicePreferences";
 
 type PermissionState = "granted" | "denied" | "undetermined";
 type SettingsSectionId =
   | "appearance"
   | "calendar"
   | "schedules"
+  | "photos"
+  | "voice"
   | "notifications"
   | "alert"
   | "data";
@@ -52,6 +69,8 @@ const defaultExpandedSections: Record<SettingsSectionId, boolean> = {
   appearance: false,
   calendar: false,
   schedules: false,
+  photos: false,
+  voice: false,
   notifications: false,
   alert: false,
   data: false,
@@ -88,6 +107,34 @@ const trashRetentionOptions: Array<{
   { label: "Never", value: "never" },
 ];
 
+const calendarProjectionOptions: Array<{
+  label: string;
+  value: CalendarProjectionRange;
+}> = [
+  { label: "Off", value: "off" },
+  { label: "1w", value: "1w" },
+  { label: "3m", value: "3m" },
+  { label: "6m", value: "6m" },
+];
+
+const dateFormatOptions: Array<{
+  label: string;
+  value: DateFormatPreference;
+}> = [
+  { label: "DD/MM/YYYY", value: "dmy" },
+  { label: "MM/DD/YYYY", value: "mdy" },
+  { label: "YYYY-MM-DD", value: "ymd" },
+];
+
+const photoScanFormatOptions: Array<{
+  label: string;
+  value: PhotoScanFormat;
+}> = [
+  { label: "Lines", value: "lines" },
+  { label: "Paragraph", value: "paragraph" },
+  { label: "Compact", value: "compact" },
+];
+
 interface AppSettingsProps {
   archivedTodos: Todo[];
   calendarEntries: CalendarEntry[];
@@ -95,11 +142,27 @@ interface AppSettingsProps {
   emptyTrash: () => void;
   exportData: () => void;
   importData: () => void;
-  onOpenTodo: (id: number | string) => void;
+  onOpenTodo: (target: ScheduleOpenTarget) => void;
   restoreTrashedTodo: (id: number) => void;
   setCalendarAutoScrollToNow: (enabled: boolean) => void;
+  setCalendarProjectionRange: (range: CalendarProjectionRange) => void;
+  setDateFormat: (format: DateFormatPreference) => void;
+  setVoiceAutoStop: (enabled: boolean) => void;
+  setVoiceEnabled: (enabled: boolean) => void;
+  setVoiceLanguage: (language: VoiceLanguagePreference) => void;
+  setPhotoAttachmentsEnabled: (enabled: boolean) => void;
+  setPhotoScanEnabled: (enabled: boolean) => void;
+  setPhotoScanFormat: (format: PhotoScanFormat) => void;
   setTrashRetention: (retention: TrashRetention) => void;
   calendarAutoScrollToNow: boolean;
+  calendarProjectionRange: CalendarProjectionRange;
+  dateFormat: DateFormatPreference;
+  voiceAutoStop: boolean;
+  voiceEnabled: boolean;
+  voiceLanguage: VoiceLanguagePreference;
+  photoAttachmentsEnabled: boolean;
+  photoScanEnabled: boolean;
+  photoScanFormat: PhotoScanFormat;
   todos: Todo[];
   trashedTodos: TrashedTodo[];
   trashRetention: TrashRetention;
@@ -118,8 +181,24 @@ const AppSettings: React.FC<AppSettingsProps> = ({
   onOpenTodo,
   restoreTrashedTodo,
   setCalendarAutoScrollToNow,
+  setCalendarProjectionRange,
+  setDateFormat,
+  setVoiceAutoStop,
+  setVoiceEnabled,
+  setVoiceLanguage,
+  setPhotoAttachmentsEnabled,
+  setPhotoScanEnabled,
+  setPhotoScanFormat,
   setTrashRetention,
   calendarAutoScrollToNow,
+  calendarProjectionRange,
+  dateFormat,
+  voiceAutoStop,
+  voiceEnabled,
+  voiceLanguage,
+  photoAttachmentsEnabled,
+  photoScanEnabled,
+  photoScanFormat,
   todos,
   trashedTodos,
   trashRetention,
@@ -134,12 +213,14 @@ const AppSettings: React.FC<AppSettingsProps> = ({
     lightNoteColorStrength,
     noteBodyFontSize,
     noteColorStrength,
+    noteListSpacing,
     noteListWidthRatio,
     noteTitleFontSize,
     resetThemeTuning,
     setCurrentIntensity,
     setCurrentNoteColorStrength,
     setNoteBodyFontSize,
+    setNoteListSpacing,
     setNoteListWidthRatio,
     setNoteTitleFontSize,
     setThemePreference,
@@ -154,8 +235,13 @@ const AppSettings: React.FC<AppSettingsProps> = ({
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
+  const [isTrashExpanded, setIsTrashExpanded] = useState(false);
 
   const allSectionsExpanded = Object.values(expandedSections).every(Boolean);
+  const sortedTrashedTodos = [...trashedTodos].sort(
+    (left, right) =>
+      new Date(right.deletedAt).getTime() - new Date(left.deletedAt).getTime(),
+  );
 
   const refreshNotificationStatus = useCallback(async () => {
     const permissions = await Notifications.getPermissionsAsync();
@@ -217,6 +303,8 @@ const AppSettings: React.FC<AppSettingsProps> = ({
       appearance: nextValue,
       calendar: nextValue,
       schedules: nextValue,
+      photos: nextValue,
+      voice: nextValue,
       notifications: nextValue,
       alert: nextValue,
       data: nextValue,
@@ -336,6 +424,24 @@ const AppSettings: React.FC<AppSettingsProps> = ({
               Reset text size
             </Text>
           </TouchableOpacity>
+          <ThemeSlider
+            label="List spacing"
+            value={noteListSpacing}
+            onValueChange={setNoteListSpacing}
+            min={NOTE_LIST_SPACING_MIN}
+            max={NOTE_LIST_SPACING_MAX}
+            minLabel="Tight"
+            maxLabel="Roomy"
+            valueFormatter={(value) => `${Math.round(value * 100)}%`}
+          />
+          <TouchableOpacity
+            style={[styles.resetButton, { borderColor: theme.border }]}
+            onPress={() => setNoteListSpacing(DEFAULT_NOTE_LIST_SPACING)}
+          >
+            <Text style={[styles.resetButtonText, { color: theme.text }]}>
+              Reset list spacing
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.layoutControls}>
@@ -383,6 +489,94 @@ const AppSettings: React.FC<AppSettingsProps> = ({
             thumbColor={theme.elevated}
           />
         </View>
+        <View style={styles.calendarProjectionBlock}>
+          <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+            Repeat projections
+          </Text>
+          <View
+            style={[
+              styles.segmentedControl,
+              { backgroundColor: theme.control },
+            ]}
+          >
+            {calendarProjectionOptions.map((option) => {
+              const isSelected = calendarProjectionRange === option.value;
+
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  onPress={() => setCalendarProjectionRange(option.value)}
+                  style={[
+                    styles.segment,
+                    isSelected && [
+                      styles.segmentSelected,
+                      {
+                        backgroundColor: theme.selected,
+                        borderColor: theme.border,
+                      },
+                    ],
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: theme.mutedText },
+                      isSelected && { color: theme.text },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+            Show translucent future repeats in the calendar without creating
+            real entries.
+          </Text>
+        </View>
+        <View style={styles.calendarProjectionBlock}>
+          <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+            Date format
+          </Text>
+          <View
+            style={[
+              styles.segmentedControl,
+              { backgroundColor: theme.control },
+            ]}
+          >
+            {dateFormatOptions.map((option) => {
+              const isSelected = dateFormat === option.value;
+
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  onPress={() => setDateFormat(option.value)}
+                  style={[
+                    styles.segment,
+                    isSelected && [
+                      styles.segmentSelected,
+                      {
+                        backgroundColor: theme.selected,
+                        borderColor: theme.border,
+                      },
+                    ],
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: theme.mutedText },
+                      isSelected && { color: theme.text },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
       </SettingsSection>
 
       <SettingsSection
@@ -394,6 +588,7 @@ const AppSettings: React.FC<AppSettingsProps> = ({
         <ScheduleOverview
           archivedTodos={archivedTodos}
           calendarEntries={calendarEntries}
+          dateFormat={dateFormat}
           onOpenTodo={onOpenTodo}
           todos={todos}
           updateArchivedTodo={updateArchivedTodo}
@@ -503,6 +698,178 @@ const AppSettings: React.FC<AppSettingsProps> = ({
       </SettingsSection>
 
       <SettingsSection
+        iconName="mic-outline"
+        isExpanded={expandedSections.voice}
+        onToggle={() => toggleSection("voice")}
+        rightText={
+          voiceEnabled
+            ? voiceLanguageOptions.find((option) => option.value === voiceLanguage)
+                ?.label
+            : "Off"
+        }
+        title="Voice"
+      >
+        <View style={styles.scheduleToggleRow}>
+          <View style={styles.scheduleLine}>
+            <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+              Voice dictation
+            </Text>
+            <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+              Show the microphone button inside notes.
+            </Text>
+          </View>
+          <Switch
+            value={voiceEnabled}
+            onValueChange={setVoiceEnabled}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+          />
+        </View>
+        <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+          Dictation language
+        </Text>
+        <View style={[styles.languageChipGrid, !voiceEnabled && styles.disabledControl]}>
+          {voiceLanguageOptions.map((option) => {
+            const isSelected = voiceLanguage === option.value;
+
+            return (
+              <TouchableOpacity
+                key={option.value}
+                disabled={!voiceEnabled}
+                onPress={() => setVoiceLanguage(option.value)}
+                style={[
+                  styles.languageChip,
+                  {
+                    backgroundColor: isSelected
+                      ? theme.primary
+                      : theme.elevated,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.languageChipText,
+                    { color: isSelected ? "#FFFFFF" : theme.text },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+          System follows the Android language. Other options force dictation to
+          that language when supported by the device.
+        </Text>
+        <View style={styles.scheduleToggleRow}>
+          <View style={styles.scheduleLine}>
+            <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+              Auto stop
+            </Text>
+            <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+              End dictation automatically after silence. Turn off to stop
+              manually with the mic button.
+            </Text>
+          </View>
+          <Switch
+            value={voiceAutoStop}
+            onValueChange={setVoiceAutoStop}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+            disabled={!voiceEnabled}
+          />
+        </View>
+      </SettingsSection>
+
+      <SettingsSection
+        iconName="image-outline"
+        isExpanded={expandedSections.photos}
+        onToggle={() => toggleSection("photos")}
+        rightText={photoAttachmentsEnabled ? "On" : "Off"}
+        title="Photos"
+      >
+        <View style={styles.scheduleToggleRow}>
+          <View style={styles.scheduleLine}>
+            <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+              Photo attachments
+            </Text>
+            <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+              Show image attachments inside notes.
+            </Text>
+          </View>
+          <Switch
+            value={photoAttachmentsEnabled}
+            onValueChange={setPhotoAttachmentsEnabled}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+          />
+        </View>
+        <View style={styles.scheduleToggleRow}>
+          <View style={styles.scheduleLine}>
+            <Text style={[styles.scheduleLineLabel, { color: theme.text }]}>
+              Scan text
+            </Text>
+            <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+              Show OCR actions for attached photos.
+            </Text>
+          </View>
+          <Switch
+            value={photoScanEnabled}
+            onValueChange={setPhotoScanEnabled}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={theme.elevated}
+            disabled={!photoAttachmentsEnabled}
+          />
+        </View>
+        <Text style={[styles.optionLabel, { color: theme.mutedText }]}>
+          Scan format
+        </Text>
+        <View
+          style={[
+            styles.languageChipGrid,
+            (!photoAttachmentsEnabled || !photoScanEnabled) &&
+              styles.disabledControl,
+          ]}
+        >
+          {photoScanFormatOptions.map((option) => {
+            const isSelected = photoScanFormat === option.value;
+
+            return (
+              <TouchableOpacity
+                key={option.value}
+                disabled={!photoAttachmentsEnabled || !photoScanEnabled}
+                onPress={() => setPhotoScanFormat(option.value)}
+                style={[
+                  styles.languageChip,
+                  {
+                    backgroundColor: isSelected
+                      ? theme.primary
+                      : theme.elevated,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.languageChipText,
+                    { color: isSelected ? "#FFFFFF" : theme.text },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={[styles.scheduleLineValue, { color: theme.mutedText }]}>
+          Attached images are stored privately in this app. Text scanning runs
+          locally on Android when enabled.
+        </Text>
+      </SettingsSection>
+
+      <SettingsSection
         iconName={
           notificationStatus === "granted"
             ? "notifications"
@@ -564,11 +931,23 @@ const AppSettings: React.FC<AppSettingsProps> = ({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.trashHeader}>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => setIsTrashExpanded((currentValue) => !currentValue)}
+          style={styles.trashHeader}
+        >
           <View style={styles.trashTitleRow}>
+            <Ionicons
+              name={isTrashExpanded ? "caret-down" : "caret-forward"}
+              size={13}
+              color={theme.mutedText}
+            />
             <Ionicons name="trash-outline" size={20} color={theme.mutedText} />
             <Text style={[styles.optionLabel, styles.trashTitle, { color: theme.text }]}>
               Trash
+            </Text>
+            <Text style={[styles.trashCount, { color: theme.subtleText }]}>
+              {trashedTodos.length}
             </Text>
           </View>
           {trashedTodos.length > 0 ? (
@@ -580,85 +959,93 @@ const AppSettings: React.FC<AppSettingsProps> = ({
               <Ionicons name="trash-bin-outline" size={20} color={theme.danger} />
             </TouchableOpacity>
           ) : null}
-        </View>
+        </TouchableOpacity>
 
-        <View
-          style={[styles.segmentedControl, { backgroundColor: theme.control }]}
-        >
-          {trashRetentionOptions.map((option) => {
-            const isSelected = trashRetention === option.value;
+        {isTrashExpanded ? (
+          <>
+            <View
+              style={[styles.segmentedControl, { backgroundColor: theme.control }]}
+            >
+              {trashRetentionOptions.map((option) => {
+                const isSelected = trashRetention === option.value;
 
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.segment,
-                  isSelected && [
-                    styles.segmentSelected,
-                    {
-                      backgroundColor: theme.selected,
-                      borderColor: theme.border,
-                    },
-                  ],
-                ]}
-                onPress={() => setTrashRetention(option.value)}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    { color: theme.mutedText },
-                    isSelected && { color: theme.text },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {trashedTodos.length === 0 ? (
-          <Text style={[styles.emptyTrashText, { color: theme.mutedText }]}>
-            Trash is empty
-          </Text>
-        ) : (
-          <View style={styles.trashList}>
-            {trashedTodos.map((todo) => (
-              <View
-                key={`${todo.id}-${todo.deletedAt}`}
-                style={[styles.trashItem, { borderColor: theme.border }]}
-              >
-                <View style={styles.trashItemText}>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.trashItemTitle, { color: theme.text }]}
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.segment,
+                      isSelected && [
+                        styles.segmentSelected,
+                        {
+                          backgroundColor: theme.selected,
+                          borderColor: theme.border,
+                        },
+                      ],
+                    ]}
+                    onPress={() => setTrashRetention(option.value)}
                   >
-                    {todo.text.trim() || "Untitled Note"}
-                  </Text>
-                  <Text style={[styles.trashItemDate, { color: theme.subtleText }]}>
-                    {new Date(todo.deletedAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => restoreTrashedTodo(todo.id)}
-                  style={styles.trashIconButton}
-                >
-                  <Ionicons name="return-up-back-outline" size={21} color={theme.text} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onLongPress={() => deleteTrashedTodo(todo.id)}
-                  delayLongPress={700}
-                  style={styles.trashIconButton}
-                >
-                  <Ionicons name="close" size={21} color={theme.danger} />
-                </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        { color: theme.mutedText },
+                        isSelected && { color: theme.text },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {trashedTodos.length === 0 ? (
+              <Text style={[styles.emptyTrashText, { color: theme.mutedText }]}>
+                Trash is empty
+              </Text>
+            ) : (
+              <View style={styles.trashList}>
+                {sortedTrashedTodos.map((todo) => (
+                  <View
+                    key={`${todo.id}-${todo.deletedAt}`}
+                    style={[styles.trashItem, { borderColor: theme.border }]}
+                  >
+                    <View style={styles.trashItemText}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.trashItemTitle, { color: theme.text }]}
+                      >
+                        {todo.text.trim() || "Untitled Note"}
+                      </Text>
+                      <Text style={[styles.trashItemDate, { color: theme.subtleText }]}>
+                        {new Date(todo.deletedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => restoreTrashedTodo(todo.id)}
+                      style={styles.trashIconButton}
+                    >
+                      <Ionicons
+                        name="return-up-back-outline"
+                        size={21}
+                        color={theme.text}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onLongPress={() => deleteTrashedTodo(todo.id)}
+                      delayLongPress={700}
+                      style={styles.trashIconButton}
+                    >
+                      <Ionicons name="close" size={21} color={theme.danger} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-        )}
+            )}
+          </>
+        ) : null}
       </SettingsSection>
     </View>
   );
@@ -796,6 +1183,10 @@ const FontSizeControl: React.FC<FontSizeControlProps> = ({
 };
 
 type ScheduleOverviewSource = "daily" | "archive" | "calendar";
+type ScheduleOpenTarget =
+  | { type: "daily"; todoId: number }
+  | { type: "archive"; todoId: number }
+  | { type: "calendar"; entryId: number };
 
 interface ScheduleOverviewItem {
   key: string;
@@ -807,7 +1198,8 @@ interface ScheduleOverviewItem {
 interface ScheduleOverviewProps {
   archivedTodos: Todo[];
   calendarEntries: CalendarEntry[];
-  onOpenTodo: (id: number | string) => void;
+  dateFormat: DateFormatPreference;
+  onOpenTodo: (target: ScheduleOpenTarget) => void;
   todos: Todo[];
   updateArchivedTodo: (id: number, updates: Partial<Todo>) => void;
   updateCalendarEntryTodo: (
@@ -820,6 +1212,7 @@ interface ScheduleOverviewProps {
 const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
   archivedTodos,
   calendarEntries,
+  dateFormat,
   onOpenTodo,
   todos,
   updateArchivedTodo,
@@ -848,6 +1241,18 @@ const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
     updateTodo(item.todo.id, updates);
   };
 
+  const getOpenTarget = (item: ScheduleOverviewItem): ScheduleOpenTarget => {
+    if (item.source === "calendar" && item.entryId !== undefined) {
+      return { type: "calendar", entryId: item.entryId };
+    }
+
+    if (item.source === "archive") {
+      return { type: "archive", todoId: item.todo.id };
+    }
+
+    return { type: "daily", todoId: item.todo.id };
+  };
+
   if (items.length === 0) {
     return (
       <Text style={[styles.emptySchedulesText, { color: theme.subtleText }]}>
@@ -870,7 +1275,7 @@ const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
         <TouchableOpacity
           key={item.key}
           activeOpacity={0.82}
-          onPress={() => onOpenTodo(item.entryId ?? item.todo.id)}
+          onPress={() => onOpenTodo(getOpenTarget(item))}
           style={[
             styles.scheduleCard,
             {
@@ -890,7 +1295,7 @@ const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
               <Text
                 style={[styles.scheduleSource, { color: theme.subtleText }]}
               >
-                {formatScheduleSource(item.source)}
+                  {formatScheduleSource(item)}
               </Text>
             </View>
             <Ionicons name="open-outline" size={16} color={theme.mutedText} />
@@ -908,7 +1313,7 @@ const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({
                     { color: theme.mutedText },
                   ]}
                 >
-                  {formatSchedule(item.todo.schedule)}
+                  {formatSchedule(item.todo.schedule, dateFormat)}
                 </Text>
               </View>
               <Switch
@@ -978,7 +1383,10 @@ const getScheduleOverviewItems = (
     })),
 ];
 
-const formatSchedule = (schedule: TodoSchedule) => {
+const formatSchedule = (
+  schedule: TodoSchedule,
+  dateFormat: DateFormatPreference,
+) => {
   const amount = schedule.amount ?? 1;
   const unit = singularizeUnit(schedule.unit, amount);
   const prefix = schedule.mode === "in" ? "in" : "every";
@@ -991,7 +1399,7 @@ const formatSchedule = (schedule: TodoSchedule) => {
   const timeText = schedule.time ? ` at ${schedule.time}` : "";
 
   if (schedule.mode === "date" && schedule.targetDate) {
-    return `on ${formatDate(schedule.targetDate)}${timeText}`;
+    return `on ${formatDate(schedule.targetDate, dateFormat)}${timeText}`;
   }
 
   return `${prefix} ${amount} ${unit}${weekdayText}${timeText}`;
@@ -1007,19 +1415,18 @@ const formatWeekdays = (weekdays: number[]) =>
     .map((day) => day.label)
     .join(" ");
 
-const formatDate = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+const formatDate = (value: string, dateFormat: DateFormatPreference) => {
+  const parts = formatScheduleDateParts(value, dateFormat);
 
-  return date.toLocaleDateString(undefined, {
-    day: "2-digit",
-    month: "short",
-  });
+  if (dateFormat === "mdy") return `${parts.month}/${parts.day}/${parts.year}`;
+  if (dateFormat === "ymd") return `${parts.year}-${parts.month}-${parts.day}`;
+  return `${parts.day}/${parts.month}/${parts.year}`;
 };
 
-const formatScheduleSource = (source: ScheduleOverviewSource) => {
-  if (source === "archive") return "Archive";
-  if (source === "calendar") return "Calendar";
+const formatScheduleSource = (item: ScheduleOverviewItem) => {
+  if (item.todo.projectId) return "Projects";
+  if (item.source === "archive") return "Archive";
+  if (item.source === "calendar") return "Calendar";
   return "Daily";
 };
 
@@ -1378,12 +1785,30 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 4,
   },
+  calendarProjectionBlock: {
+    marginTop: 12,
+  },
   segmentedControl: {
     backgroundColor: "#F3F4F6",
     borderRadius: 6,
     flexDirection: "row",
     marginBottom: 4,
     padding: 3,
+  },
+  languageChipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  languageChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  languageChipText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   dataActions: {
     gap: 10,
@@ -1402,6 +1827,11 @@ const styles = StyleSheet.create({
   trashTitle: {
     marginBottom: 0,
     marginTop: 0,
+  },
+  trashCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginLeft: 2,
   },
   trashIconButton: {
     alignItems: "center",

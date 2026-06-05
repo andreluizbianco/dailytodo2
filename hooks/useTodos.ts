@@ -149,7 +149,29 @@ export const useTodos = () => {
     return newTodo;
   };
 
-  const addProject = (): Project => {
+  const addArchivedTodo = (initialUpdates: Partial<Todo> = {}): Todo => {
+    const newTodo: Todo = {
+      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+      text: "",
+      note: "",
+      color: "blue",
+      isEditing: true,
+      noteType: "text",
+      createdAt: new Date().toISOString(),
+      timerMode: "pomodoro",
+      timer: {
+        hours: "00",
+        minutes: "25",
+        isActive: false,
+      },
+      ...initialUpdates,
+    };
+
+    setArchivedTodos((prevTodos) => [...prevTodos, newTodo]);
+    return newTodo;
+  };
+
+  const addProject = (initialUpdates: Partial<Project> = {}): Project => {
     const newProject: Project = {
       id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
       title: "",
@@ -157,6 +179,7 @@ export const useTodos = () => {
       color: "blue",
       isEditing: true,
       createdAt: new Date().toISOString(),
+      ...initialUpdates,
     };
 
     setProjects((prevProjects) => [...prevProjects, newProject]);
@@ -172,17 +195,28 @@ export const useTodos = () => {
   };
 
   const removeProject = (id: number): void => {
+    const projectIdsToRemove = new Set([
+      id,
+      ...projects
+        .filter((project) => project.parentProjectId === id)
+        .map((project) => project.id),
+    ]);
+
     setProjects((prevProjects) =>
-      prevProjects.filter((project) => project.id !== id),
+      prevProjects.filter((project) => !projectIdsToRemove.has(project.id)),
     );
     setTodos((prevTodos) =>
       prevTodos.map((todo) =>
-        todo.projectId === id ? { ...todo, projectId: undefined } : todo,
+        todo.projectId && projectIdsToRemove.has(todo.projectId)
+          ? { ...todo, projectId: undefined }
+          : todo,
       ),
     );
     setArchivedTodos((prevTodos) =>
       prevTodos.map((todo) =>
-        todo.projectId === id ? { ...todo, projectId: undefined } : todo,
+        todo.projectId && projectIdsToRemove.has(todo.projectId)
+          ? { ...todo, projectId: undefined }
+          : todo,
       ),
     );
   };
@@ -419,6 +453,7 @@ export const useTodos = () => {
     trashedTodos,
     trashRetention,
     addTodo,
+    addArchivedTodo,
     addProject,
     updateTodo,
     updateProject,

@@ -10,6 +10,28 @@ export type ScheduleMode = "every" | "in" | "date";
 export type ScheduleUnit = "days" | "weeks" | "months" | "years";
 export type ReminderUnit = "minutes" | "hours" | "days";
 export type TrashRetention = "3d" | "7d" | "30d" | "never";
+export type CalendarProjectionRange = "off" | "1w" | "3m" | "6m";
+export type DateFormatPreference = "dmy" | "mdy" | "ymd";
+export type PhotoScanFormat = "lines" | "paragraph" | "compact";
+export type VoiceLanguagePreference =
+  | "system"
+  | "pt-PT"
+  | "pt-BR"
+  | "en-US"
+  | "en-GB"
+  | "de-DE"
+  | "fr-FR"
+  | "es-ES"
+  | "it-IT";
+
+export interface NotePhotoAttachment {
+  id: string;
+  type: "image";
+  uri: string;
+  name?: string;
+  createdAt: string;
+  ocrText?: string;
+}
 
 export interface TodoSchedule {
   mode: ScheduleMode;
@@ -30,6 +52,7 @@ export interface TodoReminder {
 
 export interface Project {
   id: number;
+  parentProjectId?: number;
   title: string;
   note: string;
   color: string;
@@ -74,6 +97,7 @@ export interface Todo {
   schedule?: TodoSchedule;
   reminder?: TodoReminder;
   projectId?: number;
+  attachments?: NotePhotoAttachment[];
 }
 
 export interface TrashedTodo extends Todo {

@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Image,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -35,7 +37,15 @@ import { getNoteBackgroundColor, useTheme } from "../utils/theme";
 
 interface TodoItemNoteProps {
   todo: Todo;
+  headerRight?: ReactNode;
+  footerRight?: ReactNode;
+  disableShadow?: boolean;
+  photoAttachmentsEnabled?: boolean;
+  photoScanEnabled?: boolean;
   showTitle?: boolean;
+  titleSize?: number;
+  onRemovePhotoAttachment?: (attachmentId: string) => void;
+  onScanPhotoAttachment?: (attachmentId: string) => void;
   updateNote: (note: string) => void;
   onStartEditing: () => void;
   onEndEditing: () => void;
@@ -45,14 +55,22 @@ interface TodoItemNoteProps {
 
 const TodoItemNote: React.FC<TodoItemNoteProps> = ({
   todo,
+  headerRight,
+  footerRight,
+  disableShadow = false,
+  photoAttachmentsEnabled = true,
+  photoScanEnabled = false,
   showTitle = false,
+  titleSize,
+  onRemovePhotoAttachment,
+  onScanPhotoAttachment,
   updateNote,
   onStartEditing,
   onEndEditing,
   onListDragChange,
   onListDragMove,
 }) => {
-  const { noteBodyFontSize, theme } = useTheme();
+  const { noteBodyFontSize, noteListSpacing, theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [localNote, setLocalNote] = useState(todo.note);
   const inputRef = useRef<TextInput>(null);
@@ -78,6 +96,10 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     todo.noteType === "checkbox" || todo.noteType === "bullet";
   const isCompletionChecklist =
     todo.noteType === "checkbox" && todo.checkboxBehavior === "completion";
+  const listRowGap = Math.round((noteListSpacing - 1) * 5);
+  const visiblePhotoAttachments = photoAttachmentsEnabled
+    ? (todo.attachments ?? []).filter((attachment) => attachment.type === "image")
+    : [];
 
   useEffect(() => {
     setLocalNote(todo.note);
@@ -102,7 +124,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
     Object.values(checklistItemAnimations.current).forEach((animation) => {
       animation.setValue(0);
     });
-  }, [todo.noteType, localNote, noteBodyFontSize]);
+  }, [todo.noteType, localNote, noteBodyFontSize, noteListSpacing]);
 
   useEffect(() => {
     if (isEditing) {
@@ -262,14 +284,16 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
 
     if (!item || item.text.length > 0 || items.length <= 1) return;
 
+    const previousIndex = Math.max(0, index - 1);
+    checklistInputRefs.current[previousIndex]?.focus();
     saveChecklistItems(
       todo.noteType === "checkbox"
         ? removeChecklistItem(toChecklistItems(items), index)
         : removeBulletItem(toBulletItems(items), index),
     );
     setTimeout(() => {
-      checklistInputRefs.current[Math.max(0, index - 1)]?.focus();
-    }, 30);
+      checklistInputRefs.current[previousIndex]?.focus();
+    }, 0);
   };
 
   const handleChecklistToggle = (index: number) => {
@@ -483,6 +507,7 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
               onResponderTerminate={handleChecklistRowTouchEnd}
               style={[
                 styles.checklistRow,
+                { marginBottom: listRowGap },
                 { transform: rowTransform },
                 isLifted && [
                   styles.checklistRowLifted,
@@ -685,16 +710,66 @@ const TodoItemNote: React.FC<TodoItemNoteProps> = ({
       style={[
         styles.container,
         { backgroundColor: getNoteBackgroundColor(todo.color, theme) },
+        footerRight && !localNote.trim()
+          ? { minHeight: Math.round(noteBodyFontSize * 3.2) }
+          : null,
+        disableShadow ? styles.noShadow : null,
       ]}
     >
       {showTitle && (
-        <Text style={[styles.noteTitle, { color: theme.text }]}>
-          {titleText}
-        </Text>
+        <View style={styles.noteTitleRow}>
+          <Text
+            style={[
+              styles.noteTitle,
+              { color: theme.text },
+              titleSize ? { fontSize: titleSize } : null,
+            ]}
+          >
+            {titleText}
+          </Text>
+          {headerRight ? (
+            <View style={styles.noteTitleActions}>{headerRight}</View>
+          ) : null}
+        </View>
       )}
       {isInteractiveList
         ? renderChecklistContent()
         : renderNoteContent()}
+      {visiblePhotoAttachments.length > 0 ? (
+        <View style={styles.photoAttachmentGrid}>
+          {visiblePhotoAttachments.map((attachment) => (
+            <TouchableOpacity
+              key={attachment.id}
+              activeOpacity={0.82}
+              delayLongPress={700}
+              onLongPress={() => onRemovePhotoAttachment?.(attachment.id)}
+              style={[styles.photoAttachment, { borderColor: theme.border }]}
+            >
+              <Image
+                source={{ uri: attachment.uri }}
+                style={styles.photoAttachmentImage}
+              />
+              {photoScanEnabled && onScanPhotoAttachment ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => onScanPhotoAttachment(attachment.id)}
+                  style={[
+                    styles.photoScanButton,
+                    { backgroundColor: theme.elevated, borderColor: theme.border },
+                  ]}
+                >
+                  <Ionicons
+                    name="scan-outline"
+                    size={15}
+                    color={theme.mutedText}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+      {footerRight ? <View style={styles.noteFooter}>{footerRight}</View> : null}
     </View>
   );
 
@@ -714,12 +789,40 @@ const CHECKLIST_ROW_HEIGHT = 34;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    borderRadius: 4,
+    borderRadius: 6,
     padding: 10,
+    ...Platform.select({
+      android: {
+        elevation: 1.4,
+      },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.075,
+        shadowRadius: 2.4,
+      },
+    }),
+  },
+  noShadow: {
+    borderRadius: 4,
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   noteTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: "600",
+  },
+  noteTitleActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  noteTitleRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 8,
     marginBottom: 12,
   },
   noteInput: {
@@ -729,6 +832,39 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     textAlignVertical: "top",
+  },
+  noteFooter: {
+    alignItems: "flex-end",
+    marginTop: 6,
+  },
+  photoAttachmentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  photoAttachment: {
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 74,
+    overflow: "hidden",
+    position: "relative",
+    width: 74,
+  },
+  photoAttachmentImage: {
+    height: "100%",
+    width: "100%",
+  },
+  photoScanButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    bottom: 4,
+    height: 25,
+    justifyContent: "center",
+    position: "absolute",
+    right: 4,
+    width: 25,
   },
   noteText: {
     fontSize: 16,

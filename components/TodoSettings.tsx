@@ -1,13 +1,14 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Project, Todo } from "../types";
+import { DateFormatPreference, Project, Todo } from "../types";
 import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
 import NoteSettingsSectionHeader from "./NoteSettingsSectionHeader";
 import { softHaptic } from "../utils/haptics";
 import { useTheme } from "../utils/theme";
 import { normalizeNoteForType } from "../utils/checklist";
+import { getProjectDisplayLabel } from "../utils/projectLabels";
 
 const colors: string[] = ["red", "yellow", "green", "blue"];
 
@@ -17,6 +18,8 @@ interface TodoSettingsProps {
   updateTodo: (updates: Partial<Todo>) => void;
   removeTodo: () => void;
   archiveTodo: () => void;
+  archiveAction?: "archive" | "unarchive" | "none";
+  dateFormat?: DateFormatPreference;
   printOnCalendar: (todo: Todo) => void;
 }
 
@@ -26,6 +29,8 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   updateTodo,
   removeTodo,
   archiveTodo,
+  archiveAction = "archive",
+  dateFormat,
   printOnCalendar,
 }) => {
   const { theme } = useTheme();
@@ -38,6 +43,27 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
   const [isArchivePressed, setIsArchivePressed] = useState(false);
   const [isDeletePressed, setIsDeletePressed] = useState(false);
   const [isProjectExpanded, setIsProjectExpanded] = useState(false);
+  const [expandedParentProjectId, setExpandedParentProjectId] = useState<
+    number | null
+  >(null);
+  const topLevelProjects = projects.filter((project) => !project.parentProjectId);
+  const selectedProjectLabel = getProjectDisplayLabel(projects, todo.projectId);
+
+  const getChildProjects = (projectId: number) =>
+    projects.filter((project) => project.parentProjectId === projectId);
+
+  useEffect(() => {
+    if (!isProjectExpanded || !todo.projectId) return;
+
+    const selectedProject = projects.find(
+      (project) => project.id === todo.projectId,
+    );
+    if (selectedProject?.parentProjectId) {
+      setExpandedParentProjectId(selectedProject.parentProjectId);
+    } else if (selectedProject && getChildProjects(selectedProject.id).length > 0) {
+      setExpandedParentProjectId(selectedProject.id);
+    }
+  }, [isProjectExpanded, projects, todo.projectId]);
 
   const handleColorChange = (color: string) => {
     updateTodo({ color });
@@ -106,15 +132,23 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
     }
   };
 
-  const handleProjectSelect = (projectId: number) => {
-    const selectedProject = projects.find((project) => project.id === projectId);
-    const isRemovingProject = todo.projectId === projectId;
+  const handleProjectSelect = (project: Project) => {
+    const isRemovingProject = todo.projectId === project.id;
+    const childProjects = getChildProjects(project.id);
+
+    if (!project.parentProjectId && childProjects.length > 0) {
+      setExpandedParentProjectId((currentId) =>
+        isRemovingProject && currentId === project.id ? null : project.id,
+      );
+    } else if (!project.parentProjectId) {
+      setExpandedParentProjectId(null);
+    }
 
     updateTodo({
-      projectId: isRemovingProject ? undefined : projectId,
-      ...(isRemovingProject || !selectedProject
+      projectId: isRemovingProject ? undefined : project.id,
+      ...(isRemovingProject
         ? {}
-        : { color: selectedProject.color }),
+        : { color: project.color }),
     });
   };
 
@@ -147,6 +181,7 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
       <NoteScheduleSettings
         schedule={todo.schedule}
         reminder={todo.reminder}
+        dateFormat={dateFormat}
         onChange={(schedule) => updateTodo({ schedule })}
         onReminderChange={(reminder) => updateTodo({ reminder })}
       />
@@ -157,37 +192,85 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
             title="Project"
             expanded={isProjectExpanded}
             onPress={() => setIsProjectExpanded((prev) => !prev)}
+            detail={!isProjectExpanded ? selectedProjectLabel : undefined}
           />
 
           {isProjectExpanded && (
             <View style={styles.projectChips}>
-              {projects.map((project) => {
+              {topLevelProjects.map((project) => {
                 const isSelected = todo.projectId === project.id;
+                const childProjects = getChildProjects(project.id);
+                const isParentExpanded =
+                  expandedParentProjectId === project.id ||
+                  childProjects.some((child) => child.id === todo.projectId);
 
                 return (
-                  <TouchableOpacity
-                    key={project.id}
-                    onPress={() => handleProjectSelect(project.id)}
-                    activeOpacity={0.75}
-                    style={[
-                      styles.projectChip,
-                      {
-                        backgroundColor: isSelected
-                          ? theme.primary
-                          : theme.elevated,
-                        borderColor: isSelected ? theme.primary : theme.border,
-                      },
-                    ]}
-                  >
-                    <Text
+                  <React.Fragment key={project.id}>
+                    <TouchableOpacity
+                      onPress={() => handleProjectSelect(project)}
+                      activeOpacity={0.75}
                       style={[
-                        styles.projectChipText,
-                        { color: isSelected ? "#FFFFFF" : theme.text },
+                        styles.projectChip,
+                        {
+                          backgroundColor: isSelected
+                            ? theme.primary
+                            : theme.elevated,
+                          borderColor: isSelected ? theme.primary : theme.border,
+                        },
                       ]}
                     >
-                      {project.title || "Untitled"}
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        style={[
+                          styles.projectChipText,
+                          { color: isSelected ? "#FFFFFF" : theme.text },
+                        ]}
+                      >
+                        {project.title || "Untitled"}
+                      </Text>
+                    </TouchableOpacity>
+                    {isParentExpanded &&
+                      childProjects.map((childProject) => {
+                        const isChildSelected = todo.projectId === childProject.id;
+
+                        return (
+                          <TouchableOpacity
+                            key={childProject.id}
+                            onPress={() => handleProjectSelect(childProject)}
+                            activeOpacity={0.75}
+                            style={[
+                              styles.projectChip,
+                              styles.subprojectChip,
+                              {
+                                backgroundColor: isChildSelected
+                                  ? theme.primary
+                                  : theme.mode === "light"
+                                    ? "#EFF6FF"
+                                    : "rgba(96, 165, 250, 0.16)",
+                                borderColor: isChildSelected
+                                  ? theme.primary
+                                  : theme.mode === "light"
+                                    ? theme.border
+                                    : "rgba(147, 197, 253, 0.42)",
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.projectChipText,
+                                styles.subprojectChipText,
+                                {
+                                  color: isChildSelected
+                                    ? "#FFFFFF"
+                                    : theme.text,
+                                },
+                              ]}
+                            >
+                              {childProject.title || "Untitled"}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </React.Fragment>
                 );
               })}
             </View>
@@ -216,24 +299,30 @@ const TodoSettings: React.FC<TodoSettingsProps> = ({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.iconButton,
-            isArchivePressed && styles.iconButtonPressed,
-          ]}
-          onLongPress={() => {
-            setIsArchivePressed(true);
-            handleLongPress("archive");
-            setTimeout(() => setIsArchivePressed(false), 200);
-          }}
-          delayLongPress={800}
-        >
-          <Ionicons
-            name="archive-outline"
-            size={24}
-            color={isArchivePressed ? theme.elevated : theme.mutedText}
-          />
-        </TouchableOpacity>
+        {archiveAction !== "none" && (
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              isArchivePressed && styles.iconButtonPressed,
+            ]}
+            onLongPress={() => {
+              setIsArchivePressed(true);
+              handleLongPress("archive");
+              setTimeout(() => setIsArchivePressed(false), 200);
+            }}
+            delayLongPress={800}
+          >
+            <Ionicons
+              name={
+                archiveAction === "unarchive"
+                  ? "arrow-up-circle-outline"
+                  : "archive-outline"
+              }
+              size={24}
+              color={isArchivePressed ? theme.elevated : theme.mutedText}
+            />
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[
@@ -327,6 +416,13 @@ const styles = StyleSheet.create({
   },
   projectChipText: {
     fontSize: 14,
+  },
+  subprojectChip: {
+    backgroundColor: "#EFF6FF",
+    marginLeft: 6,
+  },
+  subprojectChipText: {
+    fontSize: 13,
   },
 });
 

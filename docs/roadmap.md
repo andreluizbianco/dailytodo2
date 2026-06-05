@@ -92,6 +92,22 @@
 - Private JSON backup.
 - Safe import without duplicating data.
 - Consider an "export all data" option.
+- Future robust storage path:
+  - migrate structured app data toward local SQLite as notes/projects/calendar/reminders/media grow;
+  - keep images/audio as local files, with database metadata pointing to file paths;
+  - export/import as a versioned zip package containing data plus media folders;
+  - consider Google Sign-In + Google Drive `appDataFolder` for private user backup/restore, while keeping the app fully usable offline.
+
+### Voice Notes, TTS, And Dictation
+
+- Explore text-to-speech for reading notes aloud.
+- Explore speech-to-text for recording an audio note and converting it into note text.
+- Prefer a local-first flow:
+  - record audio locally;
+  - transcribe on demand;
+  - keep or discard the original audio based on user choice;
+  - allow cloud transcription later through Google Cloud Speech-to-Text or OpenAI-style transcription if quality/privacy trade-offs are acceptable.
+- Consider Android native TTS/STT for low-friction offline-ish basics, but evaluate quality and language support before relying on it.
 
 ### Haptics
 

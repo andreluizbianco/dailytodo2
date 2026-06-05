@@ -104,6 +104,14 @@ class TimerService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   private fun startTimer(intent: Intent) {
+    if (intent.getBooleanExtra("fromReminder", false)) {
+      val reminderNotificationId = intent.getIntExtra("reminderNotificationId", -1)
+      if (reminderNotificationId >= 0) {
+        getSystemService(NotificationManager::class.java)
+          .cancel(reminderNotificationId)
+      }
+    }
+
     timerMode = intent.getStringExtra("timerMode") ?: "pomodoro"
     todoId = intent.getDoubleExtra("todoId", -1.0)
     durationSeconds =

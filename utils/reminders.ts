@@ -112,7 +112,7 @@ const getReminderNotificationId = (todoId: number) => {
   return `${REMINDER_ID_PREFIX}${todoId}`;
 };
 
-const getTodoPomodoroDurationSeconds = (todo: Todo) => {
+export const getTodoPomodoroDurationSeconds = (todo: Pick<Todo, "timer">) => {
   const hours = Number(todo.timer?.hours ?? "00");
   const minutes = Number(todo.timer?.minutes ?? "25");
   const totalMinutes =

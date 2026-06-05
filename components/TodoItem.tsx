@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Platform,
 } from "react-native";
-import { TapGestureHandler, State } from "react-native-gesture-handler";
 import { Todo } from "../types";
 import { Ionicons } from "@expo/vector-icons";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
@@ -57,7 +56,7 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     const [isEditing, setIsEditing] = React.useState(todo.isEditing);
     const [editedText, setEditedText] = React.useState(todo.text);
     const inputRef = useRef<TextInput>(null);
-    const doubleTapRef = useRef(null);
+    const lastTapRef = useRef(0);
 
     React.useImperativeHandle(ref, () => ({
       stopEditing: () => {
@@ -102,14 +101,15 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
       }
     };
 
-    const onSingleTap = (event: any) => {
-      if (event.nativeEvent.state === State.ACTIVE) {
-        selectTodo();
-      }
-    };
+    const handlePress = () => {
+      const now = Date.now();
+      const isDoubleTap = now - lastTapRef.current < 320;
 
-    const onDoubleTap = (event: any) => {
-      if (event.nativeEvent.state === State.ACTIVE) {
+      lastTapRef.current = now;
+      selectTodo();
+
+      if (isDoubleTap) {
+        lastTapRef.current = 0;
         onDragStart();
       }
     };
@@ -142,76 +142,66 @@ const TodoItem = forwardRef<TodoItemRef, TodoItemProps>(
     };
 
     return (
-      <TapGestureHandler
-        onHandlerStateChange={onSingleTap}
-        waitFor={doubleTapRef}
+      <View
+        style={[
+          styles.container,
+          getColorStyle(),
+          getSelectionStyle(),
+          isDragging && styles.dragging,
+          { marginHorizontal: horizontalMargin },
+        ]}
+        onLayout={(event) => onLayout(event.nativeEvent.layout)}
       >
-        <TapGestureHandler
-          ref={doubleTapRef}
-          onHandlerStateChange={onDoubleTap}
-          numberOfTaps={2}
+        <TouchableOpacity
+          onLongPress={onLongPress}
+          onPress={handlePress}
+          style={styles.todoContent}
+          activeOpacity={0.7}
         >
-          <View
-            style={[
-              styles.container,
-              getColorStyle(),
-              getSelectionStyle(),
-              isDragging && styles.dragging,
-              { marginHorizontal: horizontalMargin },
-            ]}
-            onLayout={(event) => onLayout(event.nativeEvent.layout)}
-          >
-            <TouchableOpacity
-              onLongPress={onLongPress}
-              style={styles.todoContent}
-              activeOpacity={0.7}
+          {isEditing ? (
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.input,
+                { color: theme.text, fontSize: noteTitleFontSize },
+              ]}
+              placeholderTextColor={theme.subtleText}
+              value={editedText}
+              onChangeText={handleChangeText}
+              onBlur={handleBlur}
+              multiline
+            />
+          ) : (
+            <Text
+              style={[
+                styles.text,
+                { color: theme.text, fontSize: noteTitleFontSize },
+                !todo.text && [
+                  styles.emptyText,
+                  { color: theme.subtleText },
+                ],
+              ]}
             >
-              {isEditing ? (
-                <TextInput
-                  ref={inputRef}
-                  style={[
-                    styles.input,
-                    { color: theme.text, fontSize: noteTitleFontSize },
-                  ]}
-                  placeholderTextColor={theme.subtleText}
-                  value={editedText}
-                  onChangeText={handleChangeText}
-                  onBlur={handleBlur}
-                  multiline
-                />
-              ) : (
-                <Text
-                  style={[
-                    styles.text,
-                    { color: theme.text, fontSize: noteTitleFontSize },
-                    !todo.text && [
-                      styles.emptyText,
-                      { color: theme.subtleText },
-                    ],
-                  ]}
-                >
-                  {todo.text || ""}
-                </Text>
-              )}
-            </TouchableOpacity>
+              {todo.text || ""}
+            </Text>
+          )}
+        </TouchableOpacity>
 
-            {isArchiveView && unarchiveTodo && (
-              <TouchableOpacity
-                onLongPress={withLongPressHaptic(() => unarchiveTodo(todo.id))}
-                delayLongPress={650}
-                style={styles.unarchiveButton}
-              >
-                <Ionicons
-                  name="archive-outline"
-                  size={20}
-                  color={theme.mutedText}
-                  style={{ transform: [{ rotate: "180deg" }] }}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        </TapGestureHandler>
-      </TapGestureHandler>
+        {isArchiveView && unarchiveTodo && (
+          <TouchableOpacity
+            onLongPress={withLongPressHaptic(() => unarchiveTodo(todo.id))}
+            delayLongPress={650}
+            style={styles.unarchiveButton}
+          >
+            <Ionicons
+              name="archive-outline"
+              size={20}
+              color={theme.mutedText}
+              style={{ transform: [{ rotate: "180deg" }] }}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
     );
   },
 );

@@ -35,7 +35,10 @@ interface ArchivedTodosProps {
   onNoteBodyDragChange?: (isDragging: boolean) => void;
   onNoteBodyDragMove?: (pageY: number) => number;
   hiddenArchivedTodoIds?: number[];
+  onOpenCalendarEntry?: (entryId: number) => void;
 }
+
+const SEARCH_RESULTS_PAGE_SIZE = 15;
 
 const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   archivedTodos,
@@ -49,6 +52,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   onNoteBodyDragChange,
   onNoteBodyDragMove,
   hiddenArchivedTodoIds = [],
+  onOpenCalendarEntry,
 }) => {
   const { theme } = useTheme();
   const searchScrollRef = useRef<ScrollView>(null);
@@ -66,6 +70,9 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
   const [expandedSearchResults, setExpandedSearchResults] = useState<
     SearchResult[]
   >([]);
+  const [visibleSearchResultCount, setVisibleSearchResultCount] = useState(
+    SEARCH_RESULTS_PAGE_SIZE,
+  );
   const [isSearching, setIsSearching] = useState(false);
   const [isExpandedSearching, setIsExpandedSearching] = useState(false);
   const [isSearchNoteDragging, setIsSearchNoteDragging] = useState(false);
@@ -94,10 +101,12 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       if (!lowerTitleQuery && !lowerBodyQuery) {
         setExpandedSearchResults([]);
         setIsExpandedSearching(false);
+        setVisibleSearchResultCount(SEARCH_RESULTS_PAGE_SIZE);
         return;
       }
 
       setIsExpandedSearching(true);
+      setVisibleSearchResultCount(SEARCH_RESULTS_PAGE_SIZE);
       const matchesTodo = (todo: Todo) => {
         const matchesTitle =
           !lowerTitleQuery || todo.text.toLowerCase().includes(lowerTitleQuery);
@@ -162,10 +171,12 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
       if (!query.trim()) {
         setSearchResults([]);
         setIsSearching(false);
+        setVisibleSearchResultCount(SEARCH_RESULTS_PAGE_SIZE);
         return;
       }
 
       setIsSearching(true);
+      setVisibleSearchResultCount(SEARCH_RESULTS_PAGE_SIZE);
       const results: SearchResult[] = [];
       const lowerQuery = query.toLowerCase();
 
@@ -347,6 +358,8 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
 
     const resultsToRender = isExpanded ? expandedSearchResults : searchResults;
     const searchInProgress = isExpanded ? isExpandedSearching : isSearching;
+    const visibleResults = resultsToRender.slice(0, visibleSearchResultCount);
+    const hasHiddenResults = visibleSearchResultCount < resultsToRender.length;
 
     if (searchInProgress) {
       return (
@@ -522,7 +535,7 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
         }}
         scrollEventThrottle={16}
       >
-        {resultsToRender.map((result, index) => (
+        {visibleResults.map((result, index) => (
           <View
             key={index}
             style={[styles.searchResult, { backgroundColor: theme.elevated }]}
@@ -556,21 +569,19 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                     />
                   </TouchableOpacity>
                 )}
-                <View
-                  style={[
-                    styles.resultType,
-                    {
-                      backgroundColor: theme.control,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                >
-                  {result.type === "archived" && (
-                    <Text style={[styles.typeText, { color: theme.mutedText }]}>
-                      Archived
-                    </Text>
-                  )}
-                  {result.type === "calendar" && (
+                {result.type === "calendar" ? (
+                  <TouchableOpacity
+                    onPress={() =>
+                      onOpenCalendarEntry?.((result.item as CalendarEntry).id)
+                    }
+                    style={[
+                      styles.resultType,
+                      {
+                        backgroundColor: theme.control,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
                     <Text style={[styles.dateText, { color: theme.mutedText }]}>
                       {new Date(
                         (result.item as CalendarEntry).printedAt,
@@ -580,8 +591,22 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
                         year: "2-digit",
                       })}
                     </Text>
-                  )}
-                </View>
+                  </TouchableOpacity>
+                ) : result.type === "archived" ? (
+                  <View
+                    style={[
+                      styles.resultType,
+                      {
+                        backgroundColor: theme.control,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.typeText, { color: theme.mutedText }]}>
+                      Archived
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
             <TodoItemNote
@@ -594,6 +619,39 @@ const ArchivedTodos: React.FC<ArchivedTodosProps> = ({
             />
           </View>
         ))}
+        {hasHiddenResults ? (
+          <View style={styles.searchPagination}>
+            <TouchableOpacity
+              onPress={() =>
+                setVisibleSearchResultCount((current) =>
+                  Math.min(
+                    current + SEARCH_RESULTS_PAGE_SIZE,
+                    resultsToRender.length,
+                  ),
+                )
+              }
+              style={[styles.searchPaginationButton, { borderColor: theme.border }]}
+            >
+              <Text
+                style={[styles.searchPaginationText, { color: theme.text }]}
+              >
+                Show more
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                setVisibleSearchResultCount(resultsToRender.length)
+              }
+              style={[styles.searchPaginationButton, { borderColor: theme.border }]}
+            >
+              <Text
+                style={[styles.searchPaginationText, { color: theme.text }]}
+              >
+                Show all
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     );
   };
@@ -748,6 +806,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
+  },
+  searchPagination: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    paddingBottom: 12,
+    paddingTop: 4,
+  },
+  searchPaginationButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  searchPaginationText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   resultHeader: {
     flexDirection: "row",

@@ -9,12 +9,14 @@ const colors = ["red", "yellow", "green", "blue"];
 
 interface ProjectSettingsProps {
   project: Project;
+  createSubproject?: () => void;
   updateProject: (updates: Partial<Project>) => void;
   removeProject: () => void;
 }
 
 const ProjectSettings: React.FC<ProjectSettingsProps> = ({
   project,
+  createSubproject,
   updateProject,
   removeProject,
 }) => {
@@ -71,6 +73,21 @@ const ProjectSettings: React.FC<ProjectSettingsProps> = ({
       </View>
 
       <View style={styles.actionButtons}>
+        {!project.parentProjectId && createSubproject ? (
+          <TouchableOpacity
+            onPress={() => {
+              softHaptic();
+              createSubproject();
+            }}
+            style={styles.iconButton}
+          >
+            <Ionicons
+              name="git-branch-outline"
+              size={24}
+              color={theme.mutedText}
+            />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           onPress={handleDeletePress}
           onLongPress={handleDeleteLongPress}

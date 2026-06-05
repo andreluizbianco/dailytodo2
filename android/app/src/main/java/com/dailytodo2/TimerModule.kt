@@ -81,6 +81,14 @@ init {
   override fun getName(): String = "TimerModule"
 
   @ReactMethod
+  fun copyTextToClipboard(text: String) {
+    val clipboard =
+      reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("DailyTodo project", text)
+    clipboard.setPrimaryClip(clip)
+  }
+
+  @ReactMethod
 fun startTimer(
   todoId: Double,
   durationSeconds: Int,

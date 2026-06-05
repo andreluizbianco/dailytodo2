@@ -105,9 +105,8 @@ class ReminderReceiver : BroadcastReceiver() {
       putExtra("startedAt", System.currentTimeMillis())
       putExtra("timerMode", timerMode)
       putExtra("todoTitle", title)
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      playIntent.putExtra("fromReminder", true)
+      putExtra("fromReminder", true)
+      putExtra("reminderNotificationId", NOTIFICATION_ID_BASE + reminderId)
     }
     val playPendingIntent = PendingIntent.getService(
       context,

@@ -26,8 +26,12 @@ import {
   Project,
   Todo,
   CalendarEntry,
+  CalendarProjectionRange,
+  DateFormatPreference,
+  PhotoScanFormat,
   TodayTodoItem,
   TodayTodoSource,
+  VoiceLanguagePreference,
 } from "./types";
 import { useTodos } from "./hooks/useTodos";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -37,6 +41,7 @@ import {
   createCalendarLogTodo,
   replaceCalendarEntry,
 } from "./utils/calendarStorage";
+import { detachCalendarEntryFromProject } from "./utils/calendarProjectActions";
 import {
   applyTimerAlertPreferences,
   loadTimerAlertPreferences,
@@ -66,6 +71,13 @@ import {
   loadDismissedTodayOccurrences,
 } from "./utils/todayDismissals";
 import { shouldArchiveCompletedActiveTodo } from "./utils/todayCompletion";
+import { shouldOpenTimerViewForNotificationTarget } from "./utils/notificationTargets";
+import { getTodayTodoRenderKey } from "./utils/todayKeys";
+import { getCompletionDismissalSources } from "./utils/todayCompletionDismissals";
+import {
+  DEFAULT_VOICE_LANGUAGE,
+  isVoiceLanguagePreference,
+} from "./utils/voicePreferences";
 
 const { TimerModule } = NativeModules;
 const DAILY_ORDER_KEY_PREFIX = "dailyOrder:";
@@ -92,7 +104,28 @@ type NotificationTarget = {
   reminderId?: string;
 };
 
+const getLocalDateKey = (date: Date) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+};
+type SettingsOpenTarget =
+  | { type: "daily"; todoId: number }
+  | { type: "archive"; todoId: number }
+  | { type: "calendar"; entryId: number };
+
 const CALENDAR_AUTO_SCROLL_TO_NOW_KEY = "calendarAutoScrollToNow";
+const CALENDAR_PROJECTION_RANGE_KEY = "calendarProjectionRange";
+const DATE_FORMAT_KEY = "dateFormat";
+const VOICE_AUTO_STOP_KEY = "voiceAutoStop";
+const VOICE_ENABLED_KEY = "voiceEnabled";
+const VOICE_LANGUAGE_KEY = "voiceLanguage";
+const PHOTO_ATTACHMENTS_ENABLED_KEY = "photoAttachmentsEnabled";
+const PHOTO_SCAN_ENABLED_KEY = "photoScanEnabled";
+const PHOTO_SCAN_FORMAT_KEY = "photoScanFormat";
+const defaultCalendarProjectionRange: CalendarProjectionRange = "off";
+const defaultDateFormat: DateFormatPreference = "dmy";
 
 const AppContent = () => {
   const { isDarkMode, noteListWidthRatio, theme } = useTheme();
@@ -112,6 +145,19 @@ const AppContent = () => {
     useState(false);
   const [calendarAutoScrollToNow, setCalendarAutoScrollToNowState] =
     useState(true);
+  const [calendarProjectionRange, setCalendarProjectionRangeState] =
+    useState<CalendarProjectionRange>(defaultCalendarProjectionRange);
+  const [dateFormat, setDateFormatState] =
+    useState<DateFormatPreference>(defaultDateFormat);
+  const [voiceAutoStop, setVoiceAutoStopState] = useState(false);
+  const [voiceEnabled, setVoiceEnabledState] = useState(true);
+  const [voiceLanguage, setVoiceLanguageState] =
+    useState<VoiceLanguagePreference>(DEFAULT_VOICE_LANGUAGE);
+  const [photoAttachmentsEnabled, setPhotoAttachmentsEnabledState] =
+    useState(true);
+  const [photoScanEnabled, setPhotoScanEnabledState] = useState(false);
+  const [photoScanFormat, setPhotoScanFormatState] =
+    useState<PhotoScanFormat>("lines");
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [selectedTodoSource, setSelectedTodoSource] =
     useState<SelectedTodoSource>({ type: "todo" });
@@ -124,8 +170,12 @@ const AppContent = () => {
   const [didRestoreSelectedTodo, setDidRestoreSelectedTodo] = useState(false);
   const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0],
+    getLocalDateKey(new Date()),
   );
+  const [focusedCalendarEntryId, setFocusedCalendarEntryId] = useState<
+    number | null
+  >(null);
+  const [isCalendarSearchFocus, setIsCalendarSearchFocus] = useState(false);
   const {
     todos,
     isLoaded: todosLoaded,
@@ -136,6 +186,7 @@ const AppContent = () => {
     trashedTodos,
     trashRetention,
     addTodo,
+    addArchivedTodo,
     addProject,
     updateTodo,
     updateProject,
@@ -182,6 +233,118 @@ const AppContent = () => {
       });
   }, []);
 
+  useEffect(() => {
+    AsyncStorage.getItem(CALENDAR_PROJECTION_RANGE_KEY)
+      .then((storedValue) => {
+        if (
+          storedValue === "off" ||
+          storedValue === "1w" ||
+          storedValue === "3m" ||
+          storedValue === "6m"
+        ) {
+          setCalendarProjectionRangeState(storedValue);
+        } else if (storedValue === "12m") {
+          setCalendarProjectionRangeState("6m");
+          AsyncStorage.setItem(CALENDAR_PROJECTION_RANGE_KEY, "6m").catch(
+            (error) => {
+              console.error("Error migrating calendar projection range:", error);
+            },
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading calendar projection preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DATE_FORMAT_KEY)
+      .then((storedValue) => {
+        if (
+          storedValue === "dmy" ||
+          storedValue === "mdy" ||
+          storedValue === "ymd"
+        ) {
+          setDateFormatState(storedValue);
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading date format preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(VOICE_AUTO_STOP_KEY)
+      .then((storedValue) => {
+        if (storedValue === null) return;
+        setVoiceAutoStopState(storedValue === "true");
+      })
+      .catch((error) => {
+        console.error("Error loading voice auto-stop preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(VOICE_ENABLED_KEY)
+      .then((storedValue) => {
+        if (storedValue === null) return;
+        setVoiceEnabledState(storedValue === "true");
+      })
+      .catch((error) => {
+        console.error("Error loading voice enabled preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(VOICE_LANGUAGE_KEY)
+      .then((storedValue) => {
+        if (isVoiceLanguagePreference(storedValue)) {
+          setVoiceLanguageState(storedValue);
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading voice language preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(PHOTO_ATTACHMENTS_ENABLED_KEY)
+      .then((storedValue) => {
+        if (storedValue === null) return;
+        setPhotoAttachmentsEnabledState(storedValue === "true");
+      })
+      .catch((error) => {
+        console.error("Error loading photo attachments preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(PHOTO_SCAN_ENABLED_KEY)
+      .then((storedValue) => {
+        if (storedValue === null) return;
+        setPhotoScanEnabledState(storedValue === "true");
+      })
+      .catch((error) => {
+        console.error("Error loading photo scan preference:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(PHOTO_SCAN_FORMAT_KEY)
+      .then((storedValue) => {
+        if (
+          storedValue === "lines" ||
+          storedValue === "paragraph" ||
+          storedValue === "compact"
+        ) {
+          setPhotoScanFormatState(storedValue);
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading photo scan format preference:", error);
+      });
+  }, []);
+
   const setCalendarAutoScrollToNow = useCallback((enabled: boolean) => {
     setCalendarAutoScrollToNowState(enabled);
     AsyncStorage.setItem(CALENDAR_AUTO_SCROLL_TO_NOW_KEY, String(enabled)).catch(
@@ -189,6 +352,72 @@ const AppContent = () => {
         console.error("Error saving calendar auto-scroll preference:", error);
       },
     );
+  }, []);
+
+  const setCalendarProjectionRange = useCallback(
+    (range: CalendarProjectionRange) => {
+      setCalendarProjectionRangeState(range);
+      AsyncStorage.setItem(CALENDAR_PROJECTION_RANGE_KEY, range).catch(
+        (error) => {
+          console.error("Error saving calendar projection preference:", error);
+        },
+      );
+    },
+    [],
+  );
+
+  const setDateFormat = useCallback((format: DateFormatPreference) => {
+    setDateFormatState(format);
+    AsyncStorage.setItem(DATE_FORMAT_KEY, format).catch((error) => {
+      console.error("Error saving date format preference:", error);
+    });
+  }, []);
+
+  const setVoiceLanguage = useCallback((language: VoiceLanguagePreference) => {
+    setVoiceLanguageState(language);
+    AsyncStorage.setItem(VOICE_LANGUAGE_KEY, language).catch((error) => {
+      console.error("Error saving voice language preference:", error);
+    });
+  }, []);
+
+  const setVoiceEnabled = useCallback((enabled: boolean) => {
+    setVoiceEnabledState(enabled);
+    AsyncStorage.setItem(VOICE_ENABLED_KEY, String(enabled)).catch((error) => {
+      console.error("Error saving voice enabled preference:", error);
+    });
+  }, []);
+
+  const setVoiceAutoStop = useCallback((enabled: boolean) => {
+    setVoiceAutoStopState(enabled);
+    AsyncStorage.setItem(VOICE_AUTO_STOP_KEY, String(enabled)).catch((error) => {
+      console.error("Error saving voice auto-stop preference:", error);
+    });
+  }, []);
+
+  const setPhotoAttachmentsEnabled = useCallback((enabled: boolean) => {
+    setPhotoAttachmentsEnabledState(enabled);
+    AsyncStorage.setItem(
+      PHOTO_ATTACHMENTS_ENABLED_KEY,
+      String(enabled),
+    ).catch((error) => {
+      console.error("Error saving photo attachments preference:", error);
+    });
+  }, []);
+
+  const setPhotoScanEnabled = useCallback((enabled: boolean) => {
+    setPhotoScanEnabledState(enabled);
+    AsyncStorage.setItem(PHOTO_SCAN_ENABLED_KEY, String(enabled)).catch(
+      (error) => {
+        console.error("Error saving photo scan preference:", error);
+      },
+    );
+  }, []);
+
+  const setPhotoScanFormat = useCallback((format: PhotoScanFormat) => {
+    setPhotoScanFormatState(format);
+    AsyncStorage.setItem(PHOTO_SCAN_FORMAT_KEY, format).catch((error) => {
+      console.error("Error saving photo scan format preference:", error);
+    });
   }, []);
 
   const handleSelectTodo = useCallback(
@@ -289,8 +518,23 @@ const AppContent = () => {
   }, []);
 
   useEffect(() => {
+    const previousActiveView = activeViewRef.current;
+
+    if (
+      previousActiveView === "calendar" &&
+      activeView !== "calendar" &&
+      isCalendarSearchFocus
+    ) {
+      setSelectedDate(getLocalDateKey(new Date()));
+      setFocusedCalendarEntryId(null);
+      setIsCalendarSearchFocus(false);
+      setCalendarViewMode("day");
+      setIsCalendarDayTimelineMode(false);
+      setIsCalendarWeekTimelineMode(false);
+    }
+
     activeViewRef.current = activeView;
-  }, [activeView]);
+  }, [activeView, isCalendarSearchFocus]);
 
   useEffect(() => {
     const restoreSideContext = async () => {
@@ -343,6 +587,56 @@ const AppContent = () => {
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!todosLoaded) return;
+
+    const dueArchivedTodos = archivedTodos.filter(
+      (todo) =>
+        todo.schedule?.mode === "in" &&
+        isScheduleDueOnDay(todo.schedule, todayDate),
+    );
+    const hasDueActiveTodos = todos.some(
+      (todo) =>
+        todo.schedule?.mode === "in" &&
+        isScheduleDueOnDay(todo.schedule, todayDate),
+    );
+
+    if (dueArchivedTodos.length === 0 && !hasDueActiveTodos) return;
+
+    if (dueArchivedTodos.length > 0) {
+      const dueArchivedIds = new Set(dueArchivedTodos.map((todo) => todo.id));
+      setArchivedTodos((currentTodos) =>
+        currentTodos.filter((todo) => !dueArchivedIds.has(todo.id)),
+      );
+    }
+
+    setTodos((currentTodos) => {
+      const existingIds = new Set(currentTodos.map((todo) => todo.id));
+      const clearedActiveTodos = currentTodos.map((todo) =>
+        todo.schedule?.mode === "in" &&
+        isScheduleDueOnDay(todo.schedule, todayDate)
+          ? { ...todo, schedule: undefined, isEditing: false }
+          : todo,
+      );
+      const restoredArchivedTodos = dueArchivedTodos
+        .filter((todo) => !existingIds.has(todo.id))
+        .map((todo) => ({
+          ...todo,
+          schedule: undefined,
+          isEditing: false,
+        }));
+
+      return [...clearedActiveTodos, ...restoredArchivedTodos];
+    });
+  }, [
+    archivedTodos,
+    setArchivedTodos,
+    setTodos,
+    todayDate,
+    todos,
+    todosLoaded,
+  ]);
 
   const todayItems = useMemo(
     () =>
@@ -556,9 +850,44 @@ const AppContent = () => {
         await recordTimerCompletion(todo, event);
       },
     );
+    const stateSubscription = emitter.addListener(
+      "TIMER_STATE_CHANGED",
+      (event) => {
+        const todoId = Number(event.todoId);
+        const todo = findTimerSubject(todoId);
+
+        if (!todo) return;
+
+        const durationSeconds = Number(event.durationSeconds) || 0;
+        const durationMinutes = Math.max(
+          1,
+          Math.round(durationSeconds / 60),
+        );
+        const hours = String(Math.floor(durationMinutes / 60)).padStart(2, "0");
+        const minutes = String(durationMinutes % 60).padStart(2, "0");
+        const timerMode =
+          event.timerMode === "stopwatch" ? "stopwatch" : "pomodoro";
+
+        updateTimerSubject(todo.id, {
+          timerMode,
+          timer: {
+            hours:
+              timerMode === "pomodoro"
+                ? hours
+                : todo.timer?.hours ?? "00",
+            minutes:
+              timerMode === "pomodoro"
+                ? minutes
+                : todo.timer?.minutes ?? "25",
+            isActive: Boolean(event.isRunning),
+          },
+        });
+      },
+    );
 
     return () => {
       subscription.remove();
+      stateSubscription.remove();
     };
   }, [findTimerSubject, updateTimerSubject]);
 
@@ -764,10 +1093,16 @@ const AppContent = () => {
     }
 
     if (source?.type === "active") {
-      if (shouldArchiveCompletedActiveTodo(todo)) {
+      if (todo.projectId) {
+        archiveTodo(source.todoId);
+      } else if (shouldArchiveCompletedActiveTodo(todo)) {
         archiveTodo(source.todoId);
       } else {
         removeTodo(source.todoId);
+      }
+
+      for (const dismissalSource of getCompletionDismissalSources(todo, source)) {
+        await dismissTodaySource(dismissalSource);
       }
     }
 
@@ -912,7 +1247,7 @@ const AppContent = () => {
           entryId: calendarEntry.id,
         });
         setSelectedDate(
-          new Date(calendarEntry.printedAt).toISOString().split("T")[0],
+          getLocalDateKey(new Date(calendarEntry.printedAt)),
         );
         return true;
       }
@@ -942,6 +1277,70 @@ const AppContent = () => {
     ],
   );
 
+  const selectTodoBySettingsTarget = useCallback(
+    (
+      target: SettingsOpenTarget,
+      options: { transientCalendarFocus?: boolean } = {},
+    ) => {
+      if (target.type === "daily") {
+        const todo = todos.find((item) => item.id === target.todoId);
+        if (!todo) return false;
+        const project = todo.projectId
+          ? projects.find((projectItem) => projectItem.id === todo.projectId)
+          : null;
+
+        setSideContext(project ? "projects" : "notes");
+        setActiveView(project ? "projects" : "notes");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(project ?? null);
+        handleSelectTodo(todo, { type: "todo" });
+        return true;
+      }
+
+      if (target.type === "archive") {
+        const todo = archivedTodos.find((item) => item.id === target.todoId);
+        if (!todo) return false;
+        const project = todo.projectId
+          ? projects.find((projectItem) => projectItem.id === todo.projectId)
+          : null;
+
+        setSideContext(project ? "projects" : sideContext);
+        setActiveView(project ? "projects" : "archive");
+        setShowSettings(false);
+        setIsNoteFullscreen(false);
+        handleSelectProject(project ?? null);
+        handleSelectTodo(todo, { type: "archive" });
+        return true;
+      }
+
+      const entry = calendarEntries.find((item) => item.id === target.entryId);
+      if (!entry) return false;
+
+      setActiveView("calendar");
+      setShowSettings(false);
+      setIsNoteFullscreen(false);
+      handleSelectProject(null);
+      handleSelectTodo(entry.todo, { type: "calendar", entryId: entry.id });
+      setSelectedDate(getLocalDateKey(new Date(entry.printedAt)));
+      setCalendarViewMode("day");
+      setIsCalendarDayTimelineMode(false);
+      setIsCalendarWeekTimelineMode(false);
+      setFocusedCalendarEntryId(entry.id);
+      setIsCalendarSearchFocus(options.transientCalendarFocus === true);
+      return true;
+    },
+    [
+      archivedTodos,
+      calendarEntries,
+      handleSelectProject,
+      handleSelectTodo,
+      projects,
+      sideContext,
+      todos,
+    ],
+  );
+
   const syncRunningTodoSelection = useCallback(async () => {
     if (!TimerModule?.getTimerState) return false;
 
@@ -967,7 +1366,13 @@ const AppContent = () => {
 
       if (!target?.todoId) return false;
 
-      if (selectTodoByTargetId(target.todoId)) {
+      if (
+        selectTodoByTargetId(target.todoId, {
+          preferTimerView: shouldOpenTimerViewForNotificationTarget(
+            target.targetType,
+          ),
+        })
+      ) {
         TimerModule.clearNotificationTarget?.();
         return true;
       }
@@ -1087,11 +1492,11 @@ const AppContent = () => {
 
     if (activeView === "projects") {
       if (selectedProject) {
-        const newTodo = addTodo({
+        const newTodo = addArchivedTodo({
           projectId: selectedProject.id,
           color: selectedProject.color,
         });
-        handleSelectTodo(newTodo, { type: "todo" });
+        handleSelectTodo(newTodo, { type: "archive" });
         return newTodo;
       }
 
@@ -1200,7 +1605,9 @@ const AppContent = () => {
       selectedTodaySource?.type === "active" &&
       selectedTodo?.id === todo.id
     ) {
-      if (shouldArchiveCompletedActiveTodo(todo)) {
+      if (todo.projectId) {
+        archiveTodo(selectedTodaySource.todoId);
+      } else if (shouldArchiveCompletedActiveTodo(todo)) {
         archiveTodo(selectedTodaySource.todoId);
       } else {
         removeTodo(selectedTodaySource.todoId);
@@ -1227,6 +1634,26 @@ const AppContent = () => {
     }
 
     if (selectedTodo?.id === id && selectedTodoSource.type === "calendar") {
+      if (activeView === "projects") {
+        const updatedEntries = detachCalendarEntryFromProject(
+          calendarEntriesRef.current,
+          selectedTodoSource.entryId,
+        );
+
+        setCalendarEntries(updatedEntries);
+        AsyncStorage.setItem(
+          "calendarEntries",
+          JSON.stringify(updatedEntries),
+        ).catch((error) => {
+          console.error("Error detaching calendar entry from project:", error);
+        });
+
+        setSelectedTodo(null);
+        setSelectedTodoSource({ type: "todo" });
+        setSelectedTodaySource(null);
+        return null;
+      }
+
       const updatedEntries = calendarEntriesRef.current.filter(
         (entry) => entry.id !== selectedTodoSource.entryId,
       );
@@ -1283,10 +1710,15 @@ const AppContent = () => {
         <View style={styles.calendarContainer}>
           <Calendar
             autoScrollToNow={calendarAutoScrollToNow}
+            archivedTodos={archivedTodos}
+            dateFormat={dateFormat}
+            projectionRange={calendarProjectionRange}
             dayTimelineMode={isCalendarDayTimelineMode}
+            focusedEntryId={focusedCalendarEntryId}
             weekTimelineMode={isCalendarWeekTimelineMode}
             viewMode={calendarViewMode}
             onDateSelect={setSelectedDate}
+            selectedDate={selectedDate}
             onAddEntry={handleCalendarAddEntry}
             entries={calendarEntries}
             setEntries={setCalendarEntries}
@@ -1294,6 +1726,9 @@ const AppContent = () => {
             setTodos={setTodos}
             updateTodo={updateTodo}
             projects={projects}
+            onOpenProjection={(todoId) => {
+              selectTodoByTargetId(todoId);
+            }}
           />
         </View>
       );
@@ -1346,11 +1781,9 @@ const AppContent = () => {
               updateArchivedTodo={updateArchivedTodo}
               updateCalendarEntryTodo={updateCalendarEntryTodo}
               setSelectedProject={(project) => {
-                setShowSettings(false);
                 handleSelectProject(project);
               }}
               setSelectedTodo={(todo, source) => {
-                setShowSettings(false);
                 handleSelectTodo(todo, source);
               }}
             />
@@ -1384,12 +1817,7 @@ const AppContent = () => {
               getTodoKey={(todo) => {
                 if (leftColumnMode !== "notes") return String(todo.id);
 
-                return (
-                  orderedTodayItems.find(
-                    (item) => item.todo === todo || item.todo.id === todo.id,
-                  )
-                    ?.occurrenceKey ?? String(todo.id)
-                );
+                return getTodayTodoRenderKey(todo, orderedTodayItems);
               }}
               onReorderTodos={
                 leftColumnMode === "notes" ? handleTodayReorder : undefined
@@ -1419,11 +1847,25 @@ const AppContent = () => {
             updateTodo={
               activeView === "timer" ? handleTimerItemUpdate : updateTodo
             }
+            createSubproject={(project) => {
+              if (project.parentProjectId) return;
+
+              const newProject = addProject({
+                parentProjectId: project.id,
+                color: project.color,
+              });
+              handleSelectProject(newProject);
+              handleSelectTodo(null);
+            }}
             updateCalendarEntryTodo={updateCalendarEntryTodo}
             updateProject={updateProject}
             removeProject={(id) => {
+              const childProjectIds = projects
+                .filter((project) => project.parentProjectId === id)
+                .map((project) => project.id);
               removeProject(id);
               clearCalendarProject(id);
+              childProjectIds.forEach(clearCalendarProject);
               handleSelectProject(null);
               handleSelectTodo(null);
             }}
@@ -1433,6 +1875,7 @@ const AppContent = () => {
             setArchivedTodos={setArchivedTodos}
             unarchiveTodo={unarchiveTodo}
             updateArchivedTodo={updateArchivedTodo}
+            selectTodo={handleSelectTodo}
             showSettings={showSettings}
             trashedTodos={trashedTodos}
             trashRetention={trashRetention}
@@ -1440,13 +1883,35 @@ const AppContent = () => {
             deleteTrashedTodo={deleteTrashedTodo}
             emptyTrash={emptyTrash}
             calendarAutoScrollToNow={calendarAutoScrollToNow}
+            calendarProjectionRange={calendarProjectionRange}
+            dateFormat={dateFormat}
+            voiceAutoStop={voiceAutoStop}
+            voiceEnabled={voiceEnabled}
+            voiceLanguage={voiceLanguage}
+            photoAttachmentsEnabled={photoAttachmentsEnabled}
+            photoScanEnabled={photoScanEnabled}
+            photoScanFormat={photoScanFormat}
             setCalendarAutoScrollToNow={setCalendarAutoScrollToNow}
+            setCalendarProjectionRange={setCalendarProjectionRange}
+            setDateFormat={setDateFormat}
+            setVoiceAutoStop={setVoiceAutoStop}
+            setVoiceEnabled={setVoiceEnabled}
+            setVoiceLanguage={setVoiceLanguage}
+            setPhotoAttachmentsEnabled={setPhotoAttachmentsEnabled}
+            setPhotoScanEnabled={setPhotoScanEnabled}
+            setPhotoScanFormat={setPhotoScanFormat}
             setTrashRetention={setTrashRetention}
             printOnCalendar={handlePrintOnCalendar}
             exportData={exportData}
             importData={importData}
-            onOpenTodoFromSettings={(id) => {
-              selectTodoByTargetId(id);
+            onOpenTodoFromSettings={(target) => {
+              selectTodoBySettingsTarget(target);
+            }}
+            onOpenCalendarEntry={(entryId) => {
+              selectTodoBySettingsTarget(
+                { type: "calendar", entryId },
+                { transientCalendarFocus: true },
+              );
             }}
             todos={todos}
             calendarEntries={calendarEntries}

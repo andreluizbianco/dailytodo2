@@ -4,10 +4,37 @@ import { DateData, CalendarProvider } from "react-native-calendars";
 import ExpandableCalendar from "react-native-calendars/src/expandableCalendar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CalendarEntries from "./CalendarEntries";
-import { CalendarEntry, Project, Todo } from "../types";
+import {
+  CalendarEntry,
+  CalendarProjectionRange,
+  DateFormatPreference,
+  Project,
+  Todo,
+} from "../types";
+import { buildCalendarProjections } from "../utils/calendarProjections";
 import { useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
+
+const parseDateKey = (dateKey: string) => {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (
+    Number.isFinite(year) &&
+    Number.isFinite(month) &&
+    Number.isFinite(day)
+  ) {
+    return new Date(year, month - 1, day);
+  }
+
+  return new Date();
+};
+
+const getLocalDateKey = (date: Date) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+};
 
 type FontWeight =
   | "100"
@@ -63,11 +90,16 @@ interface CalendarTheme {
 }
 
 interface CalendarProps {
+  archivedTodos: Todo[];
   autoScrollToNow: boolean;
+  dateFormat: DateFormatPreference;
   dayTimelineMode: boolean;
+  focusedEntryId: number | null;
+  projectionRange: CalendarProjectionRange;
   weekTimelineMode: boolean;
   viewMode: "day" | "week";
   onDateSelect: (date: string) => void;
+  selectedDate: string;
   onAddEntry: () => Promise<Todo | CalendarEntry | undefined>;
   entries: CalendarEntry[];
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
@@ -75,14 +107,20 @@ interface CalendarProps {
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>; // Add this
   updateTodo: (id: number, updates: Partial<Todo>) => void; // Add this
   projects: Project[];
+  onOpenProjection: (todoId: number) => void;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
+  archivedTodos,
   autoScrollToNow,
+  dateFormat,
   dayTimelineMode,
+  focusedEntryId,
+  projectionRange,
   weekTimelineMode,
   viewMode,
   onDateSelect,
+  selectedDate,
   onAddEntry,
   entries,
   setEntries,
@@ -90,9 +128,13 @@ const Calendar: React.FC<CalendarProps> = ({
   setTodos,
   updateTodo,
   projects,
+  onOpenProjection,
 }) => {
   const { theme: appTheme } = useTheme();
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const selectedDateObject = useMemo(
+    () => parseDateKey(selectedDate),
+    [selectedDate],
+  );
 
   useEffect(() => {
     loadEntries();
@@ -123,13 +165,24 @@ const Calendar: React.FC<CalendarProps> = ({
   const events = useMemo(() => {
     const markedDates: { [key: string]: any } = {};
     entries.forEach((entry: CalendarEntry) => {
-      const date = new Date(entry.printedAt).toISOString().split("T")[0];
+      const date = getLocalDateKey(new Date(entry.printedAt));
       if (!markedDates[date]) {
         markedDates[date] = { marked: true };
       }
     });
     return markedDates;
   }, [entries]);
+
+  const projections = useMemo(
+    () =>
+      buildCalendarProjections({
+        archivedTodos,
+        calendarEntries: entries,
+        range: projectionRange,
+        todos,
+      }),
+    [archivedTodos, entries, projectionRange, todos],
+  );
 
   const theme: CalendarTheme = useMemo(
     () => ({
@@ -169,9 +222,11 @@ const Calendar: React.FC<CalendarProps> = ({
   );
 
   const getWeekDates = (date: Date): Date[] => {
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(date.setDate(diff));
+    const baseDate = new Date(date);
+    const day = baseDate.getDay();
+    const diff = baseDate.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(baseDate);
+    monday.setDate(diff);
 
     const week: Date[] = [];
     for (let i = 0; i < 7; i++) {
@@ -183,13 +238,11 @@ const Calendar: React.FC<CalendarProps> = ({
   };
 
   const formatDate = useCallback((date: Date): string => {
-    return date.toISOString().split("T")[0];
+    return getLocalDateKey(date);
   }, []);
 
   const handleDateSelect = useCallback(
     (date: DateData) => {
-      const newDate = new Date(date.dateString);
-      setSelectedDate(newDate);
       onDateSelect(date.dateString);
     },
     [onDateSelect],
@@ -197,7 +250,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
   const getMarkedDates = useCallback(() => {
     const marked = { ...events };
-    const formattedSelectedDate = formatDate(selectedDate);
+    const formattedSelectedDate = formatDate(selectedDateObject);
 
     marked[formattedSelectedDate] = {
       ...marked[formattedSelectedDate],
@@ -209,19 +262,22 @@ const Calendar: React.FC<CalendarProps> = ({
     return marked;
   }, [
     events,
-    selectedDate,
+    selectedDateObject,
     theme.selectedDayBackgroundColor,
     theme.selectedDayTextColor,
     formatDate,
   ]);
 
-  const handleDateChanged = useCallback((date: string) => {
-    // Don't update selection on month change
-  }, []);
+  const handleDateChanged = useCallback(
+    (date: string) => {
+      onDateSelect(date);
+    },
+    [onDateSelect],
+  );
 
   const weekDates = useMemo(
-    () => getWeekDates(new Date(selectedDate)),
-    [selectedDate],
+    () => getWeekDates(new Date(selectedDateObject)),
+    [selectedDateObject],
   );
 
   return (
@@ -229,7 +285,7 @@ const Calendar: React.FC<CalendarProps> = ({
       style={[styles.calendarWrapper, { backgroundColor: appTheme.background }]}
     >
       <CalendarProvider
-        date={formatDate(selectedDate)}
+        date={formatDate(selectedDateObject)}
         onDateChanged={handleDateChanged}
         showTodayButton={false}
         disabledOpacity={0.6}
@@ -245,8 +301,10 @@ const Calendar: React.FC<CalendarProps> = ({
           closeOnDayPress={false}
         />
         <CalendarEntries
-          selectedDate={formatDate(selectedDate)}
+          selectedDate={formatDate(selectedDateObject)}
           autoScrollToNow={autoScrollToNow}
+          dateFormat={dateFormat}
+          focusedEntryId={focusedEntryId}
           entries={entries}
           setEntries={setEntries}
           dayTimelineMode={dayTimelineMode}
@@ -258,6 +316,8 @@ const Calendar: React.FC<CalendarProps> = ({
           setTodos={setTodos}
           updateTodo={updateTodo}
           projects={projects}
+          projections={projections}
+          onOpenProjection={onOpenProjection}
         />
       </CalendarProvider>
     </View>

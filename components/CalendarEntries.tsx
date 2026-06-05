@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -15,10 +15,13 @@ import TodoItemNote from "./TodoItemNote";
 import NoteTypeSelector from "./NoteTypeSelector";
 import NoteScheduleSettings from "./NoteScheduleSettings";
 import NoteSettingsSectionHeader from "./NoteSettingsSectionHeader";
-import { CalendarEntry, Project, Todo } from "../types";
+import { getProjectDisplayLabel } from "../utils/projectLabels";
+import { CalendarEntry, DateFormatPreference, Project, Todo } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createTodoCopyFromCalendarEntry } from "../utils/calendarEntryActions";
+import { CalendarProjection } from "../utils/calendarProjections";
 import { normalizeNoteForType } from "../utils/checklist";
+import { getCalendarAutoScrollKey } from "../utils/calendarAutoScroll";
 import { softHaptic, withLongPressHaptic } from "../utils/haptics";
 import { getScrollYToRevealRange } from "../utils/scrollVisibility";
 import { getNoteBackgroundColor, useTheme } from "../utils/theme";
@@ -33,6 +36,8 @@ const WEEK_TIMELINE_GUTTER_WIDTH = 14;
 
 interface CalendarEntriesProps {
   autoScrollToNow: boolean;
+  dateFormat: DateFormatPreference;
+  focusedEntryId: number | null;
   selectedDate: string | null;
   entries: CalendarEntry[];
   setEntries: React.Dispatch<React.SetStateAction<CalendarEntry[]>>;
@@ -45,10 +50,58 @@ interface CalendarEntriesProps {
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
   updateTodo: (id: number, updates: Partial<Todo>) => void;
   projects: Project[];
+  projections: CalendarProjection[];
+  onOpenProjection: (todoId: number) => void;
 }
+
+type DisplayCalendarEntry = CalendarEntry & {
+  isProjection?: boolean;
+  projectionKey?: string;
+  projectionSourceTodoId?: number;
+  segmentDurationMinutes?: number;
+  segmentStartMinutes?: number;
+  segmentKey?: string;
+};
+
+const getProjectionNumericId = (projectionId: string) => {
+  let hash = 0;
+  for (let index = 0; index < projectionId.length; index += 1) {
+    hash = (hash * 31 + projectionId.charCodeAt(index)) | 0;
+  }
+
+  return -Math.abs(hash || 1);
+};
+
+const createProjectionEntry = (
+  projection: CalendarProjection,
+): DisplayCalendarEntry => ({
+  id: getProjectionNumericId(projection.id),
+  todo: projection.todo,
+  printedAt: projection.printedAt,
+  showInDaily: false,
+  isProjection: true,
+  projectionKey: projection.id,
+  projectionSourceTodoId: projection.todo.id,
+});
+
+const isProjectionEntry = (
+  entry: CalendarEntry,
+): entry is DisplayCalendarEntry => {
+  return (entry as DisplayCalendarEntry).isProjection === true;
+};
+
+const getDisplayEntryKey = (entry: CalendarEntry) => {
+  const displayEntry = entry as DisplayCalendarEntry;
+  if (displayEntry.segmentKey) return displayEntry.segmentKey;
+
+  const projectionKey = displayEntry.projectionKey;
+  return projectionKey ? `projection-${projectionKey}` : `entry-${entry.id}`;
+};
 
 const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   autoScrollToNow,
+  dateFormat,
+  focusedEntryId,
   selectedDate,
   entries,
   setEntries,
@@ -61,12 +114,15 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   setTodos,
   updateTodo,
   projects,
+  projections,
+  onOpenProjection,
 }) => {
   const { theme } = useTheme();
   const dayScrollRef = useRef<ScrollView>(null);
   const timelineScrollRef = useRef<ScrollView>(null);
   const settingsRefByEntryId = useRef<Record<number, View | null>>({});
   const entryRefByEntryId = useRef<Record<number, View | null>>({});
+  const lastAutoScrollKeyRef = useRef<string | null>(null);
   const dayScrollYRef = useRef(0);
   const dayScrollPageYRef = useRef(0);
   const dayViewportHeightRef = useRef(0);
@@ -83,6 +139,12 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const [showProjectPickerForId, setShowProjectPickerForId] = useState<
     number | null
   >(null);
+  const [expandedProjectParentByEntryId, setExpandedProjectParentByEntryId] =
+    useState<Record<number, number | null>>({});
+  const projectionEntries = useMemo(
+    () => projections.map(createProjectionEntry),
+    [projections],
+  );
   const [editingTimerId, setEditingTimerId] = useState<number | null>(null);
   const [draggingWeekEntryId, setDraggingWeekEntryId] = useState<number | null>(
     null,
@@ -125,7 +187,12 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   });
 
   const isMovableCalendarEntry = (entry: CalendarEntry) =>
-    !entry.isTrackingEntry && !entry.timerCompleted;
+    !isProjectionEntry(entry) && !entry.isTrackingEntry && !entry.timerCompleted;
+
+  const handleProjectionPress = (entry: CalendarEntry) => {
+    if (!isProjectionEntry(entry) || !entry.projectionSourceTodoId) return;
+    onOpenProjection(entry.projectionSourceTodoId);
+  };
 
   useEffect(() => {
     const intervalId = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -284,6 +351,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     });
   };
 
+  const scheduleScrollTimelineToCurrentTime = (startHour: number) => {
+    setTimeout(() => scrollTimelineToCurrentTime(startHour), 320);
+  };
+
   const scrollDayListToCurrentEntry = (dateEntries: CalendarEntry[]) => {
     if (!autoScrollToNow || dayTimelineMode || !isSelectedDateToday()) return;
 
@@ -317,6 +388,54 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         () => undefined,
       );
     }, 120);
+  };
+
+  const scrollDayListToEntry = (entryId: number) => {
+    setTimeout(() => {
+      const entryRef = entryRefByEntryId.current[entryId];
+      const scrollRef = dayScrollRef.current;
+      const scrollNode = scrollRef ? findNodeHandle(scrollRef) : null;
+      if (!entryRef || !scrollRef || !scrollNode) return;
+
+      entryRef.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          const viewportHeight = dayViewportHeightRef.current;
+          const contentHeight = dayContentHeightRef.current;
+          const maxY = Math.max(0, contentHeight - viewportHeight);
+          scrollRef.scrollTo({
+            y: Math.max(0, Math.min(y - 8, maxY)),
+            animated: true,
+          });
+        },
+        () => undefined,
+      );
+    }, 140);
+  };
+
+  const scrollTimelineToEntry = (
+    entry: CalendarEntry,
+    startHour: number,
+  ) => {
+    requestAnimationFrame(() => {
+      const entryTop =
+        (getEntryStartMinutes(entry) - startHour * 60) *
+        TIMELINE_MINUTE_HEIGHT;
+      const viewportHeight = timelineViewportHeightRef.current;
+      const contentHeight = timelineContentHeightRef.current;
+      if (viewportHeight <= 0 || contentHeight <= 0) return;
+
+      timelineScrollRef.current?.scrollTo({
+        y: Math.max(
+          0,
+          Math.min(
+            entryTop - viewportHeight / 2,
+            Math.max(0, contentHeight - viewportHeight),
+          ),
+        ),
+        animated: true,
+      });
+    });
   };
 
   const createDayTimelinePanHandlers = (entry: CalendarEntry) => {
@@ -409,8 +528,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         const dx = event.nativeEvent.pageX - weekDragStartRef.current.pageX;
         const startIndex = weekDates.findIndex(
           (date) =>
-            date.toISOString().split("T")[0] ===
-            new Date(entry.printedAt).toISOString().split("T")[0],
+            getLocalDayKey(date) === getLocalDayKey(new Date(entry.printedAt)),
         );
         const fallbackIndex = Math.max(
           0,
@@ -457,11 +575,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           return;
         }
 
-        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+        const entryDate = getLocalDayKey(new Date(entry.printedAt));
         const startDayIndex = Math.max(
           0,
           weekDates.findIndex(
-            (date) => date.toISOString().split("T")[0] === entryDate,
+            (date) => getLocalDayKey(date) === entryDate,
           ),
         );
 
@@ -573,9 +691,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   const getEntriesForSelectedDate = () => {
     if (!selectedDate) return [];
 
-    return entries
+    return [...entries, ...projectionEntries]
       .filter((entry) => {
-        const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
+        const entryDate = getLocalDayKey(new Date(entry.printedAt));
         return entryDate === selectedDate;
       })
       .sort((a, b) => {
@@ -586,11 +704,20 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const getEntryStartMinutes = (entry: CalendarEntry) => {
+    const segmentStartMinutes = (entry as DisplayCalendarEntry).segmentStartMinutes;
+    if (typeof segmentStartMinutes === "number") return segmentStartMinutes;
+
     const date = new Date(entry.printedAt);
     return date.getHours() * 60 + date.getMinutes();
   };
 
   const getEntryDurationMinutes = (entry: CalendarEntry) => {
+    const segmentDurationMinutes = (entry as DisplayCalendarEntry)
+      .segmentDurationMinutes;
+    if (typeof segmentDurationMinutes === "number") {
+      return segmentDurationMinutes;
+    }
+
     if (entry.timeSpent?.elapsed && entry.timeSpent.elapsed > 0) {
       return entry.timeSpent.elapsed;
     }
@@ -602,6 +729,57 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
       (Number.isFinite(minutes) ? minutes : 0);
 
     return plannedMinutes > 0 ? plannedMinutes : 30;
+  };
+
+  const getWeekTimelineEntriesForDate = (date: Date) => {
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayStart.getDate() + 1);
+
+    return [...entries, ...projectionEntries]
+      .flatMap((entry): DisplayCalendarEntry[] => {
+        const entryStart = new Date(entry.printedAt);
+        const entryEnd = new Date(
+          entryStart.getTime() + getEntryDurationMinutes(entry) * 60_000,
+        );
+
+        if (
+          entryStart.getTime() >= dayEnd.getTime() ||
+          entryEnd.getTime() <= dayStart.getTime()
+        ) {
+          return [];
+        }
+
+        const segmentStart = new Date(
+          Math.max(entryStart.getTime(), dayStart.getTime()),
+        );
+        const segmentEnd = new Date(
+          Math.min(entryEnd.getTime(), dayEnd.getTime()),
+        );
+        const segmentStartMinutes =
+          segmentStart.getHours() * 60 + segmentStart.getMinutes();
+        const segmentDurationMinutes = Math.max(
+          1,
+          Math.round(
+            (segmentEnd.getTime() - segmentStart.getTime()) / 60_000,
+          ),
+        );
+
+        return [
+          {
+            ...entry,
+            segmentDurationMinutes,
+            segmentStartMinutes,
+            segmentKey: `${getDisplayEntryKey(entry)}:${getLocalDayKey(date)}`,
+          },
+        ];
+      })
+      .sort((a, b) => {
+        const timeA = getEntryStartMinutes(a);
+        const timeB = getEntryStartMinutes(b);
+        return timeA - timeB;
+      });
   };
 
   const getTimelineBounds = (dateEntries: CalendarEntry[]) => {
@@ -655,19 +833,48 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   useEffect(() => {
-    if (!autoScrollToNow || !selectedDate || !isSelectedDateToday()) return;
+    if (!autoScrollToNow) {
+      lastAutoScrollKeyRef.current = null;
+      return;
+    }
+
+    if (!selectedDate || !isSelectedDateToday()) return;
+
+    const autoScrollKey = getCalendarAutoScrollKey({
+      dayTimelineMode,
+      selectedDate,
+      viewMode,
+    });
+    if (lastAutoScrollKeyRef.current === autoScrollKey) return;
+    lastAutoScrollKeyRef.current = autoScrollKey;
 
     const dateEntries = getEntriesForSelectedDate();
     if (dateEntries.length === 0) return;
 
     if (dayTimelineMode) {
       const { startHour } = getDayTimelineBounds(dateEntries);
-      setTimeout(() => scrollTimelineToCurrentTime(startHour), 140);
+      scheduleScrollTimelineToCurrentTime(startHour);
       return;
     }
 
     scrollDayListToCurrentEntry(dateEntries);
-  }, [autoScrollToNow, dayTimelineMode, entries, selectedDate]);
+  }, [autoScrollToNow, dayTimelineMode, selectedDate, viewMode]);
+
+  useEffect(() => {
+    if (!focusedEntryId || !selectedDate) return;
+
+    const dateEntries = getEntriesForSelectedDate();
+    const focusedEntry = dateEntries.find((entry) => entry.id === focusedEntryId);
+    if (!focusedEntry) return;
+
+    if (dayTimelineMode) {
+      const { startHour } = getDayTimelineBounds(dateEntries);
+      setTimeout(() => scrollTimelineToEntry(focusedEntry, startHour), 160);
+      return;
+    }
+
+    scrollDayListToEntry(focusedEntryId);
+  }, [dayTimelineMode, entries, focusedEntryId, selectedDate]);
 
   const getTimelineLayoutItems = (dateEntries: CalendarEntry[]) => {
     const sortedEntries = [...dateEntries].sort((a, b) => {
@@ -987,12 +1194,34 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     });
   };
 
+  const topLevelProjects = projects.filter((project) => !project.parentProjectId);
+
+  const getChildProjects = (projectId: number) =>
+    projects.filter((project) => project.parentProjectId === projectId);
+
   const handleProjectSelect = async (
     entry: CalendarEntry,
-    projectId: number,
+    project: Project,
   ) => {
+    const childProjects = getChildProjects(project.id);
+    if (!project.parentProjectId && childProjects.length > 0) {
+      setExpandedProjectParentByEntryId((current) => ({
+        ...current,
+        [entry.id]:
+          entry.todo.projectId === project.id &&
+          current[entry.id] === project.id
+            ? null
+            : project.id,
+      }));
+    } else if (!project.parentProjectId) {
+      setExpandedProjectParentByEntryId((current) => ({
+        ...current,
+        [entry.id]: null,
+      }));
+    }
+
     await handleUpdateEntryTodo(entry, {
-      projectId: entry.todo.projectId === projectId ? undefined : projectId,
+      projectId: entry.todo.projectId === project.id ? undefined : project.id,
     });
   };
 
@@ -1116,6 +1345,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         <NoteScheduleSettings
           schedule={entry.todo.schedule}
           reminder={entry.todo.reminder}
+          dateFormat={dateFormat}
           onChange={(schedule) =>
             handleUpdateEntry(entry.id, {
               printedAt: updateEntryTimeFromSchedule(entry, schedule?.time),
@@ -1136,39 +1366,98 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                   currentId === entry.id ? null : entry.id,
                 )
               }
+              detail={
+                showProjectPickerForId === entry.id
+                  ? undefined
+                  : getProjectDisplayLabel(projects, entry.todo.projectId)
+              }
             />
 
             {showProjectPickerForId === entry.id && (
               <View style={styles.projectChips}>
-                {projects.map((project) => {
+                {topLevelProjects.map((project) => {
                   const isSelected = entry.todo.projectId === project.id;
+                  const childProjects = getChildProjects(project.id);
+                  const selectedProject = projects.find(
+                    (item) => item.id === entry.todo.projectId,
+                  );
+                  const selectedParentId = selectedProject?.parentProjectId;
+                  const isParentExpanded =
+                    expandedProjectParentByEntryId[entry.id] === project.id ||
+                    selectedParentId === project.id;
 
                   return (
-                    <TouchableOpacity
-                      key={project.id}
-                      onPress={() => handleProjectSelect(entry, project.id)}
-                      activeOpacity={0.75}
-                      style={[
-                        styles.projectChip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.primary
-                            : theme.elevated,
-                          borderColor: isSelected
-                            ? theme.primary
-                            : theme.border,
-                        },
-                      ]}
-                    >
-                      <Text
+                    <React.Fragment key={project.id}>
+                      <TouchableOpacity
+                        onPress={() => handleProjectSelect(entry, project)}
+                        activeOpacity={0.75}
                         style={[
-                          styles.projectChipText,
-                          { color: isSelected ? "#FFFFFF" : theme.text },
+                          styles.projectChip,
+                          {
+                            backgroundColor: isSelected
+                              ? theme.primary
+                              : theme.elevated,
+                            borderColor: isSelected
+                              ? theme.primary
+                              : theme.border,
+                          },
                         ]}
                       >
-                        {project.title || "Untitled"}
-                      </Text>
-                    </TouchableOpacity>
+                        <Text
+                          style={[
+                            styles.projectChipText,
+                            { color: isSelected ? "#FFFFFF" : theme.text },
+                          ]}
+                        >
+                          {project.title || "Untitled"}
+                        </Text>
+                      </TouchableOpacity>
+                      {isParentExpanded &&
+                        childProjects.map((childProject) => {
+                          const isChildSelected =
+                            entry.todo.projectId === childProject.id;
+
+                          return (
+                            <TouchableOpacity
+                              key={childProject.id}
+                              onPress={() =>
+                                handleProjectSelect(entry, childProject)
+                              }
+                              activeOpacity={0.75}
+                              style={[
+                                styles.projectChip,
+                                styles.subprojectChip,
+                                {
+                                  backgroundColor: isChildSelected
+                                    ? theme.primary
+                                    : theme.mode === "light"
+                                      ? "#EFF6FF"
+                                      : "rgba(96, 165, 250, 0.16)",
+                                  borderColor: isChildSelected
+                                    ? theme.primary
+                                    : theme.mode === "light"
+                                      ? theme.border
+                                      : "rgba(147, 197, 253, 0.42)",
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.projectChipText,
+                                  styles.subprojectChipText,
+                                  {
+                                    color: isChildSelected
+                                      ? "#FFFFFF"
+                                      : theme.text,
+                                  },
+                                ]}
+                              >
+                                {childProject.title || "Untitled"}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </React.Fragment>
                   );
                 })}
               </View>
@@ -1268,6 +1557,22 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const renderTodoText = (entry: CalendarEntry) => {
+    if (isProjectionEntry(entry)) {
+      return (
+        <Text
+          style={[
+            styles.todoText,
+            styles.projectedTitle,
+            { color: theme.text },
+          ]}
+          numberOfLines={1}
+          onPress={() => handleProjectionPress(entry)}
+        >
+          {entry.todo.text || "Projected repeat"}
+        </Text>
+      );
+    }
+
     if (editingTitleId === entry.id) {
       return (
         <TextInput
@@ -1336,65 +1641,106 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
           }}
           scrollEventThrottle={16}
         >
-          {dateEntries.map((entry) => (
+          {dateEntries.map((entry) => {
+            const isProjection = isProjectionEntry(entry);
+
+            return (
             <View
-              key={entry.id}
+              key={getDisplayEntryKey(entry)}
               ref={(ref) => {
-                entryRefByEntryId.current[entry.id] = ref;
+                if (!isProjection) {
+                  entryRefByEntryId.current[entry.id] = ref;
+                }
               }}
-              style={styles.entryContainer}
+              style={[
+                styles.entryContainer,
+                isProjection && styles.projectedEntryContainer,
+              ]}
             >
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   {renderTodoText(entry)}
-                  {renderTimerInfo(entry)}
+                  {!isProjection ? renderTimerInfo(entry) : null}
                 </View>
                 <View style={styles.headerRight}>
-                  <TimeEditor
-                    timestamp={entry.printedAt}
-                    onSave={async (newTimestamp) => {
-                      const updatedEntry = {
-                        ...entry,
-                        printedAt: newTimestamp,
-                        todo: {
-                          ...entry.todo,
-                          schedule: updateScheduleTimeFromEntry(
-                            entry,
-                            newTimestamp,
-                          ),
-                        },
-                      };
-                      // Remove the old entry and add the updated one
-                      const updatedEntries = entries
-                        .filter((e) => e.id !== entry.id)
-                        .concat(updatedEntry)
-                        // Re-sort after update
-                        .sort((a, b) => {
-                          const timeA = new Date(a.printedAt).getTime();
-                          const timeB = new Date(b.printedAt).getTime();
-                          return timeA - timeB;
-                        });
+                  {isProjection ? (
+                    <Text style={[styles.projectedTime, { color: theme.subtleText }]}>
+                      {formatTimelineMinutes(getEntryStartMinutes(entry))}
+                    </Text>
+                  ) : (
+                    <TimeEditor
+                      timestamp={entry.printedAt}
+                      onSave={async (newTimestamp) => {
+                        const updatedEntry = {
+                          ...entry,
+                          printedAt: newTimestamp,
+                          todo: {
+                            ...entry.todo,
+                            schedule: updateScheduleTimeFromEntry(
+                              entry,
+                              newTimestamp,
+                            ),
+                          },
+                        };
+                        // Remove the old entry and add the updated one
+                        const updatedEntries = entries
+                          .filter((e) => e.id !== entry.id)
+                          .concat(updatedEntry)
+                          // Re-sort after update
+                          .sort((a, b) => {
+                            const timeA = new Date(a.printedAt).getTime();
+                            const timeB = new Date(b.printedAt).getTime();
+                            return timeA - timeB;
+                          });
 
-                      setEntries(updatedEntries);
-                      await AsyncStorage.setItem(
-                        "calendarEntries",
-                        JSON.stringify(updatedEntries),
-                      );
-                    }}
-                  />
+                        setEntries(updatedEntries);
+                        await AsyncStorage.setItem(
+                          "calendarEntries",
+                          JSON.stringify(updatedEntries),
+                        );
+                      }}
+                    />
+                  )}
                 </View>
               </View>
-              <TodoItemNote
-                todo={entry.todo}
-                updateNote={(note) => handleUpdateNote(entry.id, note)}
-                onStartEditing={() => {}}
-                onEndEditing={() => setIsNoteBodyDragging(false)}
-                onListDragChange={handleNoteBodyDragChange}
-                onListDragMove={handleNoteBodyDragMove}
-              />
-              {renderSettings(entry)}
+              {isProjection ? (
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => handleProjectionPress(entry)}
+                  style={[
+                    styles.projectedNotePreview,
+                    {
+                      backgroundColor: getNoteBackgroundColor(
+                        entry.todo.color,
+                        theme,
+                      ),
+                    },
+                  ]}
+                >
+                  <Text
+                    numberOfLines={3}
+                    style={[styles.projectedNoteText, { color: theme.text }]}
+                  >
+                    {entry.todo.note || entry.todo.text || "Projected repeat"}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TodoItemNote
+                    todo={entry.todo}
+                    disableShadow
+                    updateNote={(note) => handleUpdateNote(entry.id, note)}
+                    onStartEditing={() => {}}
+                    onEndEditing={() => setIsNoteBodyDragging(false)}
+                    onListDragChange={handleNoteBodyDragChange}
+                    onListDragMove={handleNoteBodyDragMove}
+                  />
+                  {renderSettings(entry)}
+                </>
+              )}
             </View>
-          ))}
+          );
+          })}
         </ScrollView>
       </View>
     );
@@ -1412,15 +1758,30 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
     return (
       <View style={styles.dayModeToggleSurface}>
         <ScrollView
+          key={`day-timeline-${selectedDate ?? "none"}`}
           ref={timelineScrollRef}
           style={styles.timelineScroll}
           onContentSizeChange={(_, height) => {
             timelineContentHeightRef.current = height;
-            scrollTimelineToCurrentTime(startHour);
+            const focusedEntry = focusedEntryId
+              ? dateEntries.find((entry) => entry.id === focusedEntryId)
+              : null;
+            if (focusedEntry) {
+              scrollTimelineToEntry(focusedEntry, startHour);
+            } else {
+              scheduleScrollTimelineToCurrentTime(startHour);
+            }
           }}
           onLayout={(event) => {
             timelineViewportHeightRef.current = event.nativeEvent.layout.height;
-            scrollTimelineToCurrentTime(startHour);
+            const focusedEntry = focusedEntryId
+              ? dateEntries.find((entry) => entry.id === focusedEntryId)
+              : null;
+            if (focusedEntry) {
+              scrollTimelineToEntry(focusedEntry, startHour);
+            } else {
+              scheduleScrollTimelineToCurrentTime(startHour);
+            }
           }}
         >
           <View style={[styles.timelineCanvas, { height: totalHeight }]}>
@@ -1428,14 +1789,11 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
               const top = (hour - startHour) * TIMELINE_HOUR_HEIGHT;
 
               return (
-                <View
-                  key={hour}
-                  style={[styles.timelineHourRow, { top }]}
-                >
+                <React.Fragment key={hour}>
                   <Text
                     style={[
                       styles.timelineHourLabel,
-                      { color: theme.subtleText },
+                      { color: theme.subtleText, top },
                     ]}
                   >
                     {String(hour).padStart(2, "0")}
@@ -1443,10 +1801,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                   <View
                     style={[
                       styles.timelineHourLine,
-                      { backgroundColor: theme.border },
+                      { backgroundColor: theme.border, top },
                     ]}
                   />
-                </View>
+                </React.Fragment>
               );
             })}
             {isSelectedDateToday() ? (
@@ -1472,6 +1830,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             {layoutItems.map((item) => {
               const { durationMinutes, entry, label, offsetX, startMinutes } =
                 item;
+              const isProjection = isProjectionEntry(entry);
               const top =
                 (startMinutes - startHour * 60) * TIMELINE_MINUTE_HEIGHT;
               const rawHeight = durationMinutes * TIMELINE_MINUTE_HEIGHT;
@@ -1485,11 +1844,13 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
               return (
                 <View
-                  key={entry.id}
+                  key={getDisplayEntryKey(entry)}
                   style={[
                     styles.timelineEvent,
+                    isProjection && styles.projectedTimelineEvent,
                     isCompactEvent && styles.timelineEventCompact,
-                    !isMovableCalendarEntry(entry) &&
+                    !isProjection &&
+                      !isMovableCalendarEntry(entry) &&
                       styles.timelineEventLocked,
                     draggingDayEntryId === entry.id && {
                       transform: [{ translateY: dayDragOffsetY }],
@@ -1510,10 +1871,14 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                     armedTimelineEntryId === entry.id &&
                       styles.timelineEventArmed,
                   ]}
-                  onTouchEnd={() => handleTimelineEntryTouchEnd(entry)}
-                  {...createDayTimelinePanHandlers(entry)}
+                  onTouchEnd={() =>
+                    isProjection
+                      ? handleProjectionPress(entry)
+                      : handleTimelineEntryTouchEnd(entry)
+                  }
+                  {...(isProjection ? {} : createDayTimelinePanHandlers(entry))}
                 >
-                  {editingTitleId === entry.id ? (
+                  {!isProjection && editingTitleId === entry.id ? (
                     <TextInput
                       value={editingText}
                       onChangeText={setEditingText}
@@ -1531,12 +1896,17 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                       numberOfLines={1}
                       style={[
                         styles.timelineEventTitle,
+                        isProjection && styles.projectedTimelineEventTitle,
                         isCompactEvent && styles.timelineEventTitleCompact,
                         { color: theme.text },
                       ]}
-                      onLongPress={withLongPressHaptic(() =>
-                        handleStartTitleEditing(entry),
-                      )}
+                      onLongPress={
+                        isProjection
+                          ? undefined
+                          : withLongPressHaptic(() =>
+                              handleStartTitleEditing(entry),
+                            )
+                      }
                     >
                       {label}
                     </Text>
@@ -1563,12 +1933,10 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
         >
           <View style={styles.weekRow}>
             {weekDates.map((date) => {
-              const dateStr = date.toISOString().split("T")[0];
-              const dayEntries = entries
+              const dateStr = getLocalDayKey(date);
+              const dayEntries = [...entries, ...projectionEntries]
                 .filter((entry) => {
-                  const entryDate = new Date(entry.printedAt)
-                    .toISOString()
-                    .split("T")[0];
+                  const entryDate = getLocalDayKey(new Date(entry.printedAt));
                   return entryDate === dateStr;
                 })
                 .sort((a, b) => {
@@ -1581,10 +1949,16 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                 <View key={dateStr} style={styles.dayColumn}>
                   {dayEntries.map((entry) => (
                     <View
-                      key={entry.id}
-                      onTouchEnd={() => handleWeekEntryTouchStart(entry)}
+                      key={getDisplayEntryKey(entry)}
+                      onTouchEnd={() =>
+                        isProjectionEntry(entry)
+                          ? handleProjectionPress(entry)
+                          : handleWeekEntryTouchStart(entry)
+                      }
                       style={[
                         styles.weekEntryItem,
+                        isProjectionEntry(entry) &&
+                          styles.projectedWeekEntryItem,
                         draggingWeekEntryId === entry.id && {
                           transform: [
                             { translateX: weekDragOffset.x },
@@ -1595,16 +1969,21 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                           elevation: 8,
                         },
                       ]}
-                      {...createWeekEntryPanHandlers(entry)}
+                      {...(isProjectionEntry(entry)
+                        ? {}
+                        : createWeekEntryPanHandlers(entry))}
                     >
                       <View
                         style={[
                           styles.weekEntryContent,
+                          isProjectionEntry(entry) &&
+                            styles.projectedWeekEntryContent,
                           armedWeekEntryId === entry.id &&
                             styles.weekEntryArmed,
                           draggingWeekEntryId === entry.id &&
                             styles.weekEntryArmed,
-                          !isMovableCalendarEntry(entry) &&
+                            !isMovableCalendarEntry(entry) &&
+                            !isProjectionEntry(entry) &&
                             styles.weekEntryLocked,
                           {
                             backgroundColor: getNoteBackgroundColor(
@@ -1631,6 +2010,8 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                           <Text
                             style={[
                               styles.weekEntryText,
+                              isProjectionEntry(entry) &&
+                                styles.projectedWeekEntryText,
                               { color: theme.text },
                             ]}
                             onLongPress={withLongPressHaptic(() =>
@@ -1653,12 +2034,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
   };
 
   const renderWeekTimeline = () => {
-    const weekEntries = entries.filter((entry) => {
-      const entryDate = new Date(entry.printedAt).toISOString().split("T")[0];
-      return weekDates.some(
-        (date) => date.toISOString().split("T")[0] === entryDate,
-      );
-    });
+    const weekEntries = weekDates.flatMap(getWeekTimelineEntriesForDate);
     const { startHour, endHour } = getWeekTimelineBounds(weekEntries);
     const totalHeight = (endHour - startHour) * TIMELINE_HOUR_HEIGHT;
     const hours = Array.from(
@@ -1701,20 +2077,9 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
             })}
             <View style={styles.weekTimelineColumns}>
               {weekDates.map((date, dayIndex) => {
-                const dateStr = date.toISOString().split("T")[0];
+                const dateStr = getLocalDayKey(date);
                 const isTodayColumn = dateStr === getLocalDayKey(currentTime);
-                const dayEntries = entries
-                  .filter((entry) => {
-                    const entryDate = new Date(entry.printedAt)
-                      .toISOString()
-                      .split("T")[0];
-                    return entryDate === dateStr;
-                  })
-                  .sort((a, b) => {
-                    const timeA = new Date(a.printedAt).getTime();
-                    const timeB = new Date(b.printedAt).getTime();
-                    return timeA - timeB;
-                  });
+                const dayEntries = getWeekTimelineEntriesForDate(date);
                 const layoutItems = getTimelineLayoutItems(dayEntries);
 
                 return (
@@ -1751,6 +2116,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                         entry,
                         startMinutes,
                       } = item;
+                      const isProjection = isProjectionEntry(entry);
                       const top =
                         (startMinutes - startHour * 60) *
                         TIMELINE_MINUTE_HEIGHT;
@@ -1767,12 +2133,15 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
 
                       return (
                         <View
-                          key={entry.id}
+                          key={getDisplayEntryKey(entry)}
                           style={[
                             styles.weekTimelineEntryItem,
+                            isProjection &&
+                              styles.projectedWeekTimelineEntryItem,
                             armedTimelineEntryId === entry.id &&
                               styles.weekTimelineEntryArmed,
-                            !isMovableCalendarEntry(entry) &&
+                            !isProjection &&
+                              !isMovableCalendarEntry(entry) &&
                               styles.weekEntryLocked,
                             draggingWeekTimelineEntryId === entry.id && {
                               transform: [
@@ -1790,12 +2159,20 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                               right: 0,
                             },
                           ]}
-                          onTouchEnd={() => handleTimelineEntryTouchEnd(entry)}
-                          {...createWeekTimelinePanHandlers(entry)}
+                          onTouchEnd={() =>
+                            isProjection
+                              ? handleProjectionPress(entry)
+                              : handleTimelineEntryTouchEnd(entry)
+                          }
+                          {...(isProjection
+                            ? {}
+                            : createWeekTimelinePanHandlers(entry))}
                         >
                           <View
                             style={[
                               styles.weekEntryContent,
+                              isProjection &&
+                                styles.projectedWeekEntryContent,
                               armedTimelineEntryId === entry.id &&
                                 styles.weekEntryArmed,
                               {
@@ -1806,7 +2183,7 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                               },
                             ]}
                           >
-                            {editingTitleId === entry.id ? (
+                            {!isProjection && editingTitleId === entry.id ? (
                               <TextInput
                                 value={editingText}
                                 onChangeText={setEditingText}
@@ -1825,15 +2202,21 @@ const CalendarEntries: React.FC<CalendarEntriesProps> = ({
                               <Text
                                 style={[
                                   styles.weekEntryText,
+                                  isProjection &&
+                                    styles.projectedWeekEntryText,
                                   isCompactTimelineEntry &&
                                     styles.weekTimelineEntryTextTiny,
                                   { color: theme.text },
                                 ]}
                                 ellipsizeMode="clip"
                                 numberOfLines={timelineTextLines}
-                                onLongPress={withLongPressHaptic(() =>
-                                  handleStartTitleEditing(entry),
-                                )}
+                                onLongPress={
+                                  isProjection
+                                    ? undefined
+                                    : withLongPressHaptic(() =>
+                                        handleStartTitleEditing(entry),
+                                      )
+                                }
                               >
                                 {entry.todo.text || ""}
                               </Text>
@@ -2042,6 +2425,9 @@ const styles = StyleSheet.create({
   entryContainer: {
     marginBottom: 15,
   },
+  projectedEntryContainer: {
+    opacity: 0.52,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2063,6 +2449,22 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#1f2937",
     flex: 1,
+  },
+  projectedTitle: {
+    fontStyle: "italic",
+  },
+  projectedTime: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  projectedNotePreview: {
+    borderRadius: 4,
+    minHeight: 42,
+    padding: 10,
+  },
+  projectedNoteText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   todoInput: {
     padding: 0,
@@ -2106,24 +2508,20 @@ const styles = StyleSheet.create({
   timelineCanvas: {
     position: "relative",
   },
-  timelineHourRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    left: 0,
-    position: "absolute",
-    right: 0,
-  },
   timelineHourLabel: {
     fontSize: 10,
     fontWeight: "700",
-    marginLeft: -4,
+    left: 0,
+    marginTop: -7,
+    position: "absolute",
     textAlign: "right",
     width: TIMELINE_LABEL_WIDTH,
   },
   timelineHourLine: {
-    flex: 1,
     height: 1,
-    marginLeft: 4,
+    left: TIMELINE_LABEL_WIDTH + 8,
+    position: "absolute",
+    right: 0,
   },
   currentTimeRule: {
     alignItems: "center",
@@ -2158,12 +2556,19 @@ const styles = StyleSheet.create({
   timelineEventLocked: {
     opacity: 0.82,
   },
+  projectedTimelineEvent: {
+    borderStyle: "dashed",
+    opacity: 0.48,
+  },
   timelineEventTitle: {
     fontSize: 13,
     fontWeight: "700",
   },
   timelineEventTitleCompact: {
     fontSize: 12,
+  },
+  projectedTimelineEventTitle: {
+    fontStyle: "italic",
   },
   timelineEventMeta: {
     fontSize: 11,
@@ -2241,9 +2646,11 @@ const styles = StyleSheet.create({
   },
   weekTimelineEntryItem: {
     paddingHorizontal: 2,
-    paddingVertical: 2,
     position: "absolute",
     width: "100%",
+  },
+  projectedWeekTimelineEntryItem: {
+    opacity: 0.48,
   },
   weekTimelineEntryArmed: {
     transform: [{ scale: 1.03 }],
@@ -2280,6 +2687,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 3,
     borderTopColor: "transparent",
   },
+  projectedWeekEntryContent: {
+    borderStyle: "dashed",
+    borderWidth: 1,
+    opacity: 0.55,
+  },
   weekEntryArmed: {
     borderTopColor: "#2563eb",
   },
@@ -2291,6 +2703,12 @@ const styles = StyleSheet.create({
     color: "#1f2937",
     flexWrap: "wrap",
     textAlign: "center",
+  },
+  projectedWeekEntryItem: {
+    opacity: 0.55,
+  },
+  projectedWeekEntryText: {
+    fontStyle: "italic",
   },
   weekTimelineEntryTextTiny: {
     fontSize: 9,
@@ -2349,6 +2767,12 @@ const styles = StyleSheet.create({
   },
   projectChipText: {
     fontSize: 14,
+  },
+  subprojectChip: {
+    marginLeft: 6,
+  },
+  subprojectChipText: {
+    fontSize: 13,
   },
   timeEditContainer: {
     flexDirection: "row",

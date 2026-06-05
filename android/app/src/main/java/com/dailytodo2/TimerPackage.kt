@@ -7,7 +7,11 @@ import com.facebook.react.uimanager.ViewManager
 
 class TimerPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(TimerModule(reactContext))
+    return listOf(
+      TimerModule(reactContext),
+      VoiceModule(reactContext),
+      PhotoTextModule(reactContext)
+    )
   }
 
   override fun createViewManagers(

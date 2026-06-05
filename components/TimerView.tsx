@@ -191,14 +191,17 @@ const TimerView: React.FC<TimerViewProps> = ({ selectedTodo, updateTodo }) => {
       }
 
       if (mode === "stopwatch") {
+        const stopwatchBaseSeconds = Math.max(0, state.activeElapsedSeconds);
+        const visualStartedAt = state.isPaused ? 0 : Date.now();
+
         setStopwatchSeconds(state.activeElapsedSeconds);
-        stopwatchBaseSecondsRef.current = state.activeElapsedSeconds;
-        stopwatchLastStartedAtRef.current = state.lastStartedAt || Date.now();
+        stopwatchBaseSecondsRef.current = stopwatchBaseSeconds;
+        stopwatchLastStartedAtRef.current = visualStartedAt;
 
         if (!state.isPaused) {
           startStopwatchVisualInterval(
-            state.activeElapsedSeconds,
-            state.lastStartedAt || Date.now(),
+            stopwatchBaseSeconds,
+            visualStartedAt,
           );
         }
 

@@ -46,14 +46,23 @@ export const buildTodayItems = ({
   const todayItems: TodayTodoItem[] = [];
 
   for (const todo of activeTodos) {
-    todayItems.push(
-      createItem(
-        todo,
-        { type: "active", todoId: todo.id },
-        date,
-        getScheduleTimeMinutes(todo.schedule),
-      ),
+    if (
+      todo.schedule?.mode === "in" &&
+      !isScheduleDueOnDay(todo.schedule, date)
+    ) {
+      continue;
+    }
+
+    const item = createItem(
+      todo,
+      { type: "active", todoId: todo.id },
+      date,
+      getScheduleTimeMinutes(todo.schedule),
     );
+
+    if (!dismissed.has(item.occurrenceKey)) {
+      todayItems.push(item);
+    }
   }
 
   for (const todo of archivedTodos) {

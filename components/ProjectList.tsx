@@ -1,23 +1,38 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  LayoutAnimation,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  UIManager,
+  View,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PanGestureHandler } from "react-native-gesture-handler";
 import ProjectItem, { ProjectItemRef } from "./ProjectItem";
 import TodoItem, { TodoItemRef } from "./TodoItem";
 import { CalendarEntry, Project, Todo } from "../types";
 import { useTodoListDrag } from "../hooks/useTodoListDrag";
-
-type ProjectTodoSource =
-  | { type: "todo" }
-  | { type: "archive" }
-  | { type: "calendar"; entryId: number };
+import {
+  getProjectTodoRowKey,
+  isSameProjectTodoId,
+  isSameProjectTodoSource,
+  ProjectTodoSource,
+  shouldShowCalendarEntryInProject,
+} from "../utils/projects";
 
 type ProjectTodoRow = {
   todo: Todo;
   source: ProjectTodoSource;
+  occurrenceIndex: number;
 };
 
 const PROJECT_ORDER_KEY_PREFIX = "projectOrder:";
+
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
 
 interface ProjectListProps {
   projects: Project[];
@@ -54,7 +69,27 @@ const ProjectList: React.FC<ProjectListProps> = ({
   setSelectedTodo,
 }) => {
   const projectRefs = useRef<{ [key: number]: ProjectItemRef }>({});
-  const todoRefs = useRef<{ [key: number]: TodoItemRef }>({});
+  const todoRefs = useRef<Record<string, TodoItemRef>>({});
+  const [collapsedSelectedSubprojectId, setCollapsedSelectedSubprojectId] =
+    useState<number | null>(null);
+  const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null);
+
+  const animateProjectExpansion = () => {
+    LayoutAnimation.configureNext({
+      duration: 170,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+    });
+  };
 
   const stopOtherEdits = (currentId?: number, type?: "project" | "todo") => {
     Object.entries(projectRefs.current).forEach(([id, ref]) => {
@@ -71,21 +106,38 @@ const ProjectList: React.FC<ProjectListProps> = ({
   };
 
   const handleProjectSelect = (project: Project) => {
+    animateProjectExpansion();
     stopOtherEdits(project.id, "project");
+    setSelectedRowKey(null);
 
     if (selectedProject?.id === project.id) {
-      setSelectedProject(null);
+      if (project.parentProjectId) {
+        setCollapsedSelectedSubprojectId((currentId) =>
+          currentId === project.id ? null : project.id,
+        );
+      } else {
+        setSelectedProject(null);
+        setCollapsedSelectedSubprojectId(null);
+      }
       setSelectedTodo(null);
       return;
     }
 
+    setCollapsedSelectedSubprojectId(null);
     setSelectedProject(project);
     setSelectedTodo(null);
   };
 
   const handleTodoSelect = (row: ProjectTodoRow) => {
+    animateProjectExpansion();
     const { todo, source } = row;
+    const ownerProject = todo.projectId
+      ? projects.find((project) => project.id === todo.projectId)
+      : null;
 
+    setCollapsedSelectedSubprojectId(null);
+    setSelectedRowKey(getProjectRowKey(row));
+    setSelectedProject(ownerProject ?? null);
     stopOtherEdits(todo.id, "todo");
     setSelectedTodo(todo, source);
   };
@@ -93,32 +145,53 @@ const ProjectList: React.FC<ProjectListProps> = ({
   const getProjectRows = (projectId: number): ProjectTodoRow[] => {
     const currentRows = todos
       .filter((todo) => todo.projectId === projectId)
-      .map((todo) => ({ todo, source: { type: "todo" as const } }));
+      .map((todo, occurrenceIndex) => ({
+        todo,
+        source: { type: "todo" as const },
+        occurrenceIndex,
+      }));
     const archivedRows = archivedTodos
       .filter((todo) => todo.projectId === projectId)
-      .map((todo) => ({ todo, source: { type: "archive" as const } }));
+      .map((todo, occurrenceIndex) => ({
+        todo,
+        source: { type: "archive" as const },
+        occurrenceIndex,
+      }));
     const calendarRows = calendarEntries
-      .filter((entry) => entry.todo.projectId === projectId)
-      .map((entry) => ({
+      .filter((entry) => shouldShowCalendarEntryInProject(entry, projectId))
+      .map((entry, occurrenceIndex) => ({
         todo: entry.todo,
         source: { type: "calendar" as const, entryId: entry.id },
+        occurrenceIndex,
       }));
 
     return [...currentRows, ...archivedRows, ...calendarRows];
   };
 
-  const isSelectedRow = (row: ProjectTodoRow) => {
-    if (selectedTodo?.id !== row.todo.id) return false;
-    if (selectedTodoSource.type !== row.source.type) return false;
-    if (
-      selectedTodoSource.type === "calendar" &&
-      row.source.type === "calendar"
-    ) {
-      return selectedTodoSource.entryId === row.source.entryId;
-    }
+  const getSubprojects = (projectId: number) =>
+    projects.filter((project) => project.parentProjectId === projectId);
 
-    return true;
+  const subprojectsBelongsToProject = (
+    projectItems: Project[],
+    subprojectId: number,
+    projectId: number,
+  ) =>
+    projectItems.some(
+      (project) =>
+        project.id === subprojectId && project.parentProjectId === projectId,
+    );
+
+  const isSelectedRow = (row: ProjectTodoRow) => {
+    if (selectedRowKey === getProjectRowKey(row)) return true;
+    if (!isSameProjectTodoId(selectedTodo?.id, row.todo.id)) return false;
+    return isSameProjectTodoSource(selectedTodoSource, row.source);
   };
+
+  useEffect(() => {
+    if (!selectedTodo) {
+      setSelectedRowKey(null);
+    }
+  }, [selectedTodo]);
 
   const updateRowTodo = (row: ProjectTodoRow, updates: Partial<Todo>) => {
     if (row.source.type === "archive") {
@@ -137,42 +210,113 @@ const ProjectList: React.FC<ProjectListProps> = ({
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
-        {projects.map((project) => {
-          const isSelected = selectedProject?.id === project.id;
-          const childRows = isSelected ? getProjectRows(project.id) : [];
+        {projects
+          .filter((project) => !project.parentProjectId)
+          .map((project) => {
+            const isParentSelected = selectedProject?.id === project.id;
+            const isSubprojectSelected =
+              selectedProject?.parentProjectId === project.id;
+            const isCollapsedSubprojectSelected =
+              collapsedSelectedSubprojectId !== null &&
+              subprojectsBelongsToProject(
+                projects,
+                collapsedSelectedSubprojectId,
+                project.id,
+              );
+            const isGroupExpanded =
+              isParentSelected ||
+              isSubprojectSelected ||
+              isCollapsedSubprojectSelected;
+            const subprojects = isGroupExpanded ? getSubprojects(project.id) : [];
+            const childRows = isGroupExpanded ? getProjectRows(project.id) : [];
 
-          return (
-            <View key={project.id} style={styles.projectGroup}>
-              <ProjectItem
-                project={project}
-                isSelected={isSelected}
-                selectProject={() => handleProjectSelect(project)}
-                updateProject={updateProject}
-                stopOtherEdits={() => stopOtherEdits(project.id, "project")}
-                ref={(ref) => {
-                  if (ref) {
-                    projectRefs.current[project.id] = ref;
-                  }
-                }}
-              />
-              {isSelected ? (
-                <ProjectChildRows
-                  projectId={project.id}
-                  rows={childRows}
-                  isSelectedRow={isSelectedRow}
-                  onSelectRow={handleTodoSelect}
-                  updateRowTodo={updateRowTodo}
-                  stopOtherEdits={(todoId) => stopOtherEdits(todoId, "todo")}
-                  setTodoRef={(todoId, ref) => {
+            return (
+              <View key={project.id} style={styles.projectGroup}>
+                <ProjectItem
+                  project={project}
+                  isSelected={isParentSelected}
+                  selectProject={() => handleProjectSelect(project)}
+                  updateProject={updateProject}
+                  stopOtherEdits={() => stopOtherEdits(project.id, "project")}
+                  ref={(ref) => {
                     if (ref) {
-                      todoRefs.current[todoId] = ref;
+                      projectRefs.current[project.id] = ref;
                     }
                   }}
                 />
-              ) : null}
-            </View>
-          );
-        })}
+                {isGroupExpanded ? (
+                  <>
+                    {subprojects.map((subproject) => {
+                      const isSelected = selectedProject?.id === subproject.id;
+                      const isCollapsedSelected =
+                        collapsedSelectedSubprojectId === subproject.id;
+                      const subprojectRows = isSelected && !isCollapsedSelected
+                        ? getProjectRows(subproject.id)
+                        : [];
+
+                      return (
+                        <View
+                          key={subproject.id}
+                          style={styles.subprojectGroup}
+                        >
+                          <ProjectItem
+                            project={subproject}
+                            isSelected={isSelected || isCollapsedSelected}
+                            selectProject={() =>
+                              handleProjectSelect(subproject)
+                            }
+                            updateProject={updateProject}
+                            stopOtherEdits={() =>
+                              stopOtherEdits(subproject.id, "project")
+                            }
+                            ref={(ref) => {
+                              if (ref) {
+                                projectRefs.current[subproject.id] = ref;
+                              }
+                            }}
+                          />
+                          {isSelected ? (
+                            <ProjectChildRows
+                              projectId={subproject.id}
+                              rows={subprojectRows}
+                              isSelectedRow={isSelectedRow}
+                              onSelectRow={handleTodoSelect}
+                              updateRowTodo={updateRowTodo}
+                              stopOtherEdits={(todoId) =>
+                                stopOtherEdits(todoId, "todo")
+                              }
+                              setTodoRef={(todoId, ref) => {
+                                if (ref) {
+                                  todoRefs.current[todoId] = ref;
+                                }
+                              }}
+                            />
+                          ) : null}
+                        </View>
+                      );
+                    })}
+                    {childRows.length > 0 ? (
+                      <ProjectChildRows
+                        projectId={project.id}
+                        rows={childRows}
+                        isSelectedRow={isSelectedRow}
+                        onSelectRow={handleTodoSelect}
+                        updateRowTodo={updateRowTodo}
+                        stopOtherEdits={(todoId) =>
+                          stopOtherEdits(todoId, "todo")
+                        }
+                        setTodoRef={(todoId, ref) => {
+                          if (ref) {
+                            todoRefs.current[todoId] = ref;
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+            );
+          })}
       </ScrollView>
     </View>
   );
@@ -185,7 +329,7 @@ interface ProjectChildRowsProps {
   onSelectRow: (row: ProjectTodoRow) => void;
   updateRowTodo: (row: ProjectTodoRow, updates: Partial<Todo>) => void;
   stopOtherEdits: (todoId: number) => void;
-  setTodoRef: (todoId: number, ref: TodoItemRef | null) => void;
+  setTodoRef: (todoKey: string, ref: TodoItemRef | null) => void;
 }
 
 const ProjectChildRows: React.FC<ProjectChildRowsProps> = ({
@@ -284,7 +428,7 @@ const ProjectChildRows: React.FC<ProjectChildRowsProps> = ({
               isDragging={isDragging}
               onLayout={(layout) => handleLayout(rowKey, layout)}
               horizontalMargin={12}
-              ref={(ref) => setTodoRef(row.todo.id, ref)}
+              ref={(ref) => setTodoRef(rowKey, ref)}
             />
           </Animated.View>
         );
@@ -305,9 +449,7 @@ const ProjectChildRows: React.FC<ProjectChildRowsProps> = ({
 };
 
 const getProjectRowKey = (row: ProjectTodoRow) => {
-  return `${row.source.type}-${
-    row.source.type === "calendar" ? row.source.entryId : row.todo.id
-  }`;
+  return getProjectTodoRowKey(row);
 };
 
 const applyProjectOrder = (
@@ -341,6 +483,9 @@ const styles = StyleSheet.create({
   },
   projectGroup: {
     marginBottom: 3,
+  },
+  subprojectGroup: {
+    marginLeft: 4,
   },
   projectChildList: {
     overflow: "hidden",

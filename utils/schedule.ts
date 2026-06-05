@@ -1,4 +1,5 @@
 import {
+  DateFormatPreference,
   ReminderUnit,
   ScheduleMode,
   ScheduleUnit,
@@ -6,7 +7,7 @@ import {
   TodoSchedule,
 } from "../types";
 
-export const SCHEDULE_MODES: ScheduleMode[] = ["every", "in"];
+export const SCHEDULE_MODES: ScheduleMode[] = ["every", "in", "date"];
 export const SCHEDULE_UNITS: ScheduleUnit[] = [
   "days",
   "weeks",
@@ -28,6 +29,7 @@ export const SCHEDULE_AMOUNT_MIN = 1;
 export const SCHEDULE_AMOUNT_MAX = 365;
 export const REMINDER_AMOUNT_MIN = 1;
 export const REMINDER_AMOUNT_MAX = 365;
+export const DEFAULT_DATE_FORMAT: DateFormatPreference = "dmy";
 
 export const createDefaultSchedule = (): TodoSchedule => {
   const now = new Date().toISOString();
@@ -74,9 +76,26 @@ export const updateSchedule = (
   currentSchedule: TodoSchedule | undefined,
   updates: Partial<TodoSchedule>,
 ): TodoSchedule => {
+  const baseSchedule = currentSchedule ?? createDefaultSchedule();
+  const nextMode = updates.mode ?? baseSchedule.mode;
+  const nextTargetDate =
+    nextMode === "date" && !updates.targetDate && !baseSchedule.targetDate
+      ? createTodayTargetDate()
+      : updates.targetDate;
+  const shouldResetScheduleAnchor =
+    (nextMode === "in" || nextMode === "every") &&
+    (updates.mode !== undefined ||
+      updates.amount !== undefined ||
+      updates.unit !== undefined ||
+      updates.weekdays !== undefined);
+
   return normalizeSchedule({
-    ...(currentSchedule ?? createDefaultSchedule()),
+    ...baseSchedule,
     ...updates,
+    ...(nextTargetDate ? { targetDate: nextTargetDate } : {}),
+    ...(shouldResetScheduleAnchor
+      ? { startsAt: new Date().toISOString() }
+      : {}),
   });
 };
 
@@ -233,6 +252,72 @@ export const normalizeScheduleTime = (time?: string): string => {
   const minutes = Math.max(0, Math.min(59, Number(match[2])));
 
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+export const createLocalDateTarget = (
+  year: number,
+  month: number,
+  day: number,
+) => {
+  const target = new Date(year, month - 1, day, 12, 0, 0, 0);
+  return target.toISOString();
+};
+
+export const createTodayTargetDate = () => {
+  const today = new Date();
+  return createLocalDateTarget(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    today.getDate(),
+  );
+};
+
+export const formatScheduleDateParts = (
+  targetDate: string | undefined,
+  _dateFormat: DateFormatPreference = DEFAULT_DATE_FORMAT,
+) => {
+  const date = targetDate ? new Date(targetDate) : new Date();
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return {
+    day: String(safeDate.getDate()).padStart(2, "0"),
+    month: String(safeDate.getMonth() + 1).padStart(2, "0"),
+    year: String(safeDate.getFullYear()),
+  };
+};
+
+export const parseScheduleDateParts = (
+  parts: { day: string; month: string; year: string },
+  _dateFormat: DateFormatPreference = DEFAULT_DATE_FORMAT,
+  fallbackTargetDate?: string,
+) => {
+  const day = Number(parts.day);
+  const month = Number(parts.month);
+  const year = Number(parts.year);
+
+  if (
+    !Number.isInteger(day) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(year) ||
+    year < 1900 ||
+    year > 9999 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return fallbackTargetDate ?? createTodayTargetDate();
+  }
+
+  const candidate = new Date(year, month - 1, day, 12, 0, 0, 0);
+  const isValid =
+    candidate.getFullYear() === year &&
+    candidate.getMonth() === month - 1 &&
+    candidate.getDate() === day;
+
+  return isValid
+    ? candidate.toISOString()
+    : fallbackTargetDate ?? createTodayTargetDate();
 };
 
 const createCurrentTimeString = () => {
